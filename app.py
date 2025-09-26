@@ -91,7 +91,7 @@ def salvar_dados_no_github(df, commit_message=COMMIT_MESSAGE):
         return False
 
 # ==================== INTERFACE STREAMLIT ====================
-st.title("📘 Livro Caixa - Streamlit + GitHub")
+st.title("📘 Livro Caixa")
 
 # Usando st.session_state para gerenciar o DataFrame
 if "df" not in st.session_state:
@@ -195,3 +195,4 @@ else:
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
             col2_f.metric("Saídas", f"R$ {abs(saidas_filtro):,.2f}")
             col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
+
