@@ -149,7 +149,7 @@ else:
             df_atualizado = df.drop(indices_a_excluir)
             salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE_DELETE)
             st.success(f"{len(indices_a_excluir)} movimentação(ões) excluída(s) com sucesso!")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.warning("Selecione pelo menos uma movimentação para excluir.")
 
@@ -188,4 +188,5 @@ else:
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
             col2_f.metric("Saídas", f"R$ {abs(saidas_filtro):,.2f}")
             col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
+
 
