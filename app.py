@@ -6,18 +6,14 @@ import base64
 import io
 
 # ==================== CONFIGURAÇÕES DO APLICATIVO ====================
-# As variáveis de token e repositório são carregadas dos segredos do Streamlit.
-# Isso garante que suas credenciais permaneçam seguras.
 TOKEN = st.secrets["GITHUB_TOKEN"]
 OWNER = st.secrets["REPO_OWNER"]
 REPO = st.secrets["REPO_NAME"]
 CSV_PATH = st.secrets["CSV_PATH"]
-COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit" # Mensagem de commit padrão para adições
-COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa" # Mensagem de commit para exclusões
-# 'main' é a branch padrão, mas pode ser configurada nos segredos
+COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit"
+COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa"
 BRANCH = st.secrets.get("BRANCH", "main")
 
-# Cabeçalhos de autenticação para as requisições à API do GitHub
 HEADERS = {
     "Authorization": f"token {TOKEN}",
     "Accept": "application/vnd.github.v3+json",
@@ -26,23 +22,15 @@ HEADERS = {
 # ==================== FUNÇÕES DE INTERAÇÃO COM O GITHUB ====================
 @st.cache_data(show_spinner="Carregando dados do GitHub...")
 def carregar_dados_do_github():
-    """
-    Carrega o arquivo CSV do GitHub, decodifica o conteúdo e retorna um DataFrame.
-    Também retorna o SHA do arquivo para futura atualização.
-    """
     url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{CSV_PATH}?ref={BRANCH}"
-    
     try:
         response = requests.get(url, headers=HEADERS)
-        response.raise_for_status()  # Lança um erro para códigos de status HTTP ruins (4xx ou 5xx)
-        
+        response.raise_for_status()
         content = response.json()
         decoded_content = base64.b64decode(content["content"]).decode("utf-8")
         df = pd.read_csv(io.StringIO(decoded_content), parse_dates=["Data"])
-        
         sha = content["sha"]
         return df, sha
-        
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
             st.info("Arquivo CSV não encontrado no GitHub. Criando um novo DataFrame localmente.")
@@ -55,12 +43,7 @@ def carregar_dados_do_github():
         return pd.DataFrame(columns=["Data", "Cliente", "Valor", "Forma de Pagamento", "Tipo"]), None
 
 def salvar_dados_no_github(df, sha=None, commit_message=COMMIT_MESSAGE):
-    """
-    Converte o DataFrame para CSV, codifica em Base64 e salva no GitHub.
-    Usa o SHA para atualizar o arquivo existente.
-    """
     url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{CSV_PATH}"
-    
     csv_string = df.to_csv(index=False)
     csv_encoded = base64.b64encode(csv_string.encode()).decode()
     
@@ -69,14 +52,12 @@ def salvar_dados_no_github(df, sha=None, commit_message=COMMIT_MESSAGE):
         "content": csv_encoded,
         "branch": BRANCH,
     }
-
     if sha:
         payload["sha"] = sha
-    
+
     try:
         response = requests.put(url, headers=HEADERS, json=payload)
         response.raise_for_status()
-        
         if response.status_code in [200, 201]:
             st.success("📁 Dados salvos no GitHub com sucesso!")
             return True, response.json()['content']['sha']
@@ -84,15 +65,15 @@ def salvar_dados_no_github(df, sha=None, commit_message=COMMIT_MESSAGE):
             st.error(f"Erro ao salvar no GitHub. Código de status: {response.status_code}")
             st.code(response.json())
             return False, sha
-            
+
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 409:
-            st.warning("Conflito detectado, tentando recarregar e salvar novamente...")
-            try:
-                df_recarregado, novo_sha = carregar_dados_do_github()
-                salvar_dados_no_github(df, novo_sha, commit_message)
-            except Exception as e2:
-                st.error(f"Falha ao salvar após tentar recarregar: {e2}")
+            st.warning("⚠️ Conflito detectado (SHA desatualizado). Tentando resolver automaticamente...")
+            df_recarregado, novo_sha = carregar_dados_do_github()
+            if novo_sha and novo_sha != sha:
+                return salvar_dados_no_github(df, novo_sha, commit_message)
+            else:
+                st.error("Não foi possível atualizar o SHA do arquivo.")
                 return False, sha
         else:
             st.error(f"Erro HTTP ao salvar no GitHub: {e}")
@@ -129,11 +110,12 @@ if enviar:
             "Tipo": tipo
         }
         df_atualizado = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
-        if salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE):
-            st.cache_data.clear() # Limpa o cache para forçar recarregar
-            st.rerun() # Reruns the app to show the updated table
+        sucesso, novo_sha = salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE)
+        if sucesso:
+            st.cache_data.clear()
+            st.rerun()
         else:
-            st.error("Falha ao adicionar movimentação.")
+            st.error("❌ Falha ao adicionar movimentação.")
 
 # --- Exibição e Análises dos Dados ---
 st.subheader("📊 Movimentações Registradas")
@@ -159,7 +141,8 @@ else:
     if st.button("Excluir Selecionadas"):
         if indices_a_excluir:
             df_atualizado = df.drop(indices_a_excluir)
-            if salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE_DELETE):
+            sucesso, novo_sha = salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE_DELETE)
+            if sucesso:
                 st.cache_data.clear()
                 st.rerun()
             else:
