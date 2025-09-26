@@ -222,6 +222,9 @@ if "lista_produtos" not in st.session_state:
     
 if "edit_id" not in st.session_state:
     st.session_state.edit_id = None
+    
+if "operacao_selecionada" not in st.session_state:
+    st.session_state.operacao_selecionada = "Editar" # Novo estado para a operação
 
 # DataFrame usado na exibição e análise (já processado)
 df_exibicao = processar_dataframe(st.session_state.df)
@@ -518,19 +521,13 @@ if enviar:
 tab_mov, tab_rel = st.tabs(["📋 Movimentações e Resumo", "📈 Relatórios e Filtros"])
 
 # Função para aplicar o destaque condicional na coluna Valor
-# A função agora espera que 'Cor_Valor' esteja no índice da linha (colunas)
 def highlight_value(row):
-    # Acessa a cor da linha a partir da coluna 'Cor_Valor'
-    # Esta linha é segura pois a coluna 'Cor_Valor' será passada no DataFrame de estilização
     color = row['Cor_Valor']
-    
-    # Retorna o estilo (CSS color) para cada coluna
-    # Aplica a cor apenas na coluna 'Valor'
     return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
 
 with tab_mov:
     
-    # --- NOVO: FILTRAR PARA O MÊS ATUAL ---
+    # --- FILTRAR PARA O MÊS ATUAL ---
     hoje = date.today()
     primeiro_dia_mes = hoje.replace(day=1)
 
@@ -568,15 +565,20 @@ with tab_mov:
     df_resumo_loja = df_mes_atual.groupby('Loja')['Valor'].agg(['sum', lambda x: x[x >= 0].sum(), lambda x: abs(x[x < 0].sum())]).reset_index()
     df_resumo_loja.columns = ['Loja', 'Saldo', 'Entradas', 'Saídas']
     
-    cols_loja = st.columns(len(df_resumo_loja.index))
-    
-    for i, row in df_resumo_loja.iterrows():
-        cols_loja[i].metric(
-            label=f"{row['Loja']}",
-            value=f"R$ {row['Saldo']:,.2f}",
-            delta=f"E: R$ {row['Entradas']:,.2f} | S: R$ {row['Saídas']:,.2f}",
-            delta_color="off" # Desliga a cor do delta para usar como subtítulo informativo
-        )
+    # Evita erro se não houver dados no mês
+    if not df_resumo_loja.empty:
+        cols_loja = st.columns(len(df_resumo_loja.index))
+        
+        for i, row in df_resumo_loja.iterrows():
+            if i < len(cols_loja):
+                cols_loja[i].metric(
+                    label=f"{row['Loja']}",
+                    value=f"R$ {row['Saldo']:,.2f}",
+                    delta=f"E: R$ {row['Entradas']:,.2f} | S: R$ {row['Saídas']:,.2f}",
+                    delta_color="off" # Desliga a cor do delta para usar como subtítulo informativo
+                )
+    else:
+        st.info("Nenhuma movimentação registrada neste mês.")
     
     st.markdown("---")
     
@@ -685,64 +687,63 @@ with tab_mov:
         st.caption("Clique em uma linha para ver os detalhes dos produtos (se for Entrada).")
         st.markdown("---")
 
-        # --- EXCLUSÃO ---
-        st.markdown("### 🗑️ Excluir Movimentações")
+        # =================================================================
+        # --- NOVO: OPÇÕES DE EDIÇÃO E EXCLUSÃO UNIFICADAS ---
+        # =================================================================
+        st.markdown("### 📝 Operações de Movimentação (Editar/Excluir)")
         
         # Mapeamento do nome de exibição para o ÍNDICE ORIGINAL (original_index)
-        opcoes_exclusao = {
+        opcoes_operacao = {
             f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Loja']} | R$ {row['Valor']:,.2f}": row['original_index'] 
             for index, row in df_exibicao.iterrows()
         }
+        opcoes_keys = list(opcoes_operacao.keys())
         
-        movimentacoes_a_excluir_str = st.multiselect(
-            "Selecione as movimentações que deseja excluir:",
-            options=list(opcoes_exclusao.keys()),
-            key="multi_excluir"
-        )
-        indices_a_excluir = [opcoes_exclusao[s] for s in movimentacoes_a_excluir_str]
-
-        if st.button("Excluir Selecionadas e Salvar no GitHub", type="primary"):
-            if indices_a_excluir:
-                st.session_state.df = st.session_state.df.drop(indices_a_excluir, errors='ignore')
-                
-                if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
-                    st.cache_data.clear()
-                    st.rerun()
-            else:
-                st.warning("Selecione pelo menos uma movimentação para excluir.")
-
-        st.markdown("---")
+        col_modo, col_selecao = st.columns([0.3, 0.7])
         
-        # --- EDIÇÃO ---
-        st.markdown("### ✏️ Editar Movimentações")
-        col_edit_select, col_edit_btn = st.columns([0.7, 0.3])
+        with col_modo:
+            st.session_state.operacao_selecionada = st.radio(
+                "Escolha a Operação:",
+                options=["Editar", "Excluir"],
+                key="radio_operacao_select",
+                horizontal=True,
+                disabled=edit_mode
+            )
 
-        opcoes_edicao = {
-            f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Loja']} | R$ {row['Valor']:,.2f}": row['original_index'] 
-            for index, row in df_exibicao.iterrows()
-        }
-        opcoes_keys = list(opcoes_edicao.keys())
-        
-        with col_edit_select:
-            movimentacao_a_editar_str = st.selectbox(
-                "Selecione a movimentação que deseja editar (ID e Resumo):",
+        with col_selecao:
+            movimentacao_selecionada_str = st.selectbox(
+                f"Selecione a movimentação para {st.session_state.operacao_selecionada}:",
                 options=opcoes_keys,
                 index=0,
-                key="select_editar",
+                key="select_operacao",
                 disabled=edit_mode
             )
             
-        with col_edit_btn:
-            st.markdown("<br>", unsafe_allow_html=True) 
-            original_idx_to_edit_click = opcoes_edicao.get(movimentacao_a_editar_str)
-            
-            if st.button("Editar Selecionada", type="secondary", use_container_width=True, disabled=edit_mode):
-                if original_idx_to_edit_click is not None:
-                    st.session_state.edit_id = original_idx_to_edit_click
+        original_idx_selecionado = opcoes_operacao.get(movimentacao_selecionada_str)
+        
+        # --- Botões de Ação Contextual ---
+        if original_idx_selecionado is not None:
+            if st.session_state.operacao_selecionada == "Editar":
+                if st.button("✏️ Levar para Edição na Sidebar", type="secondary", use_container_width=True, disabled=edit_mode):
+                    st.session_state.edit_id = original_idx_selecionado
                     st.rerun()
-                else:
-                    st.warning("Selecione uma movimentação válida para editar.")
-
+            
+            elif st.session_state.operacao_selecionada == "Excluir":
+                # Botão de Excluir (requer confirmação visualmente)
+                st.markdown("##### Confirmação de Exclusão:")
+                if st.button(f"🗑️ Excluir permanentemente: {movimentacao_selecionada_str}", type="primary", use_container_width=True):
+                    
+                    # Lógica de exclusão
+                    if original_idx_selecionado in st.session_state.df.index:
+                        st.session_state.df = st.session_state.df.drop(original_idx_selecionado, errors='ignore')
+                        
+                        if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
+                            st.cache_data.clear()
+                            st.rerun()
+                    else:
+                        st.error("Erro interno: Movimentação não encontrada para exclusão.")
+        # --- FIM NOVO ---
+        
 with tab_rel:
     st.header("📈 Relatórios Financeiros")
     
