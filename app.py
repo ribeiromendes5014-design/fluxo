@@ -526,8 +526,8 @@ with tab_mov:
         
         colunas_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Produtos Resumo']
         
-        # O Streamlit guarda a seleção na chave 'movimentacoes_table'
-        selected_rows = st.dataframe(
+        # O Streamlit guarda a seleção na chave 'movimentacoes_table'. Removemos a atribuição para evitar o TypeError.
+        st.dataframe(
             df_para_mostrar[colunas_tabela], 
             use_container_width=True,
             column_config={
@@ -543,11 +543,14 @@ with tab_mov:
             key='movimentacoes_table' # Chave para obter a seleção
         )
 
-        # --- Lógica de Exibição de Detalhes da Linha Selecionada (Fix para o TypeError) ---
-        if selected_rows and selected_rows.get('selection', {}).get('rows'):
-            selected_index = selected_rows['selection']['rows'][0]
+        # --- Lógica de Exibição de Detalhes da Linha Selecionada (Acessando o Session State para estabilidade) ---
+        selection_state = st.session_state.get('movimentacoes_table')
+
+        if selection_state and selection_state.get('selection', {}).get('rows'):
+            # O Streamlit retorna o índice ZERO-BASED da linha selecionada do DataFrame VISUALIZADO (df_para_mostrar)
+            selected_index = selection_state['selection']['rows'][0]
             
-            # Garante que o índice exista no DataFrame filtrado
+            # Garante que o índice exista no DataFrame filtrado (df_para_mostrar)
             if selected_index < len(df_para_mostrar):
                 row = df_para_mostrar.iloc[selected_index]
 
