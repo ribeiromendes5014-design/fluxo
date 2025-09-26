@@ -96,7 +96,7 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
 
     try:
         g = Github(TOKEN)
-        repo = g.get_user(OWNER).get_repo(REPO_NAME)
+        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")  # ✅ Correção aqui
         csv_string = df_temp.to_csv(index=False)
 
         try:
@@ -111,6 +111,7 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
 
     except Exception as e:
         st.error(f"❌ Erro ao salvar no GitHub: {e}")
+        st.error("Verifique se seu 'GITHUB_TOKEN' tem permissões e se o repositório existe.")
         return False
 
 # ==================== INTERFACE STREAMLIT ====================
@@ -256,4 +257,5 @@ else:
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
             col2_f.metric("Saídas", f"R$ {saidas_filtro:,.2f}")
             col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
+
 
