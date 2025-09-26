@@ -12,7 +12,8 @@ TOKEN = st.secrets["GITHUB_TOKEN"]
 OWNER = st.secrets["REPO_OWNER"]
 REPO = st.secrets["REPO_NAME"]
 CSV_PATH = st.secrets["CSV_PATH"]
-COMMIT_MESSAGE = st.secrets["COMMIT_MESSAGE"]
+COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit" # Mensagem de commit padrão para adições
+COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa" # Mensagem de commit para exclusões
 # 'main' é a branch padrão, mas pode ser configurada nos segredos
 BRANCH = st.secrets.get("BRANCH", "main")
 
@@ -23,7 +24,7 @@ HEADERS = {
 }
 
 # ==================== FUNÇÕES DE INTERAÇÃO COM O GITHUB ====================
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def carregar_dados_do_github():
     """
     Carrega o arquivo CSV do GitHub, decodifica o conteúdo e retorna um DataFrame.
@@ -55,7 +56,7 @@ def carregar_dados_do_github():
         st.error(f"Ocorreu um erro inesperado ao carregar os dados: {e}")
         return pd.DataFrame(columns=["Data", "Cliente", "Valor", "Forma de Pagamento", "Tipo"]), None
 
-def salvar_dados_no_github(df, sha=None):
+def salvar_dados_no_github(df, sha=None, commit_message=COMMIT_MESSAGE):
     """
     Converte o DataFrame para CSV, codifica em Base64 e salva no GitHub.
     Usa o SHA para atualizar o arquivo existente.
@@ -68,7 +69,7 @@ def salvar_dados_no_github(df, sha=None):
     url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{CSV_PATH}"
 
     payload = {
-        "message": COMMIT_MESSAGE,
+        "message": commit_message,
         "content": csv_encoded,
         "branch": BRANCH,
     }
@@ -126,7 +127,7 @@ if enviar:
         df_atualizado = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
         
         # Salva o DataFrame atualizado no GitHub
-        salvar_dados_no_github(df_atualizado, sha)
+        salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE)
         
         st.success("Movimentação adicionada com sucesso!")
         st.rerun() # Reruns the app to show the updated table
@@ -136,11 +137,41 @@ st.subheader("📊 Movimentações Registradas")
 if df.empty:
     st.info("Nenhuma movimentação registrada ainda.")
 else:
+    # Adiciona uma coluna de índice para facilitar a exclusão
+    df_exibicao = df.reset_index(names=["Índice"])
+    df_exibicao["Índice"] = df_exibicao.index
+    
     # Ordena o DataFrame pela data de forma decrescente
-    df_exibicao = df.sort_values(by="Data", ascending=False).reset_index(drop=True)
+    df_exibicao = df_exibicao.sort_values(by="Data", ascending=False).reset_index(drop=True)
+    
     st.dataframe(df_exibicao, use_container_width=True)
 
+    # --- Opção de exclusão ---
+    st.markdown("---")
+    st.markdown("### 🗑️ Excluir Movimentações")
+    # Cria uma lista de opções para o multiselect
+    opcoes_exclusao = df_exibicao.apply(lambda row: f"Índice: {row['Índice']} - {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {row['Valor']}", axis=1).tolist()
+    
+    movimentacoes_a_excluir_str = st.multiselect(
+        "Selecione as movimentações que deseja excluir:",
+        options=opcoes_exclusao
+    )
+    
+    # Extrai os índices das strings selecionadas
+    indices_a_excluir = [int(s.split(" ")[1]) for s in movimentacoes_a_excluir_str]
+
+    if st.button("Excluir Selecionadas"):
+        if indices_a_excluir:
+            # Filtra o DataFrame para manter apenas as linhas que não estão na lista de exclusão
+            df_atualizado = df.drop(indices_a_excluir).reset_index(drop=True)
+            salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE_DELETE)
+            st.success(f"{len(indices_a_excluir)} movimentação(ões) excluída(s) com sucesso!")
+            st.rerun()
+        else:
+            st.warning("Selecione pelo menos uma movimentação para excluir.")
+
     # Resumo Financeiro
+    st.markdown("---")
     st.markdown("### 💰 Resumo Financeiro")
     total_entradas = df_exibicao[df_exibicao["Tipo"] == "Entrada"]["Valor"].sum()
     total_saidas = df_exibicao[df_exibicao["Tipo"] == "Saída"]["Valor"].sum()
