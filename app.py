@@ -794,9 +794,9 @@ with tab_rel:
     # --- 1. DEFINIÇÃO DAS SUB-ABAS ---
     subtab_dashboard, subtab_filtro, subtab_produtos, subtab_dividas = st.tabs(["Dashboard Geral", "Filtro e Tabela", "Produtos e Lucro", "🧾 Dívidas Pendentes"])
     
-    # --- 2. INICIALIZAÇÃO DE FALLBACK (Garante que df_filtrado_loja SEMPRE exista) ---
-    # Usa df_exibicao como fallback, que já é garantido existir, mesmo que vazio.
-    df_filtrado_loja = df_exibicao.copy()
+    # --- 2. INICIALIZAÇÃO DE FALLBACK (CORREÇÃO DE NAMERROR NA LINHA 883) ---
+    # Garante que df_filtrado_loja exista antes de qualquer sub-aba ser processada.
+    df_filtrado_loja = pd.DataFrame(columns=df_exibicao.columns)
     loja_filtro_relatorio = "Todas as Lojas"
     
     # --- 3. VERIFICAÇÃO DE DADOS ---
@@ -826,7 +826,7 @@ with tab_rel:
         st.subheader(f"Dashboard de Relatórios - {loja_filtro_relatorio}")
 
         # --- SUB-ABAS COM LÓGICA RESTRITA ---
-        # A lógica abaixo AGORA usa df_filtrado_loja, que está definido no escopo de 'else' e é guaranteed to exist.
+        # A lógica abaixo AGORA usa df_filtrado_loja, que está definido e pronto para uso.
 
         with subtab_dividas:
             st.header("🧾 Gerenciamento de Dívidas Pendentes")
