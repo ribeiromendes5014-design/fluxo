@@ -23,6 +23,7 @@ except KeyError:
 
 COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit (com produtos)"
 COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa"
+COMMIT_MESSAGE_EDIT = "Edita movimentação via Streamlit"
 
 ARQ_LOCAL = "livro_caixa.csv"
 # COLUNA PADRÃO ATUALIZADA para incluir 'Produtos Vendidos'
@@ -151,7 +152,7 @@ def processar_dataframe(df):
     # Remove linhas onde a data não pôde ser convertida
     df_proc.dropna(subset=['Data'], inplace=True)
     
-    # --- CORREÇÃO AQUI: RESETAR O ÍNDICE E CRIAR O ID VISÍVEL ---
+    # --- RESETAR O ÍNDICE E CRIAR O ID VISÍVEL ---
     # Isso garante que df_proc tenha um índice limpo de 0 a N-1.
     df_proc = df_proc.reset_index(drop=False) # Preserva o índice original na coluna 'index'
     df_proc.rename(columns={'index': 'original_index'}, inplace=True)
@@ -171,6 +172,19 @@ def calcular_resumo(df):
     saldo = df["Valor"].sum()
     return total_entradas, total_saidas, saldo
 
+# Função para formatar a coluna 'Produtos Vendidos'
+def format_produtos(produtos_json):
+    if produtos_json:
+        try:
+            produtos = json.loads(produtos_json)
+            count = len(produtos)
+            if count > 0:
+                primeiro = produtos[0]['Produto']
+                return f"{count} item(s): {primeiro}..."
+        except:
+            return "Erro na formatação"
+    return ""
+
 # ==================== INTERFACE STREAMLIT ====================
 st.set_page_config(layout="wide", page_title="Livro Caixa")
 st.title("📘 Livro Caixa - Gerenciamento de Movimentações")
@@ -182,19 +196,81 @@ if "df" not in st.session_state:
 # Novo estado de sessão para a lista temporária de produtos
 if "lista_produtos" not in st.session_state:
     st.session_state.lista_produtos = []
+    
+# Novo estado de sessão para o ID do item em edição (guarda o original_index do DF)
+if "edit_id" not in st.session_state:
+    st.session_state.edit_id = None
 
 # DataFrame usado na exibição e análise (já processado)
 df_exibicao = processar_dataframe(st.session_state.df)
 
-# --- Formulário de Nova Movimentação na barra lateral ---
-st.sidebar.header("Nova Movimentação")
+# =================================================
+# LÓGICA DE CARREGAMENTO PARA EDIÇÃO
+# =================================================
 
-# Campos que definem o comportamento do formulário (Tipo)
-loja_selecionada = st.sidebar.selectbox("Loja Responsável pela Venda/Gasto", LOJAS_DISPONIVEIS)
-data_input = st.sidebar.date_input("Data", datetime.now().date())
-cliente = st.sidebar.text_input("Nome do Cliente (ou Descrição)")
-forma_pagamento = st.sidebar.selectbox("Forma de Pagamento", ["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"])
-tipo = st.sidebar.radio("Tipo", ["Entrada", "Saída"])
+edit_mode = st.session_state.edit_id is not None
+movimentacao_para_editar = None
+
+# Valores padrão do formulário (preenchidos com valores iniciais ou valores de edição)
+default_loja = LOJAS_DISPONIVEIS[0]
+default_data = datetime.now().date()
+default_cliente = ""
+default_valor = 0.01
+default_forma = "Dinheiro"
+default_tipo = "Entrada"
+default_produtos_json = ""
+
+# Se estiver em modo de edição, carrega os dados
+if edit_mode:
+    original_idx_to_edit = st.session_state.edit_id
+    
+    # Encontra a linha no df_exibicao (que tem o index limpo)
+    linha_df_exibicao = df_exibicao[df_exibicao['original_index'] == original_idx_to_edit]
+
+    if not linha_df_exibicao.empty:
+        movimentacao_para_editar = linha_df_exibicao.iloc[0]
+        
+        # Define os valores padrão para a edição
+        default_loja = movimentacao_para_editar['Loja']
+        default_data = movimentacao_para_editar['Data']
+        default_cliente = movimentacao_para_editar['Cliente']
+        # O valor é o valor absoluto do 'Valor' no DF (que pode ser negativo para Saída)
+        default_valor = abs(movimentacao_para_editar['Valor'])
+        default_forma = movimentacao_para_editar['Forma de Pagamento']
+        default_tipo = movimentacao_para_editar['Tipo']
+        default_produtos_json = movimentacao_para_editar['Produtos Vendidos']
+        
+        # Carrega os produtos na lista de sessão (se for entrada)
+        if default_tipo == "Entrada" and default_produtos_json:
+            try:
+                st.session_state.lista_produtos = json.loads(default_produtos_json)
+            except:
+                st.session_state.lista_produtos = []
+        elif default_tipo == "Saída":
+            st.session_state.lista_produtos = []
+        
+        st.sidebar.warning(f"Modo EDIÇÃO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
+        
+    else:
+        # Se o ID não for encontrado (ex: deletado), sai do modo de edição
+        st.session_state.edit_id = None
+        edit_mode = False
+        st.sidebar.info("Movimentação não encontrada, saindo do modo de edição.")
+        st.rerun() # Rerun para limpar a sidebar
+
+# --- Formulário de Nova Movimentação na barra lateral ---
+st.sidebar.header("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
+
+# CAMPOS DE INPUT NA SIDEBAR (USANDO VALORES PADRÃO CALCULADOS ACIMA)
+loja_selecionada = st.sidebar.selectbox("Loja Responsável pela Venda/Gasto", 
+                                        LOJAS_DISPONIVEIS, 
+                                        index=LOJAS_DISPONIVEIS.index(default_loja) if default_loja in LOJAS_DISPONIVEIS else 0)
+data_input = st.sidebar.date_input("Data", value=default_data)
+cliente = st.sidebar.text_input("Nome do Cliente (ou Descrição)", value=default_cliente)
+forma_pagamento = st.sidebar.selectbox("Forma de Pagamento", 
+                                        ["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"], 
+                                        index=["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"].index(default_forma) if default_forma in ["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"] else 0)
+tipo = st.sidebar.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1)
 
 # VARIÁVEIS DE CÁLCULO
 valor_calculado = 0.0
@@ -238,13 +314,12 @@ if tipo == "Entrada":
     with st.sidebar.expander("➕ Adicionar Novo Produto"):
         col_p1, col_p2, col_p3 = st.columns(3)
         with col_p1:
-            nome_produto = st.text_input("Nome do Produto", key="input_nome_prod")
+            # Use chaves diferentes para os inputs de produto para evitar conflito de estado
+            nome_produto = st.text_input("Nome do Produto", key="input_nome_prod_edit")
         with col_p2:
-            # Pega o valor do number_input
-            quantidade_input = st.number_input("Qtd", min_value=1, value=1, step=1, key="input_qtd_prod")
+            quantidade_input = st.number_input("Qtd", min_value=1, value=1, step=1, key="input_qtd_prod_edit")
         with col_p3:
-            # Pega o valor do number_input
-            preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", key="input_preco_prod")
+            preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", key="input_preco_prod_edit")
         
         if st.button("Adicionar Produto à Lista (Entrada)", use_container_width=True):
             if nome_produto and preco_unitario_input > 0 and quantidade_input > 0:
@@ -267,10 +342,12 @@ if tipo == "Entrada":
     # O valor final para a submissão será o calculado se houver produtos
     valor_input_manual = st.sidebar.number_input(
         "Valor Total (R$)", 
-        value=valor_calculado if valor_calculado > 0.0 else 0.01, # Valor mínimo para passar na validação
+        # Usa o valor calculado ou o valor padrão de edição/inicial
+        value=valor_calculado if valor_calculado > 0.0 else default_valor,
         min_value=0.01, 
         format="%.2f",
-        disabled=(valor_calculado > 0.0), # Desabilita se o valor for calculado
+        # Desabilita se o valor for calculado
+        disabled=(valor_calculado > 0.0), 
         key="input_valor_entrada"
     )
     
@@ -278,10 +355,14 @@ if tipo == "Entrada":
     valor_final_movimentacao = valor_calculado if valor_calculado > 0.0 else valor_input_manual
 
 else: # Tipo é Saída
-    st.session_state.lista_produtos = [] # Limpa o estado se mudar para Saída
+    # Se sair do modo de edição para Saída, limpa a lista de produtos, mas só se não for edição.
+    if not edit_mode:
+        st.session_state.lista_produtos = [] 
+        
     # Para Saída, usa-se o valor manual normalmente
     valor_input_manual = st.sidebar.number_input(
         "Valor (R$)", 
+        value=default_valor, # Pre-popula se for Saída em modo de edição ou 0.01
         min_value=0.01, 
         format="%.2f", 
         key="input_valor_saida"
@@ -289,16 +370,30 @@ else: # Tipo é Saída
     valor_final_movimentacao = valor_input_manual
     produtos_vendidos_json = "" # Nulo para Saída
 
-# --- Botão de Submissão Único (Fora do form para melhor controle de state) ---
-enviar = st.sidebar.button("Adicionar Movimentação e Salvar", type="primary", use_container_width=True)
+# --- Botões de Submissão Único ---
+if edit_mode:
+    col_save, col_cancel = st.sidebar.columns(2)
+    with col_save:
+        enviar = st.button("💾 Salvar Edição", type="primary", use_container_width=True)
+    with col_cancel:
+        cancelar = st.button("❌ Cancelar Edição", type="secondary", use_container_width=True)
+else:
+    enviar = st.sidebar.button("Adicionar Movimentação e Salvar", type="primary", use_container_width=True)
+    cancelar = False # Garante que 'cancelar' não seja True
 
-# --- Lógica principal (Adicionar) ---
+# Lógica de Cancelamento
+if cancelar:
+    st.session_state.edit_id = None
+    st.session_state.lista_produtos = []
+    st.rerun()
+
+# --- Lógica principal (Adicionar/Editar) ---
 if enviar:
     # Usa o valor final determinado (calculado ou manual)
     if not cliente or valor_final_movimentacao <= 0:
         st.sidebar.warning("Por favor, preencha a descrição/cliente e o valor corretamente.")
-    elif tipo == "Entrada" and valor_final_movimentacao == 0.01 and not st.session_state.lista_produtos:
-        # Caso especial: Entrada manual com valor mínimo, mas sem produtos
+    elif tipo == "Entrada" and valor_final_movimentacao == 0.01 and not st.session_state.lista_produtos and not edit_mode:
+        # Caso especial: Entrada manual com valor mínimo, mas sem produtos (somente para novas entradas)
         st.sidebar.warning("Se o Tipo for 'Entrada', insira um Valor real ou adicione produtos.")
     else:
         # Valor de armazenamento: positivo para Entrada, negativo para Saída
@@ -310,20 +405,46 @@ if enviar:
         else:
             cliente_desc = cliente
             
-        nova_linha = {
+        nova_linha_data = {
             "Data": data_input,
-            "Loja": loja_selecionada, # Adiciona a loja
+            "Loja": loja_selecionada, 
             "Cliente": cliente_desc,
             "Valor": valor_armazenado, 
             "Forma de Pagamento": forma_pagamento,
             "Tipo": tipo,
-            "Produtos Vendidos": produtos_vendidos_json # Adiciona os produtos (ou vazio)
+            "Produtos Vendidos": produtos_vendidos_json 
         }
         
-        st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_linha])], ignore_index=True)
+        if edit_mode:
+            # EDITAR: Localiza a linha pelo índice original e a substitui
+            original_idx_to_edit = st.session_state.edit_id
+            
+            if original_idx_to_edit in st.session_state.df.index:
+                
+                # Converte os valores para string para garantir a consistência com o DF original
+                nova_linha_str = {k: str(v) for k, v in nova_linha_data.items()}
+                
+                # Atualiza a linha no DataFrame principal usando .loc[]
+                st.session_state.df.loc[original_idx_to_edit] = pd.Series(nova_linha_str)
+                
+                commit_msg = COMMIT_MESSAGE_EDIT
+                
+            else:
+                st.error("Erro interno: Movimentação original não encontrada para edição.")
+                st.session_state.edit_id = None
+                st.rerun()
+                return
+
+        else:
+            # ADICIONAR: Concatena nova linha
+            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_linha_data])], ignore_index=True)
+            commit_msg = COMMIT_MESSAGE
+            
         
-        if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE):
-            st.session_state.lista_produtos = [] # Limpa a lista após o sucesso
+        if salvar_dados_no_github(st.session_state.df, commit_msg):
+            # Limpa o estado de edição e produtos após salvar
+            st.session_state.edit_id = None
+            st.session_state.lista_produtos = [] 
             st.cache_data.clear()
             st.rerun()
 
@@ -349,22 +470,8 @@ with tab_mov:
         st.info("Nenhuma movimentação registrada ainda.")
     else:
         # Colunas de exibição atualizadas
-        # Adiciona 'Produtos Vendidos' e cria um configurador para visualização
         colunas_para_mostrar = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Valor', 'Forma de Pagamento', 'Tipo', 'Produtos Vendidos']
         
-        # Função para formatar a coluna 'Produtos Vendidos'
-        def format_produtos(produtos_json):
-            if produtos_json:
-                try:
-                    produtos = json.loads(produtos_json)
-                    count = len(produtos)
-                    if count > 0:
-                        primeiro = produtos[0]['Produto']
-                        return f"{count} item(s): {primeiro}..."
-                except:
-                    return "Erro na formatação"
-            return ""
-
         df_para_mostrar = df_exibicao.copy()
         df_para_mostrar['Produtos Resumo'] = df_para_mostrar['Produtos Vendidos'].apply(format_produtos)
         
@@ -406,17 +513,52 @@ with tab_mov:
 
         if st.button("Excluir Selecionadas e Salvar no GitHub", type="primary"):
             if indices_a_excluir:
-                # Usa o índice original (do st.session_state.df) para o drop
-                # Devemos garantir que o índice original está sendo usado corretamente.
-                # Como df_exibicao tem 'original_index', o `indices_a_excluir` contém os índices do st.session_state.df
                 st.session_state.df = st.session_state.df.drop(indices_a_excluir, errors='ignore')
                 
                 if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
-                    # Limpa o cache para forçar o recarregamento dos dados
                     st.cache_data.clear()
                     st.rerun()
             else:
                 st.warning("Selecione pelo menos uma movimentação para excluir.")
+
+        st.markdown("---")
+        
+        # --- EDIÇÃO ---
+        st.markdown("### ✏️ Editar Movimentações")
+        col_edit_select, col_edit_btn = st.columns([0.7, 0.3])
+
+        # Cria a lista de opções de edição com ID Visível e um resumo
+        opcoes_edicao = {
+            f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Loja']} | R$ {row['Valor']:,.2f}": row['original_index'] 
+            for index, row in df_exibicao.iterrows()
+        }
+        opcoes_keys = list(opcoes_edicao.keys())
+        
+        with col_edit_select:
+            movimentacao_a_editar_str = st.selectbox(
+                "Selecione a movimentação que deseja editar (ID e Resumo):",
+                options=opcoes_keys,
+                index=0,
+                key="select_editar",
+                # Desabilita o seletor se já estiver editando (a menos que o modo de edição seja cancelado/salvo)
+                disabled=edit_mode
+            )
+            
+        with col_edit_btn:
+            st.markdown("<br>", unsafe_allow_html=True) # Espaçamento para alinhar o botão
+            
+            # Encontra o índice original (o valor do dicionário)
+            original_idx_to_edit_click = opcoes_edicao.get(movimentacao_a_editar_str)
+            
+            if st.button("Editar Selecionada", type="secondary", use_container_width=True, disabled=edit_mode):
+                if original_idx_to_edit_click is not None:
+                    # Define o ID de edição (original_index) e força o recarregamento
+                    st.session_state.edit_id = original_idx_to_edit_click
+                    st.rerun()
+                else:
+                    st.warning("Selecione uma movimentação válida para editar.")
+
+    # Se a tabela estiver vazia, não mostra a seção de edição/exclusão.
 
 with tab_rel:
     st.header("📈 Relatórios Financeiros")
@@ -548,12 +690,11 @@ with tab_rel:
 
             col_data_inicial, col_data_final = st.columns(2)
             
-            data_minima = df_base_filtro_tabela["Data"].min() if not df_base_filtro_tabela.empty else datetime.now().date()
-            data_maxima = df_base_filtro_tabela["Data"].max() if not df_base_filtro_tabela.empty else datetime.now().date()
+            data_minima = df_base_filtro_tabela["Data"].min() if not df_base_filtro_tabela.empty and df_base_filtro_tabela["Data"].min() is not pd.NaT else datetime.now().date()
+            data_maxima = df_base_filtro_tabela["Data"].max() if not df_base_filtro_tabela.empty and df_base_filtro_tabela["Data"].max() is not pd.NaT else datetime.now().date()
             
-            # Garante que o valor padrão seja date.today() se o df estiver vazio
-            data_min_value = data_minima if data_minima is not pd.NaT else datetime.now().date()
-            data_max_value = data_maxima if data_maxima is not pd.NaT else datetime.now().date()
+            data_min_value = data_minima
+            data_max_value = data_maxima
             
             with col_data_inicial:
                 data_inicial = st.date_input("Data Inicial", value=data_min_value, key="filtro_data_ini")
