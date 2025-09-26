@@ -119,7 +119,7 @@ if enviar:
         df_atualizado = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
         salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE)
         st.success("Movimentação adicionada com sucesso!")
-        st.experimental_rerun()
+        st.rerun()
 
 # --- Exibição e Análises dos Dados ---
 st.subheader("📊 Movimentações Registradas")
@@ -188,3 +188,4 @@ else:
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
             col2_f.metric("Saídas", f"R$ {abs(saidas_filtro):,.2f}")
             col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
+
