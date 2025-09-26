@@ -4,29 +4,29 @@ from datetime import datetime, timedelta, date
 import requests
 from io import StringIO
 import io, os
+import json # Importa a biblioteca JSON para serializar a lista de produtos
 # Importa a biblioteca PyGithub para gerenciamento de persistência
-from github import Github 
+from github import Github
 import plotly.express as px
 
 # ==================== CONFIGURAÇÕES DO APLICATIVO ====================
 # As variáveis de token e repositório são carregadas dos segredos do Streamlit.
-# Garanta que suas credenciais estejam seguras no secrets.toml
 try:
     TOKEN = st.secrets["GITHUB_TOKEN"]
     OWNER = st.secrets["REPO_OWNER"]
-    REPO_NAME = st.secrets["REPO_NAME"] 
+    REPO_NAME = st.secrets["REPO_NAME"]
     CSV_PATH = st.secrets["CSV_PATH"]
     BRANCH = st.secrets.get("BRANCH", "main")
 except KeyError:
     st.error("Por favor, configure as chaves 'GITHUB_TOKEN', 'REPO_OWNER', 'REPO_NAME' e 'CSV_PATH' no seu secrets.toml.")
     st.stop() # Interrompe o aplicativo se as chaves essenciais não existirem
 
-COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit" 
-COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa" 
+COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit (com produtos)"
+COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa"
 
 ARQ_LOCAL = "livro_caixa.csv"
-# COLUNA PADRÃO ATUALIZADA para incluir 'Loja'
-COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo"]
+# COLUNA PADRÃO ATUALIZADA para incluir 'Produtos Vendidos'
+COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo", "Produtos Vendidos"]
 
 # Lojas disponíveis para seleção
 LOJAS_DISPONIVEIS = ["Doce&bella", "Papelaria", "Fotografia", "Outro"]
@@ -41,10 +41,12 @@ def ensure_csv(path: str, columns: list) -> pd.DataFrame:
     except Exception:
         df = pd.DataFrame(columns=columns)
         df.to_csv(path, index=False)
+    
+    # Garante que todas as colunas padrão existam
     for c in columns:
         if c not in df.columns:
-            # Se a coluna 'Loja' não existir em um arquivo antigo, preenche com "Não Informado"
-            df[c] = "Não Informado" if c == "Loja" else ""
+            df[c] = ""
+    
     return df[columns]
 
 def load_csv_github(path: str) -> pd.DataFrame | None:
@@ -86,8 +88,8 @@ def carregar_livro_caixa():
     # Garante que as colunas padrão existam
     for col in COLUNAS_PADRAO:
         if col not in df.columns:
-            # Preenche 'Loja' com valor padrão se for um arquivo antigo sem a coluna
-            df[col] = "Não Informado" if col == "Loja" else pd.NA
+            # Preenche a nova coluna 'Produtos Vendidos' com string vazia
+            df[col] = "" if col == "Produtos Vendidos" else pd.NA
             
     # Retorna apenas as colunas padrão na ordem correta
     return df[COLUNAS_PADRAO]
@@ -173,44 +175,155 @@ def calcular_resumo(df):
 st.set_page_config(layout="wide", page_title="Livro Caixa")
 st.title("📘 Livro Caixa - Gerenciamento de Movimentações")
 
-# === Carregamento e Processamento Inicial ===
+# === Inicialização do Session State ===
 if "df" not in st.session_state:
     st.session_state.df = carregar_livro_caixa()
+
+# Novo estado de sessão para a lista temporária de produtos
+if "lista_produtos" not in st.session_state:
+    st.session_state.lista_produtos = []
 
 # DataFrame usado na exibição e análise (já processado)
 df_exibicao = processar_dataframe(st.session_state.df)
 
 # --- Formulário de Nova Movimentação na barra lateral ---
 st.sidebar.header("Nova Movimentação")
-with st.sidebar.form("form_movimentacao"):
-    # NOVA OPÇÃO DE LOJA AQUI
-    loja_selecionada = st.selectbox("Loja Responsável pela Venda/Gasto", LOJAS_DISPONIVEIS)
 
-    data_input = st.date_input("Data", datetime.now().date())
-    cliente = st.text_input("Nome do Cliente (ou Descrição)")
-    valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
-    forma_pagamento = st.selectbox("Forma de Pagamento", ["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"])
-    tipo = st.radio("Tipo", ["Entrada", "Saída"])
-    enviar = st.form_submit_button("Adicionar Movimentação")
+# Campos que definem o comportamento do formulário (Tipo)
+loja_selecionada = st.sidebar.selectbox("Loja Responsável pela Venda/Gasto", LOJAS_DISPONIVEIS)
+data_input = st.sidebar.date_input("Data", datetime.now().date())
+cliente = st.sidebar.text_input("Nome do Cliente (ou Descrição)")
+forma_pagamento = st.sidebar.selectbox("Forma de Pagamento", ["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"])
+tipo = st.sidebar.radio("Tipo", ["Entrada", "Saída"])
+
+# VARIÁVEIS DE CÁLCULO
+valor_calculado = 0.0
+produtos_vendidos_json = ""
+
+# --- LÓGICA DE PRODUTOS PARA ENTRADA ---
+if tipo == "Entrada":
+    st.sidebar.markdown("#### 🛍️ Detalhes dos Produtos (Entrada)")
+    
+    # Display e cálculo dos produtos atuais
+    if st.session_state.lista_produtos:
+        df_produtos = pd.DataFrame(st.session_state.lista_produtos)
+        # Garante que as colunas sejam numéricas para o cálculo
+        df_produtos['Quantidade'] = pd.to_numeric(df_produtos['Quantidade'], errors='coerce').fillna(0)
+        df_produtos['Preço Unitário'] = pd.to_numeric(df_produtos['Preço Unitário'], errors='coerce').fillna(0.0)
+        
+        df_produtos['Total'] = df_produtos['Quantidade'] * df_produtos['Preço Unitário']
+        
+        st.sidebar.dataframe(
+            df_produtos[['Produto', 'Quantidade', 'Preço Unitário', 'Total']], 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Preço Unitário": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Total": st.column_config.NumberColumn(format="R$ %.2f", width="small")
+            }
+        )
+        
+        valor_calculado = df_produtos['Total'].sum()
+        st.sidebar.success(f"Soma dos Produtos: R$ {valor_calculado:,.2f}")
+        
+        # Serializa para JSON para armazenamento
+        produtos_vendidos_json = json.dumps(st.session_state.lista_produtos)
+
+    else:
+        st.sidebar.info("Nenhum produto adicionado. Use o campo 'Valor' abaixo para uma entrada geral.")
+
+    st.sidebar.markdown("---")
+    
+    # Campo de Adicionar Produto em um expander
+    with st.sidebar.expander("➕ Adicionar Novo Produto"):
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            nome_produto = st.text_input("Nome do Produto", key="input_nome_prod")
+        with col_p2:
+            # Pega o valor do number_input
+            quantidade_input = st.number_input("Qtd", min_value=1, value=1, step=1, key="input_qtd_prod")
+        with col_p3:
+            # Pega o valor do number_input
+            preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", key="input_preco_prod")
+        
+        if st.button("Adicionar Produto à Lista (Entrada)", use_container_width=True):
+            if nome_produto and preco_unitario_input > 0 and quantidade_input > 0:
+                st.session_state.lista_produtos.append({
+                    "Produto": nome_produto,
+                    "Quantidade": quantidade_input,
+                    "Preço Unitário": preco_unitario_input
+                })
+                # Força o Streamlit a limpar os inputs e atualizar a lista
+                st.rerun()
+            else:
+                st.warning("Preencha o nome, quantidade e preço unitário corretamente.")
+    
+    # Botão para limpar a lista de produtos
+    if st.session_state.lista_produtos:
+        if st.sidebar.button("Limpar Lista de Produtos (Entrada)", type="secondary"):
+            st.session_state.lista_produtos = []
+            st.rerun()
+            
+    # O valor final para a submissão será o calculado se houver produtos
+    valor_input_manual = st.sidebar.number_input(
+        "Valor Total (R$)", 
+        value=valor_calculado if valor_calculado > 0.0 else 0.01, # Valor mínimo para passar na validação
+        min_value=0.01, 
+        format="%.2f",
+        disabled=(valor_calculado > 0.0), # Desabilita se o valor for calculado
+        key="input_valor_entrada"
+    )
+    
+    # Define o valor real a ser usado na submissão
+    valor_final_movimentacao = valor_calculado if valor_calculado > 0.0 else valor_input_manual
+
+else: # Tipo é Saída
+    st.session_state.lista_produtos = [] # Limpa o estado se mudar para Saída
+    # Para Saída, usa-se o valor manual normalmente
+    valor_input_manual = st.sidebar.number_input(
+        "Valor (R$)", 
+        min_value=0.01, 
+        format="%.2f", 
+        key="input_valor_saida"
+    )
+    valor_final_movimentacao = valor_input_manual
+    produtos_vendidos_json = "" # Nulo para Saída
+
+# --- Botão de Submissão Único (Fora do form para melhor controle de state) ---
+enviar = st.sidebar.button("Adicionar Movimentação e Salvar", type="primary", use_container_width=True)
 
 # --- Lógica principal (Adicionar) ---
 if enviar:
-    if not cliente or valor <= 0:
+    # Usa o valor final determinado (calculado ou manual)
+    if not cliente or valor_final_movimentacao <= 0:
         st.sidebar.warning("Por favor, preencha a descrição/cliente e o valor corretamente.")
+    elif tipo == "Entrada" and valor_final_movimentacao == 0.01 and not st.session_state.lista_produtos:
+        # Caso especial: Entrada manual com valor mínimo, mas sem produtos
+        st.sidebar.warning("Se o Tipo for 'Entrada', insira um Valor real ou adicione produtos.")
     else:
-        valor_armazenado = valor if tipo == "Entrada" else -valor
+        # Valor de armazenamento: positivo para Entrada, negativo para Saída
+        valor_armazenado = valor_final_movimentacao if tipo == "Entrada" else -valor_final_movimentacao
+        
+        # Ajusta a descrição/cliente se houver produtos e o cliente for vago
+        if tipo == "Entrada" and not cliente:
+            cliente_desc = f"Venda de {len(st.session_state.lista_produtos)} produto(s)"
+        else:
+            cliente_desc = cliente
+            
         nova_linha = {
             "Data": data_input,
             "Loja": loja_selecionada, # Adiciona a loja
-            "Cliente": cliente,
+            "Cliente": cliente_desc,
             "Valor": valor_armazenado, 
             "Forma de Pagamento": forma_pagamento,
-            "Tipo": tipo
+            "Tipo": tipo,
+            "Produtos Vendidos": produtos_vendidos_json # Adiciona os produtos (ou vazio)
         }
         
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_linha])], ignore_index=True)
         
         if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE):
+            st.session_state.lista_produtos = [] # Limpa a lista após o sucesso
             st.cache_data.clear()
             st.rerun()
 
@@ -236,22 +349,45 @@ with tab_mov:
         st.info("Nenhuma movimentação registrada ainda.")
     else:
         # Colunas de exibição atualizadas
-        colunas_para_mostrar = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Valor', 'Forma de Pagamento', 'Tipo']
+        # Adiciona 'Produtos Vendidos' e cria um configurador para visualização
+        colunas_para_mostrar = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Valor', 'Forma de Pagamento', 'Tipo', 'Produtos Vendidos']
+        
+        # Função para formatar a coluna 'Produtos Vendidos'
+        def format_produtos(produtos_json):
+            if produtos_json:
+                try:
+                    produtos = json.loads(produtos_json)
+                    count = len(produtos)
+                    if count > 0:
+                        primeiro = produtos[0]['Produto']
+                        return f"{count} item(s): {primeiro}..."
+                except:
+                    return "Erro na formatação"
+            return ""
+
+        df_para_mostrar = df_exibicao.copy()
+        df_para_mostrar['Produtos Resumo'] = df_para_mostrar['Produtos Vendidos'].apply(format_produtos)
+        
+        colunas_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Valor', 'Forma de Pagamento', 'Tipo', 'Produtos Resumo']
+
         st.dataframe(
-            df_exibicao[colunas_para_mostrar], 
+            df_para_mostrar[colunas_tabela], 
             use_container_width=True,
             column_config={
                 "Valor": st.column_config.NumberColumn(
                     "Valor (R$)",
                     format="R$ %.2f",
                 ),
+                "Produtos Resumo": st.column_config.TextColumn(
+                    "Detalhe dos Produtos"
+                )
             },
             height=400
         )
-
+        
         st.markdown("---")
 
-        # --- EXCLUSÃO (CORRIGIDA) ---
+        # --- EXCLUSÃO ---
         st.markdown("### 🗑️ Excluir Movimentações")
         
         # Mapeamento do nome de exibição para o ÍNDICE ORIGINAL (original_index)
@@ -271,6 +407,8 @@ with tab_mov:
         if st.button("Excluir Selecionadas e Salvar no GitHub", type="primary"):
             if indices_a_excluir:
                 # Usa o índice original (do st.session_state.df) para o drop
+                # Devemos garantir que o índice original está sendo usado corretamente.
+                # Como df_exibicao tem 'original_index', o `indices_a_excluir` contém os índices do st.session_state.df
                 st.session_state.df = st.session_state.df.drop(indices_a_excluir, errors='ignore')
                 
                 if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
@@ -338,8 +476,10 @@ with tab_rel:
                 else: # Comparação Personalizada
                     col_d_ini, col_d_fim = st.columns(2)
                     
+                    data_minima_df = df_filtrado_loja["Data"].min()
+                    
                     with col_d_ini:
-                        data_rel_inicial = st.date_input("Data Inicial do Relatório", value=data_2_meses_atras, key="rel_data_ini")
+                        data_rel_inicial = st.date_input("Data Inicial do Relatório", value=data_minima_df if data_minima_df < hoje else hoje, key="rel_data_ini")
                     with col_d_fim:
                         data_rel_final = st.date_input("Data Final do Relatório", value=hoje, key="rel_data_fim")
                     
@@ -411,10 +551,14 @@ with tab_rel:
             data_minima = df_base_filtro_tabela["Data"].min() if not df_base_filtro_tabela.empty else datetime.now().date()
             data_maxima = df_base_filtro_tabela["Data"].max() if not df_base_filtro_tabela.empty else datetime.now().date()
             
+            # Garante que o valor padrão seja date.today() se o df estiver vazio
+            data_min_value = data_minima if data_minima is not pd.NaT else datetime.now().date()
+            data_max_value = data_maxima if data_maxima is not pd.NaT else datetime.now().date()
+            
             with col_data_inicial:
-                data_inicial = st.date_input("Data Inicial", value=data_minima, key="filtro_data_ini")
+                data_inicial = st.date_input("Data Inicial", value=data_min_value, key="filtro_data_ini")
             with col_data_final:
-                data_final = st.date_input("Data Final", value=data_maxima, key="filtro_data_fim")
+                data_final = st.date_input("Data Final", value=data_max_value, key="filtro_data_fim")
 
             if data_inicial and data_final:
                 data_inicial_dt = pd.to_datetime(data_inicial).date()
@@ -429,7 +573,11 @@ with tab_rel:
                     st.warning("Não há movimentações para o período selecionado.")
                 else:
                     st.markdown("#### Tabela Filtrada")
-                    st.dataframe(df_filtrado_final[colunas_para_mostrar], use_container_width=True)
+                    
+                    # Cria a coluna resumo dos produtos novamente para a tabela filtrada
+                    df_filtrado_final['Produtos Resumo'] = df_filtrado_final['Produtos Vendidos'].apply(format_produtos)
+                    
+                    st.dataframe(df_filtrado_final[colunas_tabela], use_container_width=True)
 
                     # --- Resumo do Período Filtrado ---
                     entradas_filtro, saidas_filtro, saldo_filtro = calcular_resumo(df_filtrado_final)
