@@ -18,7 +18,6 @@ HEADERS = {
     "Accept": "application/vnd.github.v3+json",
 }
 
-
 # === FUNÇÕES PARA LER/SALVAR NO GITHUB ===
 def carregar_dados():
     url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{CSV_PATH}?ref={BRANCH}"
@@ -87,6 +86,10 @@ if enviar:
         "Tipo": tipo
     }
     df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
+
+    # DEBUG: mostrar DataFrame antes de salvar
+    st.write("DataFrame que será salvo:", df)
+
     salvar_dados(df, sha)
 
 # Exibir tabela
