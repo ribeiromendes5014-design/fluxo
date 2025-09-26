@@ -397,10 +397,34 @@ else: # Tipo é Saída
     if not edit_mode or tipo != default_tipo:
         st.session_state.lista_produtos = [] 
         
+    # NOVO: Lógica para carregar valor customizado se estiver em edição
+    custom_desc_default = ""
+    default_select_index = 0
+    
+    if default_categoria in CATEGORIAS_SAIDA:
+        default_select_index = CATEGORIAS_SAIDA.index(default_categoria)
+    elif default_categoria.startswith("Outro: "):
+        default_select_index = CATEGORIAS_SAIDA.index("Outro/Diversos")
+        # Extrai a parte personalizada da string
+        custom_desc_default = default_categoria.replace("Outro: ", "")
+    
     st.sidebar.markdown("#### ⚙️ Centro de Custo (Saída)")
     categoria_selecionada = st.sidebar.selectbox("Categoria de Gasto", 
                                                  CATEGORIAS_SAIDA, 
-                                                 index=CATEGORIAS_SAIDA.index(default_categoria) if default_categoria in CATEGORIAS_SAIDA else 0)
+                                                 index=default_select_index)
+        
+    # --- NOVO: Lógica para input personalizado se "Outro/Diversos" for selecionado ---
+    if categoria_selecionada == "Outro/Diversos":
+        descricao_personalizada = st.sidebar.text_input("Especifique o Gasto (Obrigatório)", 
+                                                        value=custom_desc_default, 
+                                                        placeholder="Ex: Doação de Caridade, Compra de Novo Equipamento",
+                                                        key="input_custom_category")
+        if descricao_personalizada:
+            categoria_selecionada = f"Outro: {descricao_personalizada}"
+        else:
+            # Se o usuário selecionar "Outro/Diversos" mas não digitar nada, mantém a categoria padrão
+            pass 
+    # --- FIM NOVO ---
         
     # Para Saída, usa-se o valor manual normalmente
     valor_input_manual = st.sidebar.number_input(
