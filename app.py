@@ -794,7 +794,7 @@ with tab_rel:
     # --- 1. DEFINIÇÃO DAS SUB-ABAS ---
     subtab_dashboard, subtab_filtro, subtab_produtos, subtab_dividas = st.tabs(["Dashboard Geral", "Filtro e Tabela", "Produtos e Lucro", "🧾 Dívidas Pendentes"])
     
-    # --- 2. INICIALIZAÇÃO DE FALLBACK (CORREÇÃO DE NAMERROR NA LINHA 883) ---
+    # --- 2. INICIALIZAÇÃO DE FALLBACK (CORREÇÃO DE NAMERROR) ---
     # Garante que df_filtrado_loja exista antes de qualquer sub-aba ser processada.
     df_filtrado_loja = pd.DataFrame(columns=df_exibicao.columns)
     loja_filtro_relatorio = "Todas as Lojas"
@@ -807,7 +807,6 @@ with tab_rel:
     else:
         # --- 4. FILTRO GLOBAL DE LOJA (Ocorre apenas se houver dados) ---
         
-
         lojas_unicas_no_df = df_exibicao["Loja"].unique().tolist()
         todas_lojas = ["Todas as Lojas"] + [l for l in LOJAS_DISPONIVEIS if l in lojas_unicas_no_df] + [l for l in lojas_unicas_no_df if l not in LOJAS_DISPONIVEIS and l != "Todas as Lojas"]
         todas_lojas = list(dict.fromkeys(todas_lojas))
@@ -883,11 +882,18 @@ with tab_rel:
                 selecao_pagar = st.session_state.get('tabela_pagar', {}).get('selection', {}).get('rows', [])
                 
                 indices_selecionados = []
-                if selecao_receber:
-                    indices_selecionados.extend(df_receber.iloc[selecao_receber]['original_index'].tolist())
-                if selecao_pagar:
-                    indices_selecionados.extend(df_pagar.iloc[selecao_pagar]['original_index'].tolist())
                 
+                # --- REFORÇO DA LÓGICA DE SELEÇÃO E ÍNDICE ---
+                if selecao_receber:
+                    # Garante que usamos iloc com a lista de índices (selecao_receber) do DF exibido.
+                    indices_a_iloc = [int(i) for i in selecao_receber]
+                    indices_selecionados.extend(df_receber.iloc[indices_a_iloc]['original_index'].tolist())
+                
+                if selecao_pagar:
+                    indices_a_iloc = [int(i) for i in selecao_pagar]
+                    indices_selecionados.extend(df_pagar.iloc[indices_a_iloc]['original_index'].tolist())
+                # --- FIM REFORÇO ---
+
                 if indices_selecionados:
                     st.info(f"Total de {len(indices_selecionados)} transações selecionadas para conclusão.")
                     
