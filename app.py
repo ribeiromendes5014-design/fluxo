@@ -139,7 +139,6 @@ if df.empty:
 else:
     # Cria uma cópia do DataFrame e adiciona uma coluna de índice para exibição
     df_exibicao = df.copy()
-    df_exibicao.insert(0, 'Índice', df_exibicao.index)
     
     # Ordena o DataFrame pela data de forma decrescente
     df_exibicao = df_exibicao.sort_values(by="Data", ascending=False)
@@ -151,15 +150,18 @@ else:
     st.markdown("### 🗑️ Excluir Movimentações")
     
     # Cria uma lista de opções para o multiselect, associando a exibição ao índice real do DF
-    opcoes_exclusao = df_exibicao.apply(lambda row: f"ID: {row.name} - Data: {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {row['Valor']}", axis=1).tolist()
+    opcoes_exclusao = {
+        f"ID: {row.name} - Data: {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {row['Valor']:, .2f}": row.name
+        for _, row in df.iterrows()
+    }
     
     movimentacoes_a_excluir_str = st.multiselect(
         "Selecione as movimentações que deseja excluir:",
-        options=opcoes_exclusao
+        options=list(opcoes_exclusao.keys())
     )
     
-    # Extrai os IDs (índices) das strings selecionadas usando a parte inicial da string
-    indices_a_excluir = [int(s.split(" ")[1]) for s in movimentacoes_a_excluir_str]
+    # Extrai os IDs (índices) das strings selecionadas usando o dicionário
+    indices_a_excluir = [opcoes_exclusao[s] for s in movimentacoes_a_excluir_str]
 
     if st.button("Excluir Selecionadas"):
         if indices_a_excluir:
