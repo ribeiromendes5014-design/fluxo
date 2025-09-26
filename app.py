@@ -529,8 +529,29 @@ def highlight_value(row):
     return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
 
 with tab_mov:
-    st.subheader("📊 Resumo Financeiro Geral")
-    total_entradas, total_saidas, saldo = calcular_resumo(df_exibicao)
+    
+    # --- NOVO: FILTRAR PARA O MÊS ATUAL ---
+    hoje = date.today()
+    primeiro_dia_mes = hoje.replace(day=1)
+
+    # Determina o último dia do mês atual
+    if hoje.month == 12:
+        proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
+    else:
+        proximo_mes = hoje.replace(month=hoje.month + 1, day=1)
+    ultimo_dia_mes = proximo_mes - timedelta(days=1)
+
+    # Filtra o DataFrame de exibição para incluir apenas o mês atual
+    df_mes_atual = df_exibicao[
+        (df_exibicao["Data"] >= primeiro_dia_mes) &
+        (df_exibicao["Data"] <= ultimo_dia_mes)
+    ]
+    
+    # Título Atualizado
+    st.subheader(f"📊 Resumo Financeiro Geral - Mês de {primeiro_dia_mes.strftime('%m/%Y')}")
+
+    # Calcula Resumo com dados do Mês Atual
+    total_entradas, total_saidas, saldo = calcular_resumo(df_mes_atual)
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Total de Entradas", f"R$ {total_entradas:,.2f}")
@@ -540,10 +561,11 @@ with tab_mov:
 
     st.markdown("---")
     
-    # --- Resumo Agregado por Loja (Melhoria 2) ---
-    st.subheader("🏠 Resumo Rápido por Loja")
+    # --- Resumo Agregado por Loja (MÊS ATUAL) ---
+    st.subheader(f"🏠 Resumo Rápido por Loja (Mês de {primeiro_dia_mes.strftime('%m/%Y')})")
     
-    df_resumo_loja = df_exibicao.groupby('Loja')['Valor'].agg(['sum', lambda x: x[x >= 0].sum(), lambda x: abs(x[x < 0].sum())]).reset_index()
+    # AGORA USANDO DF_MES_ATUAL
+    df_resumo_loja = df_mes_atual.groupby('Loja')['Valor'].agg(['sum', lambda x: x[x >= 0].sum(), lambda x: abs(x[x < 0].sum())]).reset_index()
     df_resumo_loja.columns = ['Loja', 'Saldo', 'Entradas', 'Saídas']
     
     cols_loja = st.columns(len(df_resumo_loja.index))
