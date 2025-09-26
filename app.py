@@ -795,8 +795,9 @@ with tab_rel:
     subtab_dashboard, subtab_filtro, subtab_produtos, subtab_dividas = st.tabs(["Dashboard Geral", "Filtro e Tabela", "Produtos e Lucro", "🧾 Dívidas Pendentes"])
     
     # --- 2. INICIALIZAÇÃO DE FALLBACK (Garante que df_filtrado_loja SEMPRE exista) ---
-    # Inicializa com colunas do df_exibicao para evitar erros de coluna no caso de dados vazios.
-    df_filtrado_loja = pd.DataFrame(columns=df_exibicao.columns)
+    # Usa df_exibicao como fallback, que já é garantido existir, mesmo que vazio.
+    df_filtrado_loja = df_exibicao.copy()
+    loja_filtro_relatorio = "Todas as Lojas"
     
     # --- 3. VERIFICAÇÃO DE DADOS ---
     if df_exibicao.empty:
@@ -805,7 +806,7 @@ with tab_rel:
         
     else:
         # --- 4. FILTRO GLOBAL DE LOJA (Ocorre apenas se houver dados) ---
-        loja_filtro_relatorio = "Todas as Lojas" 
+        
 
         lojas_unicas_no_df = df_exibicao["Loja"].unique().tolist()
         todas_lojas = ["Todas as Lojas"] + [l for l in LOJAS_DISPONIVEIS if l in lojas_unicas_no_df] + [l for l in lojas_unicas_no_df if l not in LOJAS_DISPONIVEIS and l != "Todas as Lojas"]
