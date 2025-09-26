@@ -6,34 +6,59 @@ import base64
 import io
 
 # ==================== CONFIGURAÇÕES DO APLICATIVO ====================
+# As variáveis de token e repositório são carregadas dos segredos do Streamlit.
+# Isso garante que suas credenciais permaneçam seguras.
 TOKEN = st.secrets["GITHUB_TOKEN"]
 OWNER = st.secrets["REPO_OWNER"]
 REPO = st.secrets["REPO_NAME"]
 CSV_PATH = st.secrets["CSV_PATH"]
-COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit"
-COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa"
+COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit" # Mensagem de commit padrão para adições
+COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa" # Mensagem de commit para exclusões
+# 'main' é a branch padrão, mas pode ser configurada nos segredos
 BRANCH = st.secrets.get("BRANCH", "main")
 
+# Cabeçalhos de autenticação para as requisições à API do GitHub
 HEADERS = {
     "Authorization": f"token {TOKEN}",
-    "Accept": "application/vnd.github.v3+json",
+    "Accept": "application/vnd.github.com",
 }
 
 # ==================== FUNÇÕES DE INTERAÇÃO COM O GITHUB ====================
-@st.cache_data(show_spinner="Carregando dados do GitHub...")
-def carregar_dados_do_github():
+def obter_sha_atual():
+    """Obtém o SHA atual do arquivo do GitHub para evitar conflitos de salvamento."""
     url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{CSV_PATH}?ref={BRANCH}"
     try:
         response = requests.get(url, headers=HEADERS)
         response.raise_for_status()
+        return response.json()["sha"]
+    except Exception as e:
+        st.error(f"Erro ao obter SHA atual: {e}")
+        return None
+
+@st.cache_data(show_spinner="Carregando dados do GitHub...")
+def carregar_dados_do_github():
+    """
+    Carrega o arquivo CSV do GitHub, decodifica o conteúdo e retorna um DataFrame.
+    Também retorna o SHA do arquivo para futura atualização.
+    """
+    url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{CSV_PATH}?ref={BRANCH}"
+    
+    try:
+        response = requests.get(url, headers=HEADERS)
+        response.raise_for_status()  # Lança um erro para códigos de status HTTP ruins (4xx ou 5xx)
+        
         content = response.json()
         decoded_content = base64.b64decode(content["content"]).decode("utf-8")
+        # Usa io.StringIO, que é a forma correta de ler strings em memória com pandas
         df = pd.read_csv(io.StringIO(decoded_content), parse_dates=["Data"])
+        
         sha = content["sha"]
         return df, sha
+        
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
             st.info("Arquivo CSV não encontrado no GitHub. Criando um novo DataFrame localmente.")
+            # Retorna um DataFrame vazio se o arquivo não existir
             return pd.DataFrame(columns=["Data", "Cliente", "Valor", "Forma de Pagamento", "Tipo"]), None
         else:
             st.error(f"Erro HTTP ao carregar dados do GitHub: {e}")
@@ -42,65 +67,65 @@ def carregar_dados_do_github():
         st.error(f"Ocorreu um erro inesperado ao carregar os dados: {e}")
         return pd.DataFrame(columns=["Data", "Cliente", "Valor", "Forma de Pagamento", "Tipo"]), None
 
-def obter_sha_atual():
-    url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{CSV_PATH}?ref={BRANCH}"
-    try:
-        response = requests.get(url, headers=HEADERS)
-        response.raise_for_status()
-        content = response.json()
-        return content["sha"]
-    except Exception as e:
-        st.error(f"Erro ao obter SHA atual: {e}")
-        return None
-
 def salvar_dados_no_github(df, sha=None, commit_message=COMMIT_MESSAGE):
+    """
+    Converte o DataFrame para CSV, codifica em Base64 e salva no GitHub.
+    Usa o SHA para atualizar o arquivo existente.
+    """
+    # Converte o DataFrame para string CSV
     csv_string = df.to_csv(index=False)
+    # Codifica a string CSV em Base64
     csv_encoded = base64.b64encode(csv_string.encode()).decode()
     
     url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{CSV_PATH}"
+
     payload = {
         "message": commit_message,
         "content": csv_encoded,
         "branch": BRANCH,
     }
+
     if sha:
+        # O SHA é necessário para que a API do GitHub saiba qual versão do arquivo atualizar
         payload["sha"] = sha
 
     try:
         response = requests.put(url, headers=HEADERS, json=payload)
         response.raise_for_status()
+        
         if response.status_code in [200, 201]:
-            novo_sha = response.json()['content']['sha']
             st.success("📁 Dados salvos no GitHub com sucesso!")
-            return True, novo_sha
+            return True, response.json()['content']['sha']
         else:
             st.error(f"Erro ao salvar no GitHub. Código de status: {response.status_code}")
             st.code(response.json())
             return False, sha
+            
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 409:
             st.warning("Conflito detectado, tentando atualizar SHA e salvar novamente...")
             novo_sha = obter_sha_atual()
-            if novo_sha and novo_sha != sha:
+            if novo_sha:
                 payload["sha"] = novo_sha
                 try:
-                    response = requests.put(url, headers=HEADERS, json=payload)
-                    response.raise_for_status()
-                    novo_sha = response.json()['content']['sha']
-                    st.success("📁 Dados salvos no GitHub com sucesso após atualizar SHA!")
-                    return True, novo_sha
+                    response_retry = requests.put(url, headers=HEADERS, json=payload)
+                    response_retry.raise_for_status()
+                    st.success("📁 Dados salvos no GitHub com sucesso após resolver conflito!")
+                    return True, response_retry.json()['content']['sha']
                 except Exception as e2:
                     st.error(f"Falha ao salvar após atualizar SHA: {e2}")
                     return False, sha
             else:
-                st.error("Não foi possível obter SHA atualizado.")
+                st.error("Não foi possível obter o SHA atualizado para resolver o conflito.")
                 return False, sha
         else:
             st.error(f"Erro HTTP ao salvar no GitHub: {e}")
+            st.code(e.response.json())
             return False, sha
     except requests.exceptions.RequestException as e:
         st.error(f"Erro de requisição ao salvar no GitHub: {e}")
         return False, sha
+
 
 # ==================== INTERFACE STREAMLIT ====================
 st.title("📘 Livro Caixa - Streamlit + GitHub")
@@ -132,9 +157,9 @@ if enviar:
         df_atualizado = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
         sucesso, novo_sha = salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE)
         if sucesso:
-            sha = novo_sha  # Atualiza SHA para próximas operações
+            st.cache_data.clear() # Limpa o cache para forçar recarregar
             st.success("Movimentação adicionada com sucesso!")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Falha ao adicionar movimentação.")
 
@@ -149,12 +174,10 @@ else:
 
     st.markdown("---")
     st.markdown("### 🗑️ Excluir Movimentações")
-
     opcoes_exclusao = {
         f"ID: {row.name} - Data: {row['Data'].strftime('%d/%m/%Y') if pd.notnull(row['Data']) else 'Data inválida'} - {row['Cliente']} - R$ {row['Valor']:,.2f}": row.name
         for _, row in df.iterrows()
     }
-
     movimentacoes_a_excluir_str = st.multiselect(
         "Selecione as movimentações que deseja excluir:",
         options=list(opcoes_exclusao.keys())
@@ -166,7 +189,7 @@ else:
             df_atualizado = df.drop(indices_a_excluir)
             sucesso, novo_sha = salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE_DELETE)
             if sucesso:
-                sha = novo_sha  # Atualiza SHA
+                st.cache_data.clear()
                 st.success(f"{len(indices_a_excluir)} movimentação(ões) excluída(s) com sucesso!")
                 st.rerun()
             else:
@@ -212,4 +235,3 @@ else:
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
             col2_f.metric("Saídas", f"R$ {abs(saidas_filtro):,.2f}")
             col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
-
