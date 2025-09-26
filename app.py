@@ -20,11 +20,11 @@ BRANCH = st.secrets.get("BRANCH", "main")
 # Cabeçalhos de autenticação para as requisições à API do GitHub
 HEADERS = {
     "Authorization": f"token {TOKEN}",
-    "Accept": "application/vnd.github.v3+json",
+    "Accept": "application/vnd.github.com",
 }
 
 # ==================== FUNÇÕES DE INTERAÇÃO COM O GITHUB ====================
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner="Carregando dados do GitHub...")
 def carregar_dados_do_github():
     """
     Carrega o arquivo CSV do GitHub, decodifica o conteúdo e retorna um DataFrame.
@@ -137,33 +137,34 @@ st.subheader("📊 Movimentações Registradas")
 if df.empty:
     st.info("Nenhuma movimentação registrada ainda.")
 else:
-    # Adiciona uma coluna de índice para facilitar a exclusão
-    df_exibicao = df.reset_index(names=["Índice"])
-    df_exibicao["Índice"] = df_exibicao.index
+    # Cria uma cópia do DataFrame e adiciona uma coluna de índice para exibição
+    df_exibicao = df.copy()
+    df_exibicao.insert(0, 'Índice', df_exibicao.index)
     
     # Ordena o DataFrame pela data de forma decrescente
-    df_exibicao = df_exibicao.sort_values(by="Data", ascending=False).reset_index(drop=True)
+    df_exibicao = df_exibicao.sort_values(by="Data", ascending=False)
     
     st.dataframe(df_exibicao, use_container_width=True)
 
     # --- Opção de exclusão ---
     st.markdown("---")
     st.markdown("### 🗑️ Excluir Movimentações")
-    # Cria uma lista de opções para o multiselect
-    opcoes_exclusao = df_exibicao.apply(lambda row: f"Índice: {row['Índice']} - {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {row['Valor']}", axis=1).tolist()
+    
+    # Cria uma lista de opções para o multiselect, associando a exibição ao índice real do DF
+    opcoes_exclusao = df_exibicao.apply(lambda row: f"ID: {row.name} - Data: {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {row['Valor']}", axis=1).tolist()
     
     movimentacoes_a_excluir_str = st.multiselect(
         "Selecione as movimentações que deseja excluir:",
         options=opcoes_exclusao
     )
     
-    # Extrai os índices das strings selecionadas
+    # Extrai os IDs (índices) das strings selecionadas usando a parte inicial da string
     indices_a_excluir = [int(s.split(" ")[1]) for s in movimentacoes_a_excluir_str]
 
     if st.button("Excluir Selecionadas"):
         if indices_a_excluir:
             # Filtra o DataFrame para manter apenas as linhas que não estão na lista de exclusão
-            df_atualizado = df.drop(indices_a_excluir).reset_index(drop=True)
+            df_atualizado = df.drop(indices_a_excluir)
             salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE_DELETE)
             st.success(f"{len(indices_a_excluir)} movimentação(ões) excluída(s) com sucesso!")
             st.rerun()
