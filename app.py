@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import requests
 import base64
+from io import StringIO  # ✅ Correção aqui
 
 # === CONFIGURAÇÃO DOS SECRETS ===
 TOKEN = st.secrets["GITHUB_TOKEN"]
@@ -26,7 +27,7 @@ def carregar_dados():
     if response.status_code == 200:
         content = response.json()
         decoded = base64.b64decode(content["content"]).decode("utf-8")
-        df = pd.read_csv(pd.compat.StringIO(decoded), parse_dates=["Data"])
+        df = pd.read_csv(StringIO(decoded), parse_dates=["Data"])  # ✅ Correção aqui
         sha = content["sha"]
         return df, sha
     else:
