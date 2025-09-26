@@ -39,4 +39,3 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos
 2025-09-26,Doce&bella,compra,-152.92,PIX,Saída,
 2025-09-26,Doce&bella,venda,15.0,PIX,Entrada,
 2025-09-26,Doce&bella,Gloss transparente,15.0,PIX,Entrada,
-2025-09-26,Doce&bella,Venda,30.0,PIX,Entrada,"[{""Produto"": ""teste2"", ""Quantidade"": 1, ""Pre\u00e7o Unit\u00e1rio"": 15.0}, {""Produto"": ""teste3"", ""Quantidade"": 1, ""Pre\u00e7o Unit\u00e1rio"": 15.0}]"
