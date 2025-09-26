@@ -158,17 +158,17 @@ if st.session_state.df.empty:
 else:
     df_exibicao = st.session_state.df.copy()
 
-# Converte coluna Valor para número
-df_exibicao["Valor"] = pd.to_numeric(df_exibicao["Valor"], errors="coerce").fillna(0.0)
+    # Converte coluna Valor para número
+    df_exibicao["Valor"] = pd.to_numeric(df_exibicao["Valor"], errors="coerce").fillna(0.0)
 
-try:
-    df_exibicao["Data"] = pd.to_datetime(df_exibicao["Data"], errors='coerce').dt.date
-    df_exibicao = df_exibicao.sort_values(by="Data", ascending=False).reset_index(drop=True)
-    df_exibicao.insert(0, 'ID Visível', df_exibicao.index + 1)
-except Exception:
-    st.error("Erro ao processar a coluna 'Data'. Verifique o formato do CSV.")
+    try:
+        df_exibicao["Data"] = pd.to_datetime(df_exibicao["Data"], errors='coerce').dt.date
+        df_exibicao = df_exibicao.sort_values(by="Data", ascending=False).reset_index(drop=True)
+        df_exibicao.insert(0, 'ID Visível', df_exibicao.index + 1)
+    except Exception:
+        st.error("Erro ao processar a coluna 'Data'. Verifique o formato do CSV.")
 
-        
+    # --- Exibição ---
     colunas_para_mostrar = ['ID Visível', 'Data', 'Cliente', 'Valor', 'Forma de Pagamento', 'Tipo']
 
     st.dataframe(
@@ -256,4 +256,3 @@ except Exception:
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
             col2_f.metric("Saídas", f"R$ {saidas_filtro:,.2f}")
             col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
-
