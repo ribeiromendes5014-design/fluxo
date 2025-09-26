@@ -128,7 +128,7 @@ def salvar_dados_no_github(df, sha=None, commit_message=COMMIT_MESSAGE):
 
 
 # ==================== INTERFACE STREAMLIT ====================
-st.title("📘 Livro Caixa")
+st.title("📘 Livro Caixa - Streamlit + GitHub")
 
 # --- Formulário de Nova Movimentação na barra lateral ---
 st.sidebar.header("Nova Movimentação")
@@ -159,7 +159,7 @@ if enviar:
         if sucesso:
             st.cache_data.clear() # Limpa o cache para forçar recarregar
             st.success("Movimentação adicionada com sucesso!")
-            st.rerun()
+            st.rerun() # Reruns the app to show the updated table
         else:
             st.error("Falha ao adicionar movimentação.")
 
@@ -171,14 +171,6 @@ else:
     df_exibicao = df.copy()
     df_exibicao = df_exibicao.sort_values(by="Data", ascending=False)
     st.dataframe(df_exibicao, use_container_width=True)
-
-    # Botão para salvar
-    if st.button("Salvar no GitHub"):
-        sucesso, novo_sha = salvar_dados_no_github(df, sha, COMMIT_MESSAGE)
-        if sucesso:
-            st.cache_data.clear()
-            st.success("Dados salvos com sucesso!")
-            st.rerun()
 
     st.markdown("---")
     st.markdown("### 🗑️ Excluir Movimentações")
