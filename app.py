@@ -28,6 +28,7 @@ HEADERS = {
 def carregar_dados_do_github():
     """
     Carrega o arquivo CSV do GitHub usando a URL de conteúdo bruto.
+    Essa abordagem é ideal para arquivos públicos.
     """
     url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO}/{BRANCH}/{CSV_PATH}"
     try:
@@ -91,7 +92,7 @@ def salvar_dados_no_github(df, commit_message=COMMIT_MESSAGE):
         return False
 
 # ==================== INTERFACE STREAMLIT ====================
-st.title("📘 Livro Caixa")
+st.title("📘 Livro Caixa - Streamlit + GitHub")
 
 # Usando st.session_state para gerenciar o DataFrame
 if "df" not in st.session_state:
@@ -195,4 +196,3 @@ else:
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
             col2_f.metric("Saídas", f"R$ {abs(saidas_filtro):,.2f}")
             col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
-
