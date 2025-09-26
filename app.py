@@ -172,6 +172,14 @@ else:
     df_exibicao = df_exibicao.sort_values(by="Data", ascending=False)
     st.dataframe(df_exibicao, use_container_width=True)
 
+    # Botão para salvar
+    if st.button("Salvar no GitHub"):
+        sucesso, novo_sha = salvar_dados_no_github(df, sha, COMMIT_MESSAGE)
+        if sucesso:
+            st.cache_data.clear()
+            st.success("Dados salvos com sucesso!")
+            st.rerun()
+
     st.markdown("---")
     st.markdown("### 🗑️ Excluir Movimentações")
     opcoes_exclusao = {
@@ -235,4 +243,3 @@ else:
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
             col2_f.metric("Saídas", f"R$ {abs(saidas_filtro):,.2f}")
             col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
-
