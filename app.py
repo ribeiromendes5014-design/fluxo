@@ -28,8 +28,8 @@ ARQ_LOCAL = "livro_caixa.csv"
 # COLUNA PADRÃO ATUALIZADA para incluir 'Loja'
 COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo"]
 
-# Lojas disponíveis para seleção
-LOJAS_DISPONIVEIS = ["Loja A (Física)", "Loja B (Física)", "Online", "Outro"]
+# Lojas disponíveis para seleção (ATUALIZADO CONFORME SOLICITADO)
+LOJAS_DISPONIVEIS = ["Doce&bella", "Papelaria", "Fotografia", "Outro"]
 
 # ========================================================
 # FUNÇÕES DE PERSISTÊNCIA (adaptadas do loja.py)
@@ -277,7 +277,10 @@ with tab_rel:
     else:
         
         # FILTRO GLOBAL DE LOJA PARA RELATÓRIOS
-        todas_lojas = ["Todas as Lojas"] + df_exibicao["Loja"].unique().tolist()
+        # Garante que a lista de lojas no filtro reflita as lojas reais no CSV
+        lojas_unicas_no_df = df_exibicao["Loja"].unique().tolist()
+        todas_lojas = ["Todas as Lojas"] + lojas_unicas_no_df
+        
         loja_filtro_relatorio = st.selectbox(
             "Selecione a Loja para Filtrar Relatórios",
             options=todas_lojas,
@@ -299,7 +302,7 @@ with tab_rel:
         with subtab_dashboard:
             
             if df_filtrado_loja.empty:
-                st.warning(f"Nenhuma movimentação para {loja_filtro_relatorio} no período.")
+                st.warning(f"Nenhuma movimentação encontrada na Loja '{loja_filtro_relatorio}' no período.")
             else:
                 # --- Opção 1: Últimos 2 meses ---
                 hoje = date.today()
