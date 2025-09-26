@@ -296,7 +296,7 @@ loja_selecionada = st.sidebar.selectbox("Loja Responsável pela Venda/Gasto",
                                         index=LOJAS_DISPONIVEIS.index(default_loja) if default_loja in LOJAS_DISPONIVEIS else 0)
 data_input = st.sidebar.date_input("Data", value=default_data)
 
-# --- Alerta de Data Antiga/Futura (Melhoria 3) ---
+# --- Alerta de Data Antiga/Futura ---
 hoje = date.today()
 limite_passado = hoje - timedelta(days=90)
 if data_input > hoje:
@@ -518,8 +518,14 @@ if enviar:
 tab_mov, tab_rel = st.tabs(["📋 Movimentações e Resumo", "📈 Relatórios e Filtros"])
 
 # Função para aplicar o destaque condicional na coluna Valor
+# A função agora espera que 'Cor_Valor' esteja no índice da linha (colunas)
 def highlight_value(row):
+    # Acessa a cor da linha a partir da coluna 'Cor_Valor'
+    # Esta linha é segura pois a coluna 'Cor_Valor' será passada no DataFrame de estilização
     color = row['Cor_Valor']
+    
+    # Retorna o estilo (CSS color) para cada coluna
+    # Aplica a cor apenas na coluna 'Valor'
     return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
 
 with tab_mov:
@@ -586,11 +592,20 @@ with tab_mov:
         
         colunas_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Produtos Resumo']
         
-        # O BLOCO DE DATAFRAME DUPLICADO FOI REMOVIDO.
+        # --- Lógica Correta para Estilização Condicional ---
+        # 1. Cria o DataFrame que inclui a coluna auxiliar 'Cor_Valor'
+        df_styling = df_para_mostrar[colunas_tabela + ['Cor_Valor']].copy()
 
-        # Usando a coluna auxiliar 'Cor_Valor' para determinar a cor do texto na coluna 'Valor'
+        # 2. Aplica o estilo
+        styled_df = df_styling.style.apply(highlight_value, axis=1)
+
+        # 3. Esconde a coluna auxiliar 'Cor_Valor' antes de exibir
+        styled_df = styled_df.hide(subset=['Cor_Valor'], axis=1)
+
+
+        # 4. Exibe o DataFrame estilizado
         st.dataframe(
-            df_para_mostrar[colunas_tabela].style.apply(highlight_value, axis=1),
+            styled_df,
             use_container_width=True,
             column_config={
                 "Valor": st.column_config.NumberColumn(
@@ -914,9 +929,14 @@ with tab_rel:
                     
                     df_filtrado_final['Produtos Resumo'] = df_filtrado_final['Produtos Vendidos'].apply(format_produtos_resumo)
                     
+                    # --- Lógica Correta para Estilização Condicional na Tabela Filtrada ---
+                    df_styling_filtro = df_filtrado_final[colunas_tabela + ['Cor_Valor']].copy()
+                    styled_df_filtro = df_styling_filtro.style.apply(highlight_value, axis=1)
+                    styled_df_filtro = styled_df_filtro.hide(subset=['Cor_Valor'], axis=1)
+                    
                     # Aplica estilo condicional na tabela filtrada também
                     st.dataframe(
-                        df_filtrado_final[colunas_tabela].style.apply(highlight_value, axis=1),
+                        styled_df_filtro,
                         use_container_width=True,
                         column_config={
                             "Valor": st.column_config.NumberColumn(
