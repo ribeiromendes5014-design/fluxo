@@ -168,7 +168,7 @@ else:
             if sucesso:
                 sha = novo_sha  # Atualiza SHA
                 st.success(f"{len(indices_a_excluir)} movimentação(ões) excluída(s) com sucesso!")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Falha ao excluir movimentações.")
         else:
@@ -212,3 +212,4 @@ else:
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
             col2_f.metric("Saídas", f"R$ {abs(saidas_filtro):,.2f}")
             col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
+
