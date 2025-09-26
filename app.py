@@ -121,14 +121,9 @@ if enviar:
             "Tipo": tipo
         }
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_linha])], ignore_index=True)
-
-# --- Botão para Salvar no GitHub ---
-if st.button("Salvar no GitHub"):
-    if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE):
-        st.cache_data.clear()
-        st.rerun()
-    else:
-        st.error("Falha ao salvar as alterações. Verifique os logs.")
+        if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE):
+            st.cache_data.clear()
+            st.rerun()
 
 # --- Exibição e Análises dos Dados ---
 st.subheader("📊 Movimentações Registradas")
@@ -154,7 +149,9 @@ else:
     if st.button("Excluir Selecionadas"):
         if indices_a_excluir:
             st.session_state.df = st.session_state.df.drop(indices_a_excluir)
-            st.warning("Movimentações excluídas. Clique em 'Salvar no GitHub' para confirmar.")
+            if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
+                st.cache_data.clear()
+                st.rerun()
         else:
             st.warning("Selecione pelo menos uma movimentação para excluir.")
 
