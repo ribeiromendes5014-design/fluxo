@@ -186,18 +186,25 @@ def processar_dataframe(df):
     # Filtra o DataFrame para calcular o Saldo Acumulado APENAS com transações REALIZADAS
     df_realizadas = df_proc[df_proc['Status'] == 'Realizada'].copy()
 
-    # 2. Calula Saldo Acumulado (requer ordenação por data ascendente)
-    df_proc_sorted_asc = df_realizadas.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]).reset_index(drop=True)
-    df_proc_sorted_asc['Saldo Acumulado'] = df_proc_sorted_asc['Valor'].cumsum()
-    
-    # Junta o saldo acumulado de volta ao DF principal (usando o índice original como chave)
-    df_proc = pd.merge(df_proc, df_proc_sorted_asc[['original_index', 'Saldo Acumulado']], 
-                       on='original_index', how='left', suffixes=('', '_new'))
-    df_proc['Saldo Acumulado'] = df_proc['Saldo Acumulado_new'].fillna(method='ffill').fillna(0)
-    df_proc.drop(columns=['Saldo Acumulado_new'], inplace=True)
+    # NOVO: Verifica se há transações realizadas
+    if df_realizadas.empty:
+        df_proc['Saldo Acumulado'] = 0.0
+    else:
+        # 2. Calula Saldo Acumulado (requer ordenação por data ascendente)
+        df_proc_sorted_asc = df_realizadas.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]).reset_index(drop=True)
+        df_proc_sorted_asc['Saldo Acumulado'] = df_proc_sorted_asc['Valor'].cumsum()
+        
+        # Junta o saldo acumulado de volta ao DF principal (usando o índice original como chave)
+        df_proc = pd.merge(df_proc, df_proc_sorted_asc[['original_index', 'Saldo Acumulado']], 
+                           on='original_index', how='left', suffixes=('', '_new'))
+        
+        # 3. Aplica fillna para preencher valores nulos (ffill para dívidas no meio do DF, 0 para antes do primeiro registro)
+        # O KeyError 'Saldo Acumulado_new' é corrigido pela verificação 'if df_realizadas.empty' acima
+        df_proc['Saldo Acumulado'] = df_proc['Saldo Acumulado_new'].fillna(method='ffill').fillna(0)
+        df_proc.drop(columns=['Saldo Acumulado_new'], inplace=True)
 
 
-    # 3. Retorna à ordenação para exibição (Data DESC)
+    # 4. Retorna à ordenação para exibição (Data DESC)
     df_proc = df_proc.sort_values(by="Data_dt", ascending=False).reset_index(drop=True)
     df_proc.insert(0, 'ID Visível', df_proc.index + 1)
     
