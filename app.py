@@ -194,8 +194,9 @@ def format_produtos_resumo(produtos_json):
             if count > 0:
                 primeiro = produtos[0]['Produto']
                 # Adiciona informação de lucro (se disponível)
-                total_custo = sum(p.get('Custo Unitário', 0) * p.get('Quantidade', 0) for p in produtos)
-                total_venda = sum(p.get('Preço Unitário', 0) * p.get('Quantidade', 0) for p in produtos)
+                # Garante valores padrão (0) se as chaves estiverem faltando
+                total_custo = sum(float(p.get('Custo Unitário', 0)) * float(p.get('Quantidade', 0)) for p in produtos)
+                total_venda = sum(float(p.get('Preço Unitário', 0)) * float(p.get('Quantidade', 0)) for p in produtos)
                 lucro = total_venda - total_custo
                 
                 lucro_str = f"| Lucro R$ {lucro:,.2f}" if lucro != 0 else ""
@@ -347,16 +348,16 @@ if tipo == "Entrada":
     
     # Campo de Adicionar Produto em um expander
     with st.sidebar.expander("➕ Adicionar Novo Produto"):
-        col_p1, col_p2, col_p3 = st.columns(3)
+        col_p1, col_p2 = st.columns(2)
         with col_p1:
             nome_produto = st.text_input("Nome do Produto", key="input_nome_prod_edit")
         with col_p2:
             quantidade_input = st.number_input("Qtd", min_value=1.0, value=1.0, step=1.0, key="input_qtd_prod_edit")
         
-        col_p4, col_p5 = st.columns(2)
-        with col_p4:
+        col_p3, col_p4 = st.columns(2)
+        with col_p3:
             preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", key="input_preco_prod_edit")
-        with col_p5:
+        with col_p4:
             # Novo campo Custo Unitário (opcional)
             custo_unitario_input = st.number_input("Custo Unitário (R$)", min_value=0.00, value=0.00, format="%.2f", key="input_custo_prod_edit")
         
@@ -525,38 +526,8 @@ with tab_mov:
         
         colunas_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Produtos Resumo']
         
-        # Adiciona o Expander para visualizar os detalhes dos produtos
-        def display_products_details(row):
-            if row['Tipo'] == 'Entrada' and row['Produtos Vendidos']:
-                try:
-                    produtos = json.loads(row['Produtos Vendidos'])
-                    st.expander(f"Detalhes da Venda ID {row['ID Visível']}")
-                    
-                    # Cria um DF temporário para exibição formatada
-                    df_detalhe = pd.DataFrame(produtos)
-                    
-                    # Garante colunas de cálculo para exibição
-                    df_detalhe['Total Venda'] = df_detalhe['Quantidade'] * df_detalhe['Preço Unitário']
-                    df_detalhe['Total Custo'] = df_detalhe['Quantidade'] * df_detalhe['Custo Unitário']
-                    df_detalhe['Lucro Bruto'] = df_detalhe['Total Venda'] - df_detalhe['Total Custo']
-
-                    st.dataframe(
-                        df_detalhe,
-                        hide_index=True,
-                        column_config={
-                            "Produto": "Produto",
-                            "Quantidade": st.column_config.NumberColumn("Qtd"),
-                            "Preço Unitário": st.column_config.NumberColumn("Preço Un.", format="R$ %.2f"),
-                            "Custo Unitário": st.column_config.NumberColumn("Custo Un.", format="R$ %.2f"),
-                            "Total Venda": st.column_config.NumberColumn("Total Venda", format="R$ %.2f"),
-                            "Total Custo": st.column_config.NumberColumn("Total Custo", format="R$ %.2f"),
-                            "Lucro Bruto": st.column_config.NumberColumn("Lucro Bruto", format="R$ %.2f"),
-                        }
-                    )
-                except Exception as e:
-                    st.write("Erro ao carregar detalhes dos produtos.")
-        
-        st.dataframe(
+        # O Streamlit guarda a seleção na chave 'movimentacoes_table'
+        selected_rows = st.dataframe(
             df_para_mostrar[colunas_tabela], 
             use_container_width=True,
             column_config={
@@ -568,12 +539,51 @@ with tab_mov:
                 "Categoria": "Categoria (C. Custo)"
             },
             height=400,
-            # Passa a função para o Streamlit para renderizar os expanders por linha
-            on_select=display_products_details,
-            selection_mode='single-row' # Permite selecionar a linha para ver os detalhes
+            selection_mode='single-row', 
+            key='movimentacoes_table' # Chave para obter a seleção
         )
+
+        # --- Lógica de Exibição de Detalhes da Linha Selecionada (Fix para o TypeError) ---
+        if selected_rows and selected_rows.get('selection', {}).get('rows'):
+            selected_index = selected_rows['selection']['rows'][0]
+            
+            # Garante que o índice exista no DataFrame filtrado
+            if selected_index < len(df_para_mostrar):
+                row = df_para_mostrar.iloc[selected_index]
+
+                if row['Tipo'] == 'Entrada' and row['Produtos Vendidos']:
+                    st.markdown("#### Detalhes dos Produtos Selecionados")
+                    try:
+                        produtos = json.loads(row['Produtos Vendidos'])
+                        
+                        # Cria um DF temporário para exibição formatada
+                        df_detalhe = pd.DataFrame(produtos)
+                        
+                        # Garante colunas de cálculo para exibição
+                        df_detalhe['Total Venda'] = df_detalhe['Quantidade'] * df_detalhe['Preço Unitário']
+                        df_detalhe['Total Custo'] = df_detalhe['Quantidade'] * df_detalhe['Custo Unitário']
+                        df_detalhe['Lucro Bruto'] = df_detalhe['Total Venda'] - df_detalhe['Total Custo']
+
+                        st.dataframe(
+                            df_detalhe,
+                            hide_index=True,
+                            use_container_width=True,
+                            column_config={
+                                "Produto": "Produto",
+                                "Quantidade": st.column_config.NumberColumn("Qtd"),
+                                "Preço Unitário": st.column_config.NumberColumn("Preço Un.", format="R$ %.2f"),
+                                "Custo Unitário": st.column_config.NumberColumn("Custo Un.", format="R$ %.2f"),
+                                "Total Venda": st.column_config.NumberColumn("Total Venda", format="R$ %.2f"),
+                                "Total Custo": st.column_config.NumberColumn("Total Custo", format="R$ %.2f"),
+                                "Lucro Bruto": st.column_config.NumberColumn("Lucro Bruto", format="R$ %.2f"),
+                            }
+                        )
+                    except Exception as e:
+                        st.error(f"Erro ao carregar detalhes dos produtos: {e}")
+                elif row['Tipo'] == 'Saída':
+                    st.info(f"Movimentação de Saída. Categoria: **{row['Categoria']}**")
+
         st.caption("Clique em uma linha para ver os detalhes dos produtos (se for Entrada).")
-        
         st.markdown("---")
 
         # --- EXCLUSÃO ---
