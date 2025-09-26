@@ -48,7 +48,7 @@ def load_csv_github(path: str) -> pd.DataFrame | None:
     """Carrega CSV de repositório privado do GitHub (via token)."""
     try:
         g = Github(TOKEN)
-        repo = g.get_user(OWNER).get_repo(REPO_NAME)
+        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
         contents = repo.get_contents(path, ref=BRANCH)
         return pd.read_csv(io.StringIO(contents.decoded_content.decode()), dtype=str)
     except Exception as e:
@@ -256,3 +256,4 @@ else:
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
             col2_f.metric("Saídas", f"R$ {saidas_filtro:,.2f}")
             col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
+
