@@ -70,12 +70,13 @@ def salvar_dados_no_github(df, sha=None, commit_message=COMMIT_MESSAGE):
         response = requests.put(url, headers=HEADERS, json=payload)
         response.raise_for_status()
         if response.status_code in [200, 201]:
+            novo_sha = response.json()['content']['sha']
             st.success("📁 Dados salvos no GitHub com sucesso!")
-            return True
+            return True, novo_sha
         else:
             st.error(f"Erro ao salvar no GitHub. Código de status: {response.status_code}")
             st.code(response.json())
-            return False
+            return False, sha
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 409:
             st.warning("Conflito detectado, tentando atualizar SHA e salvar novamente...")
@@ -85,20 +86,21 @@ def salvar_dados_no_github(df, sha=None, commit_message=COMMIT_MESSAGE):
                 try:
                     response = requests.put(url, headers=HEADERS, json=payload)
                     response.raise_for_status()
+                    novo_sha = response.json()['content']['sha']
                     st.success("📁 Dados salvos no GitHub com sucesso após atualizar SHA!")
-                    return True
+                    return True, novo_sha
                 except Exception as e2:
                     st.error(f"Falha ao salvar após atualizar SHA: {e2}")
-                    return False
+                    return False, sha
             else:
                 st.error("Não foi possível obter SHA atualizado.")
-                return False
+                return False, sha
         else:
             st.error(f"Erro HTTP ao salvar no GitHub: {e}")
-            return False
+            return False, sha
     except requests.exceptions.RequestException as e:
         st.error(f"Erro de requisição ao salvar no GitHub: {e}")
-        return False
+        return False, sha
 
 # ==================== INTERFACE STREAMLIT ====================
 st.title("📘 Livro Caixa - Streamlit + GitHub")
@@ -128,8 +130,9 @@ if enviar:
             "Tipo": tipo
         }
         df_atualizado = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
-        sucesso = salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE)
+        sucesso, novo_sha = salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE)
         if sucesso:
+            sha = novo_sha  # Atualiza SHA para próximas operações
             st.success("Movimentação adicionada com sucesso!")
             st.experimental_rerun()
         else:
@@ -161,10 +164,11 @@ else:
     if st.button("Excluir Selecionadas"):
         if indices_a_excluir:
             df_atualizado = df.drop(indices_a_excluir)
-            sucesso = salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE_DELETE)
+            sucesso, novo_sha = salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE_DELETE)
             if sucesso:
+                sha = novo_sha  # Atualiza SHA
                 st.success(f"{len(indices_a_excluir)} movimentação(ões) excluída(s) com sucesso!")
-                st.rerun()
+                st.experimental_rerun()
             else:
                 st.error("Falha ao excluir movimentações.")
         else:
@@ -190,7 +194,10 @@ else:
         data_final = st.date_input("Data Final", value=df_exibicao["Data"].max())
 
     if data_inicial and data_final:
-        df_filtrado = df_exibicao[(df_exibicao["Data"] >= pd.to_datetime(data_inicial)) & (df_exibicao["Data"] <= pd.to_datetime(data_final))]
+        df_filtrado = df_exibicao[
+            (df_exibicao["Data"] >= pd.to_datetime(data_inicial)) &
+            (df_exibicao["Data"] <= pd.to_datetime(data_final))
+        ]
         if df_filtrado.empty:
             st.warning("Não há movimentações para o período selecionado.")
         else:
@@ -205,4 +212,3 @@ else:
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
             col2_f.metric("Saídas", f"R$ {abs(saidas_filtro):,.2f}")
             col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
-
