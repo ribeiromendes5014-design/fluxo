@@ -517,6 +517,11 @@ if enviar:
 # ========================================================
 tab_mov, tab_rel = st.tabs(["📋 Movimentações e Resumo", "📈 Relatórios e Filtros"])
 
+# Função para aplicar o destaque condicional na coluna Valor
+def highlight_value(row):
+    color = row['Cor_Valor']
+    return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
+
 with tab_mov:
     st.subheader("📊 Resumo Financeiro Geral")
     total_entradas, total_saidas, saldo = calcular_resumo(df_exibicao)
@@ -581,37 +586,11 @@ with tab_mov:
         
         colunas_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Produtos Resumo']
         
-        # --- Formatação Condicional (Melhoria 1) ---
-        # Mapeia a cor com base na coluna 'Cor_Valor' que criamos em processar_dataframe
-        st.dataframe(
-            df_para_mostrar[colunas_tabela], 
-            use_container_width=True,
-            column_config={
-                "Valor": st.column_config.NumberColumn(
-                    "Valor (R$)",
-                    format="R$ %.2f",
-                    # Aplica a cor condicional com base na coluna auxiliar 'Cor_Valor'
-                    # Note: St.dataframe does not directly support full row coloring via CSS in this simplified configuration
-                    # We use the icon logic here to simulate the highlight visually within the column.
-                    # For full color, we rely on the cell-level formatting capability (which is minimal in pure Streamlit dataframe).
-                ),
-                "Produtos Resumo": st.column_config.TextColumn("Detalhe dos Produtos"),
-                "Categoria": "Categoria (C. Custo)"
-            },
-            # Estilização da cor da célula 'Valor'
-            # Esta lógica injeta cores diretamente no estilo visual da coluna "Valor"
-            height=400,
-            selection_mode='single-row', 
-            key='movimentacoes_table'
-        ).style.apply(lambda x: [f'color: {row["Cor_Valor"]}' if x.name == 'Valor' else '' for i, row in x.iterrows()], axis=1)
+        # O BLOCO DE DATAFRAME DUPLICADO FOI REMOVIDO.
 
         # Usando a coluna auxiliar 'Cor_Valor' para determinar a cor do texto na coluna 'Valor'
-        def highlight_value(row):
-            color = row['Cor_Valor']
-            return [f'color: {color}' if col == 'Valor' else '' for col in df_para_mostrar.columns]
-
         st.dataframe(
-            df_para_mostrar[colunas_tabela].style.apply(highlight_value, axis=1, subset=['Valor']),
+            df_para_mostrar[colunas_tabela].style.apply(highlight_value, axis=1),
             use_container_width=True,
             column_config={
                 "Valor": st.column_config.NumberColumn(
@@ -623,7 +602,7 @@ with tab_mov:
             },
             height=400,
             selection_mode='single-row', 
-            key='movimentacoes_table_styled' # Nova chave para o styled dataframe
+            key='movimentacoes_table_styled'
         )
 
 
@@ -937,7 +916,7 @@ with tab_rel:
                     
                     # Aplica estilo condicional na tabela filtrada também
                     st.dataframe(
-                        df_filtrado_final[colunas_tabela].style.apply(highlight_value, axis=1, subset=['Valor']),
+                        df_filtrado_final[colunas_tabela].style.apply(highlight_value, axis=1),
                         use_container_width=True,
                         column_config={
                             "Valor": st.column_config.NumberColumn(
