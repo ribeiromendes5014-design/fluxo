@@ -150,8 +150,9 @@ else:
     st.markdown("### 🗑️ Excluir Movimentações")
     
     # Cria uma lista de opções para o multiselect, associando a exibição ao índice real do DF
+    # Adicionando uma verificação para evitar o erro ValueError em datas nulas
     opcoes_exclusao = {
-        f"ID: {row.name} - Data: {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {row['Valor']:, .2f}": row.name
+        f"ID: {row.name} - Data: {row['Data'].strftime('%d/%m/%Y') if pd.notnull(row['Data']) else 'Data inválida'} - {row['Cliente']} - R$ {row['Valor']:, .2f}": row.name
         for _, row in df.iterrows()
     }
     
