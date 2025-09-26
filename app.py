@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import requests
 import base64
-from io import StringIO  # ✅ Correção aqui
+from io import StringIO  # Correção para ler CSV em memória
 
 # === CONFIGURAÇÃO DOS SECRETS ===
 TOKEN = st.secrets["GITHUB_TOKEN"]
@@ -27,12 +27,13 @@ def carregar_dados():
     if response.status_code == 200:
         content = response.json()
         decoded = base64.b64decode(content["content"]).decode("utf-8")
-        df = pd.read_csv(StringIO(decoded), parse_dates=["Data"])  # ✅ Correção aqui
+        df = pd.read_csv(StringIO(decoded), parse_dates=["Data"])
         sha = content["sha"]
         return df, sha
     else:
-        # Se o arquivo não existir ainda
+        # Se arquivo não existe, cria dataframe vazio com as colunas esperadas
         return pd.DataFrame(columns=["Data", "Cliente", "Valor", "Forma de Pagamento", "Tipo"]), None
+
 
 def salvar_dados(df, sha=None):
     csv_encoded = base64.b64encode(df.to_csv(index=False).encode()).decode()
@@ -48,6 +49,9 @@ def salvar_dados(df, sha=None):
         payload["sha"] = sha
 
     response = requests.put(url, headers=HEADERS, json=payload)
+
+    st.write(f"Status do commit: {response.status_code}")
+    st.write(f"Resposta da API: {response.json()}")
 
     if response.status_code in [200, 201]:
         st.success("📁 Dados salvos no GitHub com sucesso!")
@@ -84,7 +88,6 @@ if enviar:
     }
     df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
     salvar_dados(df, sha)
-    st.success("Movimentação adicionada com sucesso!")
 
 # Exibir tabela
 st.subheader("📊 Movimentações")
