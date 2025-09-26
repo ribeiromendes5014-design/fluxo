@@ -790,16 +790,20 @@ with tab_mov:
 with tab_rel:
     
     st.header("📈 Relatórios e Filtros")
-
-    # --- Inicializa df_filtrado_loja e loja_filtro_relatorio ---
-    # Este é o DataFrame padrão, se nenhum filtro for aplicado.
-    df_filtrado_loja = df_exibicao.copy() 
-    loja_filtro_relatorio = "Todas as Lojas"
-
+    
+    # --- 1. DEFINIÇÃO DAS SUB-ABAS (Sempre fora do bloco condicional) ---
+    subtab_dashboard, subtab_filtro, subtab_produtos, subtab_dividas = st.tabs(["Dashboard Geral", "Filtro e Tabela", "Produtos e Lucro", "🧾 Dívidas Pendentes"])
+    
+    # --- 2. VERIFICAÇÃO DE DADOS ---
     if df_exibicao.empty:
         st.info("Não há dados suficientes para gerar relatórios e filtros.")
+        # Se estiver vazio, não há nada mais para fazer aqui.
+        
     else:
-        # --- FILTRO GLOBAL DE LOJA (Display e Aplicação) ---
+        # --- 3. INICIALIZAÇÃO E FILTRO GLOBAL DE LOJA (Ocorre apenas se houver dados) ---
+        df_filtrado_loja = df_exibicao.copy() 
+        loja_filtro_relatorio = "Todas as Lojas"
+
         lojas_unicas_no_df = df_exibicao["Loja"].unique().tolist()
         todas_lojas = ["Todas as Lojas"] + [l for l in LOJAS_DISPONIVEIS if l in lojas_unicas_no_df] + [l for l in lojas_unicas_no_df if l not in LOJAS_DISPONIVEIS and l != "Todas as Lojas"]
         todas_lojas = list(dict.fromkeys(todas_lojas))
@@ -810,7 +814,6 @@ with tab_rel:
             key="loja_filtro_rel"
         )
 
-        # Aplica filtro à variável principal usada nas sub-abas
         if loja_filtro_relatorio != "Todas as Lojas":
             df_filtrado_loja = df_exibicao[df_exibicao["Loja"] == loja_filtro_relatorio].copy()
         else:
@@ -818,9 +821,6 @@ with tab_rel:
             
         st.subheader(f"Dashboard de Relatórios - {loja_filtro_relatorio}")
 
-        # --- AUMENTA O NÚMERO DE SUB-ABAS (DEFINIDO APENAS SE HOUVER DADOS) ---
-        subtab_dashboard, subtab_filtro, subtab_produtos, subtab_dividas = st.tabs(["Dashboard Geral", "Filtro e Tabela", "Produtos e Lucro", "🧾 Dívidas Pendentes"])
-    
         # --- SUB-ABAS COM LÓGICA RESTRITA ---
 
         with subtab_dividas:
