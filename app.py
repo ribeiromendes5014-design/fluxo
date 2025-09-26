@@ -29,6 +29,9 @@ COMMIT_MESSAGE_DEBT_REALIZED = "Conclui dívidas pendentes"
 ARQ_LOCAL = "livro_caixa.csv"
 # COLUNA PADRÃO ATUALIZADA: Adiciona 'Status' e 'Data Pagamento'
 COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo", "Produtos Vendidos", "Categoria", "Status", "Data Pagamento"]
+# NOVO: Lista completa de colunas processadas para garantir consistência no fallback do DataFrame
+COLUNAS_COMPLETAS_PROCESSADAS = COLUNAS_PADRAO + ["ID Visível", "original_index", "Data_dt", "Saldo Acumulado", "Cor_Valor"]
+
 
 # Lojas disponíveis para seleção
 LOJAS_DISPONIVEIS = ["Doce&bella", "Papelaria", "Fotografia", "Outro"]
@@ -150,8 +153,8 @@ def processar_dataframe(df):
     Retorna o DataFrame processado.
     """
     if df.empty:
-        # Retorna DF vazio com todas as colunas esperadas
-        return pd.DataFrame(columns=COLUNAS_PADRAO + ["ID Visível", "original_index", "Data_dt", "Saldo Acumulado", "Cor_Valor"])
+        # Retorna DF vazio com todas as colunas esperadas (incluindo as colunas de processamento)
+        return pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
         
     df_proc = df.copy()
     
@@ -183,12 +186,12 @@ def processar_dataframe(df):
     df_proc = df_proc.reset_index(drop=False) 
     df_proc.rename(columns={'index': 'original_index'}, inplace=True)
     
+    # Inicializa Saldo Acumulado para todas as linhas
+    df_proc['Saldo Acumulado'] = 0.0 
+    
     # Filtra o DataFrame para calcular o Saldo Acumulado APENAS com transações REALIZADAS
     df_realizadas = df_proc[df_proc['Status'] == 'Realizada'].copy()
 
-    # NOVO: Unifica todas as linhas do DF principal e das Realizadas
-    df_proc['Saldo Acumulado'] = 0.0 # Inicializa com 0.0 para todas as linhas
-    
     if not df_realizadas.empty:
         # 2. Calula Saldo Acumulado (requer ordenação por data ascendente)
         # Ordena apenas as realizadas para o cálculo de cumsum
@@ -203,7 +206,7 @@ def processar_dataframe(df):
             how='left'
         )
         
-        # 3. CORREÇÃO: Usa ffill para propagar o último saldo realizado para as linhas pendentes
+        # 3. CORREÇÃO: Usa ffill para propagar o último saldo realizado para as linhas pendentes (que têm NaN)
         df_proc['Saldo Acumulado'] = df_proc['TEMP_SALDO'].fillna(method='ffill').fillna(0)
         df_proc.drop(columns=['TEMP_SALDO'], inplace=True, errors='ignore')
 
@@ -859,19 +862,25 @@ with tab_rel:
     
     st.header("📈 Relatórios e Filtros")
     
-    # --- 1. DEFINIÇÃO DAS SUB-ABAS ---
+    # --- 2. INICIALIZAÇÃO DE FALLBACK REFORÇADA (CORREÇÃO DO NAMERROR) ---
+    # Garante que df_filtrado_loja SEMPRE é um DataFrame válido para evitar NameError
+    try:
+        df_filtrado_loja = df_exibicao.copy()
+    except Exception:
+        # Fallback de segurança extrema, usando colunas completas
+        df_filtrado_loja = pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
+        
+    loja_filtro_relatorio = "Todas as Lojas"
+
+    # --- 1. DEFINIÇÃO DAS SUB-ABAS (DEVE VIR ANTES DO CONTEÚDO PARA SER PROCESSADO) ---
     subtab_dashboard, subtab_filtro, subtab_produtos, subtab_dividas = st.tabs(["Dashboard Geral", "Filtro e Tabela", "Produtos e Lucro", "🧾 Dívidas Pendentes"])
     
-    # --- 2. INICIALIZAÇÃO DE FALLBACK (CORREÇÃO DE NAMERROR) ---
-    df_filtrado_loja = pd.DataFrame(columns=df_exibicao.columns)
-    loja_filtro_relatorio = "Todas as Lojas"
-    
-    # --- 3. VERIFICAÇÃO DE DADOS ---
-    if df_exibicao.empty:
+    # --- 3. LÓGICA DE FILTRO GLOBAL (SÓ EXIBE SE HOUVER DADOS) ---
+    if df_exibicao.empty or df_filtrado_loja.empty:
         st.info("Não há dados suficientes para gerar relatórios e filtros.")
         
     else:
-        # --- 4. FILTRO GLOBAL DE LOJA (Ocorre apenas se houver dados) ---
+        # --- 4. FILTRO GLOBAL DE LOJA ---
         
         # Cria a lista de todas as lojas, incluindo as que estão no DF mas não na lista original
         lojas_unicas_no_df = df_exibicao["Loja"].unique().tolist()
@@ -891,338 +900,339 @@ with tab_rel:
             
         st.subheader(f"Dashboard de Relatórios - {loja_filtro_relatorio}")
 
-        # --- SUB-ABAS COM LÓGICA RESTRITA ---
+    # As sub-abas são executadas e usam a variável df_filtrado_loja, que está agora garantida no escopo.
+    # O teste df_filtrado_loja.empty garante que a lógica de relatórios só ocorra com dados.
 
-        with subtab_dividas:
-            st.header("🧾 Gerenciamento de Dívidas Pendentes")
+    with subtab_dividas:
+        st.header("🧾 Gerenciamento de Dívidas Pendentes")
+        
+        # Continua usando df_exibicao que é o base
+        df_pendente = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
+        
+        if df_pendente.empty:
+            st.info("🎉 Não há Contas a Pagar ou Receber pendentes!")
+        else:
             
-            # Filtra APENAS no DF de exibição (que tem a coluna original_index e Status)
-            df_pendente = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
+            # --- Separação Contas a Receber e Pagar ---
+            df_receber = df_pendente[df_pendente["Tipo"] == "Entrada"].reset_index(drop=True)
+            df_pagar = df_pendente[df_pendente["Tipo"] == "Saída"].reset_index(drop=True)
             
-            if df_pendente.empty:
-                st.info("🎉 Não há Contas a Pagar ou Receber pendentes!")
+            st.markdown("---")
+            st.markdown("### 📥 Contas a Receber (Vendas Pendentes)")
+            
+            if df_receber.empty:
+                st.info("Nenhuma venda pendente para receber.")
+            else:
+                st.dataframe(
+                    df_receber[['ID Visível', 'Data', 'Loja', 'Cliente', 'Valor', 'Data Pagamento', 'original_index']],
+                    use_container_width=True,
+                    selection_mode='multi-row',
+                    hide_index=True,
+                    column_config={
+                        "Data Pagamento": st.column_config.DateColumn("Data Prevista", format="DD/MM/YYYY"),
+                        "Valor": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f"),
+                        "original_index": "Índice Original (Debug)",
+                    },
+                    column_order=('ID Visível', 'Data', 'Loja', 'Cliente', 'Valor', 'Data Pagamento'),
+                    key="tabela_receber"
+                )
+                st.info(f"Total a Receber: R$ {df_receber['Valor'].sum():,.2f}")
+                
+            st.markdown("---")
+            st.markdown("### 📤 Contas a Pagar (Despesas Pendentes)")
+            
+            if df_pagar.empty:
+                st.info("Nenhuma despesa pendente para pagar.")
+            else:
+                st.dataframe(
+                    df_pagar[['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Data Pagamento', 'original_index']],
+                    use_container_width=True,
+                    selection_mode='multi-row',
+                    hide_index=True,
+                    column_config={
+                        "Data Pagamento": st.column_config.DateColumn("Data Prevista", format="DD/MM/YYYY"),
+                        # Valor já é negativo, exibimos o valor absoluto para a conta a pagar
+                        "Valor": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f"), 
+                        "original_index": "Índice Original (Debug)",
+                    },
+                    column_order=('ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Data Pagamento'),
+                    key="tabela_pagar"
+                )
+                st.info(f"Total a Pagar: R$ {abs(df_pagar['Valor'].sum()):,.2f}")
+
+            st.markdown("---")
+            st.markdown("### ✅ Concluir Pagamentos Pendentes")
+
+            selecao_receber = st.session_state.get('tabela_receber', {}).get('selection', {}).get('rows', [])
+            selecao_pagar = st.session_state.get('tabela_pagar', {}).get('selection', {}).get('rows', [])
+            
+            indices_selecionados = []
+            
+            # --- REFORÇO DA LÓGICA DE SELEÇÃO E ÍNDICE ---
+            # Pega o 'original_index' das linhas selecionadas no DF filtrado/resetado
+            if selecao_receber:
+                indices_selecionados.extend(df_receber.iloc[selecao_receber]['original_index'].tolist())
+            
+            if selecao_pagar:
+                indices_selecionados.extend(df_pagar.iloc[selecao_pagar]['original_index'].tolist())
+            # --- FIM REFORÇO ---
+
+            if indices_selecionados:
+                st.info(f"Total de {len(indices_selecionados)} transações selecionadas para conclusão.")
+                
+                with st.form("form_concluir_dividas"):
+                    st.markdown("##### Detalhes da Conclusão:")
+                    data_conclusao = st.date_input("Data de Pagamento Real", value=hoje)
+                    forma_conclusao = st.selectbox("Forma de Pagamento Real (PIX, Dinheiro, etc.)", options=FORMAS_PAGAMENTO)
+                    
+                    submeter_conclusao = st.form_submit_button("Concluir Pagamentos Selecionados e Salvar", type="primary")
+
+                if submeter_conclusao:
+                    df_temp_session = st.session_state.df.copy()
+                    
+                    for original_idx in indices_selecionados:
+                        # Atualiza a linha no DataFrame original usando o índice real (original_idx)
+                        if original_idx in df_temp_session.index:
+                            df_temp_session.loc[original_idx, 'Status'] = 'Realizada'
+                            df_temp_session.loc[original_idx, 'Data Pagamento'] = data_conclusao
+                            df_temp_session.loc[original_idx, 'Forma de Pagamento'] = forma_conclusao
+                            
+                    st.session_state.df = df_temp_session
+                    
+                    if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DEBT_REALIZED):
+                        st.cache_data.clear()
+                        st.rerun()
+            else:
+                st.warning("Selecione itens nas tabelas acima para concluir.")
+
+    with subtab_dashboard:
+        # Agora o acesso a df_filtrado_loja é seguro
+        if df_filtrado_loja.empty:
+            st.warning("Nenhuma movimentação encontrada para gerar o Dashboard.")
+        else:
+            
+            # --- Análise de Saldo Acumulado (Série Temporal) ---
+            st.markdown("### 📉 Saldo Acumulado (Tendência no Tempo)")
+            
+            # O Saldo Acumulado é calculado apenas para transações REALIZADAS no processamento_dataframe
+            df_acumulado = df_filtrado_loja.sort_values(by='Data_dt', ascending=True).copy()
+            df_acumulado = df_acumulado[df_acumulado['Status'] == 'Realizada']
+
+            if df_acumulado.empty:
+                st.info("Nenhuma transação Realizada para calcular o Saldo Acumulado.")
+            else:
+                fig_line = px.line(
+                    df_acumulado,
+                    x='Data_dt',
+                    y='Saldo Acumulado',
+                    title='Evolução do Saldo Realizado ao Longo do Tempo',
+                    labels={'Data_dt': 'Data', 'Saldo Acumulado': 'Saldo Acumulado (R$)'},
+                    line_shape='spline',
+                    markers=True
+                )
+                fig_line.update_layout(xaxis_title="Data", yaxis_title="Saldo Acumulado (R$)")
+                st.plotly_chart(fig_line, use_container_width=True)
+            
+            st.markdown("---")
+
+            # --- Distribuição de Saídas por Categoria (Centro de Custo) ---
+            st.markdown("### 📊 Saídas por Categoria (Centro de Custo - Realizadas)")
+            
+            df_saidas = df_filtrado_loja[(df_filtrado_loja['Tipo'] == 'Saída') & (df_filtrado_loja['Status'] == 'Realizada')].copy()
+            
+            if df_saidas.empty:
+                st.info("Nenhuma saída Realizada registrada para análise de categorias.")
+            else:
+                df_saidas['Valor Absoluto'] = df_saidas['Valor'].abs()
+                df_categorias = df_saidas.groupby('Categoria')['Valor Absoluto'].sum().reset_index()
+                
+                fig_cat_pie = px.pie(
+                    df_categorias,
+                    values='Valor Absoluto',
+                    names='Categoria',
+                    title='Distribuição de Gastos por Categoria',
+                    hole=.3
+                )
+                st.plotly_chart(fig_cat_pie, use_container_width=True)
+
+            st.markdown("---")
+
+            # --- Gráfico de Ganhos vs. Gastos (Existente, mas reajustado para Realizada) ---
+            st.markdown("### 📈 Ganhos (Entradas) vs. Gastos (Saídas) por Mês (Realizados)")
+            
+            df_ganhos_gastos = df_filtrado_loja[df_filtrado_loja['Status'] == 'Realizada'].copy()
+            
+            if df_ganhos_gastos.empty:
+                st.info("Nenhuma transação Realizada para a análise mensal.")
+            else:
+                df_ganhos_gastos['MesAno'] = df_ganhos_gastos['Data'].apply(lambda x: x.strftime('%Y-%m'))
+                df_grouped = df_ganhos_gastos.groupby(['MesAno', 'Tipo'])['Valor'].sum().abs().reset_index()
+                df_grouped.columns = ['MesAno', 'Tipo', 'Total']
+                df_grouped = df_grouped.sort_values(by='MesAno')
+
+                fig_bar = px.bar(
+                    df_grouped,
+                    x='MesAno',
+                    y='Total',
+                    color='Tipo',
+                    barmode='group',
+                    text='Total',
+                    color_discrete_map={'Entrada': 'green', 'Saída': 'red'},
+                    labels={'Total': 'Valor (R$)', 'MesAno': 'Mês/Ano'},
+                    height=500
+                )
+                fig_bar.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+    with subtab_produtos:
+        st.markdown("## 💰 Análise de Produtos e Lucratividade (Realizados)")
+
+        if df_filtrado_loja.empty:
+            st.warning("Nenhuma movimentação encontrada para gerar a Análise de Produtos.")
+        else:
+            df_entradas_produtos = df_filtrado_loja[(df_filtrado_loja['Tipo'] == 'Entrada') & (df_filtrado_loja['Status'] == 'Realizada')].copy()
+
+            if df_entradas_produtos.empty:
+                st.info("Nenhuma entrada com produtos REALIZADA registrada para análise.")
             else:
                 
-                # --- Separação Contas a Receber e Pagar ---
-                df_receber = df_pendente[df_pendente["Tipo"] == "Entrada"].reset_index(drop=True)
-                df_pagar = df_pendente[df_pendente["Tipo"] == "Saída"].reset_index(drop=True)
-                
-                st.markdown("---")
-                st.markdown("### 📥 Contas a Receber (Vendas Pendentes)")
-                
-                if df_receber.empty:
-                    st.info("Nenhuma venda pendente para receber.")
-                else:
-                    st.dataframe(
-                        df_receber[['ID Visível', 'Data', 'Loja', 'Cliente', 'Valor', 'Data Pagamento', 'original_index']],
-                        use_container_width=True,
-                        selection_mode='multi-row',
-                        hide_index=True,
-                        column_config={
-                            "Data Pagamento": st.column_config.DateColumn("Data Prevista", format="DD/MM/YYYY"),
-                            "Valor": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f"),
-                            "original_index": "Índice Original (Debug)",
-                        },
-                        column_order=('ID Visível', 'Data', 'Loja', 'Cliente', 'Valor', 'Data Pagamento'),
-                        key="tabela_receber"
-                    )
-                    st.info(f"Total a Receber: R$ {df_receber['Valor'].sum():,.2f}")
-                    
-                st.markdown("---")
-                st.markdown("### 📤 Contas a Pagar (Despesas Pendentes)")
-                
-                if df_pagar.empty:
-                    st.info("Nenhuma despesa pendente para pagar.")
-                else:
-                    st.dataframe(
-                        df_pagar[['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Data Pagamento', 'original_index']],
-                        use_container_width=True,
-                        selection_mode='multi-row',
-                        hide_index=True,
-                        column_config={
-                            "Data Pagamento": st.column_config.DateColumn("Data Prevista", format="DD/MM/YYYY"),
-                            # Valor já é negativo, exibimos o valor absoluto para a conta a pagar
-                            "Valor": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f"), 
-                            "original_index": "Índice Original (Debug)",
-                        },
-                        column_order=('ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Data Pagamento'),
-                        key="tabela_pagar"
-                    )
-                    st.info(f"Total a Pagar: R$ {abs(df_pagar['Valor'].sum()):,.2f}")
-
-                st.markdown("---")
-                st.markdown("### ✅ Concluir Pagamentos Pendentes")
-
-                selecao_receber = st.session_state.get('tabela_receber', {}).get('selection', {}).get('rows', [])
-                selecao_pagar = st.session_state.get('tabela_pagar', {}).get('selection', {}).get('rows', [])
-                
-                indices_selecionados = []
-                
-                # --- REFORÇO DA LÓGICA DE SELEÇÃO E ÍNDICE ---
-                # Pega o 'original_index' das linhas selecionadas no DF filtrado/resetado
-                if selecao_receber:
-                    indices_selecionados.extend(df_receber.iloc[selecao_receber]['original_index'].tolist())
-                
-                if selecao_pagar:
-                    indices_selecionados.extend(df_pagar.iloc[selecao_pagar]['original_index'].tolist())
-                # --- FIM REFORÇO ---
-
-                if indices_selecionados:
-                    st.info(f"Total de {len(indices_selecionados)} transações selecionadas para conclusão.")
-                    
-                    with st.form("form_concluir_dividas"):
-                        st.markdown("##### Detalhes da Conclusão:")
-                        data_conclusao = st.date_input("Data de Pagamento Real", value=hoje)
-                        forma_conclusao = st.selectbox("Forma de Pagamento Real (PIX, Dinheiro, etc.)", options=FORMAS_PAGAMENTO)
-                        
-                        submeter_conclusao = st.form_submit_button("Concluir Pagamentos Selecionados e Salvar", type="primary")
-
-                    if submeter_conclusao:
-                        df_temp_session = st.session_state.df.copy()
-                        
-                        for original_idx in indices_selecionados:
-                            # Atualiza a linha no DataFrame original usando o índice real (original_idx)
-                            if original_idx in df_temp_session.index:
-                                df_temp_session.loc[original_idx, 'Status'] = 'Realizada'
-                                df_temp_session.loc[original_idx, 'Data Pagamento'] = data_conclusao
-                                df_temp_session.loc[original_idx, 'Forma de Pagamento'] = forma_conclusao
+                lista_produtos_agregada = []
+                for index, row in df_entradas_produtos.iterrows():
+                    if pd.notna(row['Produtos Vendidos']) and row['Produtos Vendidos']:
+                        try:
+                            produtos = json.loads(row['Produtos Vendidos'])
+                            for p in produtos:
+                                # Garante que os valores são numéricos, usando 0 como fallback
+                                try:
+                                    qtd = float(p.get('Quantidade', 0))
+                                    preco_un = float(p.get('Preço Unitário', 0))
+                                    custo_un = float(p.get('Custo Unitário', 0))
+                                except ValueError:
+                                    continue
                                 
-                        st.session_state.df = df_temp_session
-                        
-                        if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DEBT_REALIZED):
-                            st.cache_data.clear()
-                            st.rerun()
-                else:
-                    st.warning("Selecione itens nas tabelas acima para concluir.")
+                                if qtd > 0:
+                                    lista_produtos_agregada.append({
+                                        "Produto": p['Produto'],
+                                        "Quantidade": qtd,
+                                        "Total Venda": qtd * preco_un,
+                                        "Total Custo": qtd * custo_un,
+                                        "Lucro Bruto": (qtd * preco_un) - (qtd * custo_un),
+                                    })
+                        except:
+                            pass
 
-        with subtab_dashboard:
-            # Agora o acesso a df_filtrado_loja é seguro
-            if df_filtrado_loja.empty:
-                st.warning("Nenhuma movimentação encontrada para gerar o Dashboard.")
-            else:
-                
-                # --- Análise de Saldo Acumulado (Série Temporal) ---
-                st.markdown("### 📉 Saldo Acumulado (Tendência no Tempo)")
-                
-                # O Saldo Acumulado é calculado apenas para transações REALIZADAS no processamento_dataframe
-                df_acumulado = df_filtrado_loja.sort_values(by='Data_dt', ascending=True).copy()
-                df_acumulado = df_acumulado[df_acumulado['Status'] == 'Realizada']
+                if lista_produtos_agregada:
+                    df_produtos_agregados = pd.DataFrame(lista_produtos_agregada)
+                    df_produtos_agregados = df_produtos_agregados.groupby('Produto').sum(numeric_only=True).reset_index() # Usa numeric_only=True
 
-                if df_acumulado.empty:
-                    st.info("Nenhuma transação Realizada para calcular o Saldo Acumulado.")
-                else:
-                    fig_line = px.line(
-                        df_acumulado,
-                        x='Data_dt',
-                        y='Saldo Acumulado',
-                        title='Evolução do Saldo Realizado ao Longo do Tempo',
-                        labels={'Data_dt': 'Data', 'Saldo Acumulado': 'Saldo Acumulado (R$)'},
-                        line_shape='spline',
-                        markers=True
-                    )
-                    fig_line.update_layout(xaxis_title="Data", yaxis_title="Saldo Acumulado (R$)")
-                    st.plotly_chart(fig_line, use_container_width=True)
-                
-                st.markdown("---")
-
-                # --- Distribuição de Saídas por Categoria (Centro de Custo) ---
-                st.markdown("### 📊 Saídas por Categoria (Centro de Custo - Realizadas)")
-                
-                df_saidas = df_filtrado_loja[(df_filtrado_loja['Tipo'] == 'Saída') & (df_filtrado_loja['Status'] == 'Realizada')].copy()
-                
-                if df_saidas.empty:
-                    st.info("Nenhuma saída Realizada registrada para análise de categorias.")
-                else:
-                    df_saidas['Valor Absoluto'] = df_saidas['Valor'].abs()
-                    df_categorias = df_saidas.groupby('Categoria')['Valor Absoluto'].sum().reset_index()
+                    # --- Top 10 Produtos por Valor Total de Venda ---
+                    st.markdown("### 🏆 Top 10 Produtos (Valor de Venda)")
+                    top_venda = df_produtos_agregados.sort_values(by='Total Venda', ascending=False).head(10)
                     
-                    fig_cat_pie = px.pie(
-                        df_categorias,
-                        values='Valor Absoluto',
-                        names='Categoria',
-                        title='Distribuição de Gastos por Categoria',
-                        hole=.3
+                    fig_top_venda = px.bar(
+                        top_venda,
+                        x='Produto',
+                        y='Total Venda',
+                        text='Total Venda',
+                        title='Top 10 Produtos por Valor Total de Venda (R$)',
+                        color='Total Venda'
                     )
-                    st.plotly_chart(fig_cat_pie, use_container_width=True)
-
-                st.markdown("---")
-
-                # --- Gráfico de Ganhos vs. Gastos (Existente, mas reajustado para Realizada) ---
-                st.markdown("### 📈 Ganhos (Entradas) vs. Gastos (Saídas) por Mês (Realizados)")
-                
-                df_ganhos_gastos = df_filtrado_loja[df_filtrado_loja['Status'] == 'Realizada'].copy()
-                
-                if df_ganhos_gastos.empty:
-                    st.info("Nenhuma transação Realizada para a análise mensal.")
-                else:
-                    df_ganhos_gastos['MesAno'] = df_ganhos_gastos['Data'].apply(lambda x: x.strftime('%Y-%m'))
-                    df_grouped = df_ganhos_gastos.groupby(['MesAno', 'Tipo'])['Valor'].sum().abs().reset_index()
-                    df_grouped.columns = ['MesAno', 'Tipo', 'Total']
-                    df_grouped = df_grouped.sort_values(by='MesAno')
-
-                    fig_bar = px.bar(
-                        df_grouped,
-                        x='MesAno',
-                        y='Total',
-                        color='Tipo',
-                        barmode='group',
-                        text='Total',
-                        color_discrete_map={'Entrada': 'green', 'Saída': 'red'},
-                        labels={'Total': 'Valor (R$)', 'MesAno': 'Mês/Ano'},
-                        height=500
-                    )
-                    fig_bar.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
-                    st.plotly_chart(fig_bar, use_container_width=True)
-
-        with subtab_produtos:
-            st.markdown("## 💰 Análise de Produtos e Lucratividade (Realizados)")
-
-            if df_filtrado_loja.empty:
-                st.warning("Nenhuma movimentação encontrada para gerar a Análise de Produtos.")
-            else:
-                df_entradas_produtos = df_filtrado_loja[(df_filtrado_loja['Tipo'] == 'Entrada') & (df_filtrado_loja['Status'] == 'Realizada')].copy()
-
-                if df_entradas_produtos.empty:
-                    st.info("Nenhuma entrada com produtos REALIZADA registrada para análise.")
-                else:
+                    fig_top_venda.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
+                    st.plotly_chart(fig_top_venda, use_container_width=True)
                     
-                    lista_produtos_agregada = []
-                    for index, row in df_entradas_produtos.iterrows():
-                        if pd.notna(row['Produtos Vendidos']) and row['Produtos Vendidos']:
-                            try:
-                                produtos = json.loads(row['Produtos Vendidos'])
-                                for p in produtos:
-                                    # Garante que os valores são numéricos, usando 0 como fallback
-                                    try:
-                                        qtd = float(p.get('Quantidade', 0))
-                                        preco_un = float(p.get('Preço Unitário', 0))
-                                        custo_un = float(p.get('Custo Unitário', 0))
-                                    except ValueError:
-                                        continue
-                                    
-                                    if qtd > 0:
-                                        lista_produtos_agregada.append({
-                                            "Produto": p['Produto'],
-                                            "Quantidade": qtd,
-                                            "Total Venda": qtd * preco_un,
-                                            "Total Custo": qtd * custo_un,
-                                            "Lucro Bruto": (qtd * preco_un) - (qtd * custo_un),
-                                        })
-                            except:
-                                pass
-
-                    if lista_produtos_agregada:
-                        df_produtos_agregados = pd.DataFrame(lista_produtos_agregada)
-                        df_produtos_agregados = df_produtos_agregados.groupby('Produto').sum(numeric_only=True).reset_index() # Usa numeric_only=True
-
-                        # --- Top 10 Produtos por Valor Total de Venda ---
-                        st.markdown("### 🏆 Top 10 Produtos (Valor de Venda)")
-                        top_venda = df_produtos_agregados.sort_values(by='Total Venda', ascending=False).head(10)
+                    # --- Top 10 Produtos por Lucro Bruto (se houver custo) ---
+                    if df_produtos_agregados['Lucro Bruto'].sum() > 0:
+                        st.markdown("### 💸 Top 10 Produtos por Lucro Bruto")
+                        top_lucro = df_produtos_agregados.sort_values(by='Lucro Bruto', ascending=False).head(10)
                         
-                        fig_top_venda = px.bar(
-                            top_venda,
+                        fig_top_lucro = px.bar(
+                            top_lucro,
                             x='Produto',
-                            y='Total Venda',
-                            text='Total Venda',
-                            title='Top 10 Produtos por Valor Total de Venda (R$)',
-                            color='Total Venda'
+                            y='Lucro Bruto',
+                            text='Lucro Bruto',
+                            title='Top 10 Produtos Mais Lucrativos (R$)',
+                            color='Lucro Bruto',
+                            color_continuous_scale=px.colors.sequential.Greens
                         )
-                        fig_top_venda.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
-                        st.plotly_chart(fig_top_venda, use_container_width=True)
-                        
-                        # --- Top 10 Produtos por Lucro Bruto (se houver custo) ---
-                        if df_produtos_agregados['Lucro Bruto'].sum() > 0:
-                            st.markdown("### 💸 Top 10 Produtos por Lucro Bruto")
-                            top_lucro = df_produtos_agregados.sort_values(by='Lucro Bruto', ascending=False).head(10)
-                            
-                            fig_top_lucro = px.bar(
-                                top_lucro,
-                                x='Produto',
-                                y='Lucro Bruto',
-                                text='Lucro Bruto',
-                                title='Top 10 Produtos Mais Lucrativos (R$)',
-                                color='Lucro Bruto',
-                                color_continuous_scale=px.colors.sequential.Greens
-                            )
-                            fig_top_lucro.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
-                            st.plotly_chart(fig_top_lucro, use_container_width=True)
-                        else:
-                            st.info("Adicione o 'Custo Unitário' no cadastro de produtos para ver o ranking de Lucro Bruto.")
-                            
+                        fig_top_lucro.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
+                        st.plotly_chart(fig_top_lucro, use_container_width=True)
                     else:
-                        st.info("Nenhum produto com dados válidos encontrado para agregar.")
+                        st.info("Adicione o 'Custo Unitário' no cadastro de produtos para ver o ranking de Lucro Bruto.")
+                        
+                else:
+                    st.info("Nenhum produto com dados válidos encontrado para agregar.")
 
-        with subtab_filtro:
+    with subtab_filtro:
+        
+        if df_filtrado_loja.empty:
+            st.warning("Nenhuma movimentação encontrada para gerar a Tabela Filtrada.")
+        else:
+            st.subheader("📅 Filtrar Movimentações por Período e Loja")
             
-            if df_filtrado_loja.empty:
-                st.warning("Nenhuma movimentação encontrada para gerar a Tabela Filtrada.")
-            else:
-                st.subheader("📅 Filtrar Movimentações por Período e Loja")
-                
-                df_base_filtro_tabela = df_filtrado_loja
+            df_base_filtro_tabela = df_filtrado_loja
 
-                col_data_inicial, col_data_final = st.columns(2)
-                
-                # Definir valores de data inicial e final seguros
-                data_minima = df_base_filtro_tabela["Data"].min() if not df_base_filtro_tabela.empty and pd.notna(df_base_filtro_tabela["Data"].min()) else hoje
-                data_maxima = df_base_filtro_tabela["Data"].max() if not df_base_filtro_tabela.empty and pd.notna(df_base_filtro_tabela["Data"].max()) else hoje
-                
-                # Ajusta se a data mínima for NaT
-                data_min_value = data_minima if pd.notna(data_minima) else hoje
-                data_max_value = data_maxima if pd.notna(data_maxima) else hoje
-                
-                with col_data_inicial:
-                    data_inicial = st.date_input("Data Inicial", value=data_min_value, key="filtro_data_ini")
-                with col_data_final:
-                    data_final = st.date_input("Data Final", value=data_max_value, key="filtro_data_fim")
+            col_data_inicial, col_data_final = st.columns(2)
+            
+            # Definir valores de data inicial e final seguros
+            data_minima = df_base_filtro_tabela["Data"].min() if not df_base_filtro_tabela.empty and pd.notna(df_base_filtro_tabela["Data"].min()) else hoje
+            data_maxima = df_base_filtro_tabela["Data"].max() if not df_base_filtro_tabela.empty and pd.notna(df_base_filtro_tabela["Data"].max()) else hoje
+            
+            # Ajusta se a data mínima for NaT
+            data_min_value = data_minima if pd.notna(data_minima) else hoje
+            data_max_value = data_maxima if pd.notna(data_maxima) else hoje
+            
+            with col_data_inicial:
+                data_inicial = st.date_input("Data Inicial", value=data_min_value, key="filtro_data_ini")
+            with col_data_final:
+                data_final = st.date_input("Data Final", value=data_max_value, key="filtro_data_fim")
 
-                if data_inicial and data_final:
-                    data_inicial_dt = pd.to_datetime(data_inicial).date()
-                    data_final_dt = pd.to_datetime(data_final).date()
+            if data_inicial and data_final:
+                data_inicial_dt = pd.to_datetime(data_inicial).date()
+                data_final_dt = pd.to_datetime(data_final).date()
+                
+                df_filtrado_final = df_base_filtro_tabela[
+                    (df_base_filtro_tabela["Data"] >= data_inicial_dt) &
+                    (df_base_filtro_tabela["Data"] <= data_final_dt)
+                ].copy()
+                
+                if df_filtrado_final.empty:
+                    st.warning("Não há movimentações para o período selecionado.")
+                else:
+                    st.markdown("#### Tabela Filtrada")
                     
-                    df_filtrado_final = df_base_filtro_tabela[
-                        (df_base_filtro_tabela["Data"] >= data_inicial_dt) &
-                        (df_base_filtro_tabela["Data"] <= data_final_dt)
-                    ].copy()
+                    df_filtrado_final['Produtos Resumo'] = df_filtrado_final['Produtos Vendidos'].apply(format_produtos_resumo)
                     
-                    if df_filtrado_final.empty:
-                        st.warning("Não há movimentações para o período selecionado.")
-                    else:
-                        st.markdown("#### Tabela Filtrada")
-                        
-                        df_filtrado_final['Produtos Resumo'] = df_filtrado_final['Produtos Vendidos'].apply(format_produtos_resumo)
-                        
-                        colunas_filtro_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Status', 'Data Pagamento', 'Produtos Resumo', 'Saldo Acumulado']
+                    colunas_filtro_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Status', 'Data Pagamento', 'Produtos Resumo', 'Saldo Acumulado']
 
-                        # --- Lógica Correta para Estilização Condicional na Tabela Filtrada ---
-                        df_styling_filtro = df_filtrado_final[colunas_filtro_tabela + ['Cor_Valor']].copy()
-                        styled_df_filtro = df_styling_filtro.style.apply(highlight_value, axis=1)
-                        styled_df_filtro = styled_df_filtro.hide(subset=['Cor_Valor'], axis=1)
-                        
-                        # Aplica estilo condicional na tabela filtrada também
-                        st.dataframe(
-                            styled_df_filtro,
-                            use_container_width=True,
-                            column_config={
-                                "Valor": st.column_config.NumberColumn(
-                                    "Valor (R$)",
-                                    format="R$ %.2f",
-                                ),
-                                "Saldo Acumulado": st.column_config.NumberColumn(
-                                    "Saldo Acumulado (R$)",
-                                    format="R$ %.2f",
-                                ),
-                                "Produtos Resumo": st.column_config.TextColumn("Detalhe dos Produtos"),
-                                "Categoria": "Categoria (C. Custo)",
-                                "Data Pagamento": st.column_config.DateColumn("Data Pagt. Previsto/Real", format="DD/MM/YYYY")
-                            }
-                        )
+                    # --- Lógica Correta para Estilização Condicional na Tabela Filtrada ---
+                    df_styling_filtro = df_filtrado_final[colunas_filtro_tabela + ['Cor_Valor']].copy()
+                    styled_df_filtro = df_styling_filtro.style.apply(highlight_value, axis=1)
+                    styled_df_filtro = styled_df_filtro.hide(subset=['Cor_Valor'], axis=1)
+                    
+                    # Aplica estilo condicional na tabela filtrada também
+                    st.dataframe(
+                        styled_df_filtro,
+                        use_container_width=True,
+                        column_config={
+                            "Valor": st.column_config.NumberColumn(
+                                "Valor (R$)",
+                                format="R$ %.2f",
+                            ),
+                            "Saldo Acumulado": st.column_config.NumberColumn(
+                                "Saldo Acumulado (R$)",
+                                format="R$ %.2f",
+                            ),
+                            "Produtos Resumo": st.column_config.TextColumn("Detalhe dos Produtos"),
+                            "Categoria": "Categoria (C. Custo)",
+                            "Data Pagamento": st.column_config.DateColumn("Data Pagt. Previsto/Real", format="DD/MM/YYYY")
+                        }
+                    )
 
-                        # --- Resumo do Período Filtrado (Apenas Realizado) ---
-                        entradas_filtro, saidas_filtro, saldo_filtro = calcular_resumo(df_filtrado_final)
+                    # --- Resumo do Período Filtrado (Apenas Realizado) ---
+                    entradas_filtro, saidas_filtro, saldo_filtro = calcular_resumo(df_filtrado_final)
 
-                        st.markdown("#### 💰 Resumo do Período Filtrado (Apenas Realizado)")
-                        col1_f, col2_f, col3_f = st.columns(3)
-                        col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
-                        col2_f.metric("Saídas", f"R$ {saidas_filtro:,.2f}")
-                        col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
+                    st.markdown("#### 💰 Resumo do Período Filtrado (Apenas Realizado)")
+                    col1_f, col2_f, col3_f = st.columns(3)
+                    col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
+                    col2_f.metric("Saídas", f"R$ {saidas_filtro:,.2f}")
+                    col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
