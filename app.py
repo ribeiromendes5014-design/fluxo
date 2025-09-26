@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import requests
 import base64
+import io  # Importa a biblioteca 'io' para usar 'StringIO'
 
 # ==================== CONFIGURAÇÕES DO APLICATIVO ====================
 # As variáveis de token e repositório são carregadas dos segredos do Streamlit.
@@ -35,7 +36,8 @@ def carregar_dados_do_github():
         
         content = response.json()
         decoded_content = base64.b64decode(content["content"]).decode("utf-8")
-        df = pd.read_csv(pd.compat.StringIO(decoded_content), parse_dates=["Data"])
+        # Usa io.StringIO, que é a forma correta de ler strings em memória com pandas
+        df = pd.read_csv(io.StringIO(decoded_content), parse_dates=["Data"])
         
         sha = content["sha"]
         return df, sha
@@ -126,7 +128,7 @@ if enviar:
         salvar_dados_no_github(df_atualizado, sha)
         
         st.success("Movimentação adicionada com sucesso!")
-        st.experimental_rerun() # Reruns the app to show the updated table
+        st.rerun() # Reruns the app to show the updated table
 
 # --- Exibição e Análises dos Dados ---
 st.subheader("📊 Movimentações Registradas")
