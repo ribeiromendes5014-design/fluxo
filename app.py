@@ -204,7 +204,6 @@ def processar_dataframe(df):
         )
         
         # 3. Aplica fillna para preencher valores nulos e atribui ao nome final
-        # O erro KeyError: 'Saldo Acumulado_new' foi resolvido usando TEMP_SALDO
         df_proc['Saldo Acumulado'] = df_proc['TEMP_SALDO'].fillna(method='ffill').fillna(0)
         df_proc.drop(columns=['TEMP_SALDO'], inplace=True)
 
@@ -789,10 +788,41 @@ with tab_mov:
 with tab_rel:
     # Aumenta o número de sub-abas
     subtab_dashboard, subtab_filtro, subtab_produtos, subtab_dividas = st.tabs(["Dashboard Geral", "Filtro e Tabela", "Produtos e Lucro", "🧾 Dívidas Pendentes"])
+    
+    # FIX: Inicializa df_filtrado_loja e loja_filtro_relatorio fora do 'if empty' para garantir que existam
+    df_filtrado_loja = df_exibicao.copy() 
+    loja_filtro_relatorio = "Todas as Lojas"
+
+    if df_exibicao.empty:
+        st.info("Não há dados suficientes para gerar relatórios e filtros.")
+    else:
+        # --- FILTRO GLOBAL DE LOJA PARA RELATÓRIOS ---
+        # Garante que a lista de lojas no filtro reflita as lojas reais no CSV
+        lojas_unicas_no_df = df_exibicao["Loja"].unique().tolist()
+        todas_lojas = ["Todas as Lojas"] + [l for l in LOJAS_DISPONIVEIS if l in lojas_unicas_no_df] + [l for l in lojas_unicas_no_df if l not in LOJAS_DISPONIVEIS and l != "Todas as Lojas"]
+        todas_lojas = list(dict.fromkeys(todas_lojas)) # Remove duplicatas
+
+        loja_filtro_relatorio = st.selectbox(
+            "Selecione a Loja para Filtrar Relatórios",
+            options=todas_lojas,
+            key="loja_filtro_rel"
+        )
+
+        # Aplicar filtro de loja
+        if loja_filtro_relatorio != "Todas as Lojas":
+            df_filtrado_loja = df_exibicao[df_exibicao["Loja"] == loja_filtro_relatorio].copy()
+        else:
+            df_filtrado_loja = df_exibicao.copy()
+            
+        st.subheader(f"Dashboard de Relatórios - {loja_filtro_relatorio}")
+
+
+    # --- SUB-ABAS COM LÓGICA RESTRITA ---
 
     with subtab_dividas:
         st.header("🧾 Gerenciamento de Dívidas Pendentes")
         
+        # O df_exibicao sempre existe, então esta lógica é segura
         df_pendente = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
         
         if df_pendente.empty:
@@ -877,11 +907,10 @@ with tab_rel:
             else:
                 st.warning("Selecione itens nas tabelas acima para concluir.")
 
-    # Bloco dos dashboards e filtros existentes (sem alterações substanciais)
     with subtab_dashboard:
-        # ... (Mantém a lógica do dashboard geral)
+        # Agora o acesso a df_filtrado_loja é seguro
         if df_filtrado_loja.empty:
-            st.warning(f"Nenhuma movimentação encontrada na Loja '{loja_filtro_relatorio}'.")
+            st.warning("Nenhuma movimentação encontrada para gerar o Dashboard.")
         else:
             
             # --- Análise de Saldo Acumulado (Série Temporal) ---
@@ -954,141 +983,147 @@ with tab_rel:
                     labels={'Total': 'Valor (R$)', 'MesAno': 'Mês/Ano'},
                     height=500
                 )
-                fig_bar.update_traces(texttemplate='R$ %{y:.2f}', textposition='outside')
+                fig_bar.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
                 st.plotly_chart(fig_bar, use_container_width=True)
 
-    with subtab_productos:
-        # ... (Mantém a lógica de produtos)
+    with subtab_produtos:
         st.markdown("## 💰 Análise de Produtos e Lucratividade (Realizados)")
 
-        df_entradas_produtos = df_filtrado_loja[(df_filtrado_loja['Tipo'] == 'Entrada') & (df_filtrado_loja['Status'] == 'Realizada')].copy()
-
-        if df_entradas_produtos.empty:
-            st.info("Nenhuma entrada com produtos REALIZADA registrada para análise.")
+        if df_filtrado_loja.empty:
+            st.warning("Nenhuma movimentação encontrada para gerar a Análise de Produtos.")
         else:
-            
-            lista_produtos_agregada = []
-            for index, row in df_entradas_produtos.iterrows():
-                if row['Produtos Vendidos']:
-                    try:
-                        produtos = json.loads(row['Produtos Vendidos'])
-                        for p in produtos:
-                            qtd = float(p.get('Quantidade', 0))
-                            preco_un = float(p.get('Preço Unitário', 0))
-                            custo_un = float(p.get('Custo Unitário', 0))
-                            
-                            lista_produtos_agregada.append({
-                                "Produto": p['Produto'],
-                                "Quantidade": qtd,
-                                "Total Venda": qtd * preco_un,
-                                "Total Custo": qtd * custo_un,
-                                "Lucro Bruto": (qtd * preco_un) - (qtd * custo_un),
-                            })
-                    except:
-                        pass
+            df_entradas_produtos = df_filtrado_loja[(df_filtrado_loja['Tipo'] == 'Entrada') & (df_filtrado_loja['Status'] == 'Realizada')].copy()
 
-            if lista_produtos_agregada:
-                df_produtos_agregados = pd.DataFrame(lista_produtos_agregada)
-                df_produtos_agregados = df_produtos_agregados.groupby('Produto').sum().reset_index()
-
-                # --- Top 10 Produtos por Valor Total de Venda ---
-                st.markdown("### 🏆 Top 10 Produtos (Valor de Venda)")
-                top_venda = df_produtos_agregados.sort_values(by='Total Venda', ascending=False).head(10)
-                
-                fig_top_venda = px.bar(
-                    top_venda,
-                    x='Produto',
-                    y='Total Venda',
-                    text='Total Venda',
-                    title='Top 10 Produtos por Valor Total de Venda (R$)',
-                    color='Total Venda'
-                )
-                fig_top_venda.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
-                st.plotly_chart(fig_top_venda, use_container_width=True)
-                
-                # --- Top 10 Produtos por Lucro Bruto (se houver custo) ---
-                if df_produtos_agregados['Lucro Bruto'].sum() > 0:
-                    st.markdown("### 💸 Top 10 Produtos por Lucro Bruto")
-                    top_lucro = df_produtos_agregados.sort_values(by='Lucro Bruto', ascending=False).head(10)
-                    
-                    fig_top_lucro = px.bar(
-                        top_lucro,
-                        x='Produto',
-                        y='Lucro Bruto',
-                        text='Lucro Bruto',
-                        title='Top 10 Produtos Mais Lucrativos (R$)',
-                        color='Lucro Bruto',
-                        color_continuous_scale=px.colors.sequential.Greens
-                    )
-                    fig_top_lucro.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
-                    st.plotly_chart(fig_top_lucro, use_container_width=True)
-                else:
-                    st.info("Adicione o 'Custo Unitário' no cadastro de produtos para ver o ranking de Lucro Bruto.")
-                    
+            if df_entradas_produtos.empty:
+                st.info("Nenhuma entrada com produtos REALIZADA registrada para análise.")
             else:
-                st.info("Nenhum produto com dados válidos encontrado para agregar.")
+                
+                lista_produtos_agregada = []
+                for index, row in df_entradas_produtos.iterrows():
+                    if row['Produtos Vendidos']:
+                        try:
+                            produtos = json.loads(row['Produtos Vendidos'])
+                            for p in produtos:
+                                qtd = float(p.get('Quantidade', 0))
+                                preco_un = float(p.get('Preço Unitário', 0))
+                                custo_un = float(p.get('Custo Unitário', 0))
+                                
+                                lista_produtos_agregada.append({
+                                    "Produto": p['Produto'],
+                                    "Quantidade": qtd,
+                                    "Total Venda": qtd * preco_un,
+                                    "Total Custo": qtd * custo_un,
+                                    "Lucro Bruto": (qtd * preco_un) - (qtd * custo_un),
+                                })
+                        except:
+                            pass
+
+                if lista_produtos_agregada:
+                    df_produtos_agregados = pd.DataFrame(lista_produtos_agregada)
+                    df_produtos_agregados = df_produtos_agregados.groupby('Produto').sum().reset_index()
+
+                    # --- Top 10 Produtos por Valor Total de Venda ---
+                    st.markdown("### 🏆 Top 10 Produtos (Valor de Venda)")
+                    top_venda = df_produtos_agregados.sort_values(by='Total Venda', ascending=False).head(10)
+                    
+                    fig_top_venda = px.bar(
+                        top_venda,
+                        x='Produto',
+                        y='Total Venda',
+                        text='Total Venda',
+                        title='Top 10 Produtos por Valor Total de Venda (R$)',
+                        color='Total Venda'
+                    )
+                    fig_top_venda.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
+                    st.plotly_chart(fig_top_venda, use_container_width=True)
+                    
+                    # --- Top 10 Produtos por Lucro Bruto (se houver custo) ---
+                    if df_produtos_agregados['Lucro Bruto'].sum() > 0:
+                        st.markdown("### 💸 Top 10 Produtos por Lucro Bruto")
+                        top_lucro = df_produtos_agregados.sort_values(by='Lucro Bruto', ascending=False).head(10)
+                        
+                        fig_top_lucro = px.bar(
+                            top_lucro,
+                            x='Produto',
+                            y='Lucro Bruto',
+                            text='Lucro Bruto',
+                            title='Top 10 Produtos Mais Lucrativos (R$)',
+                            color='Lucro Bruto',
+                            color_continuous_scale=px.colors.sequential.Greens
+                        )
+                        fig_top_lucro.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
+                        st.plotly_chart(fig_top_lucro, use_container_width=True)
+                    else:
+                        st.info("Adicione o 'Custo Unitário' no cadastro de produtos para ver o ranking de Lucro Bruto.")
+                        
+                else:
+                    st.info("Nenhum produto com dados válidos encontrado para agregar.")
 
     with subtab_filtro:
-        st.subheader("📅 Filtrar Movimentações por Período e Loja")
         
-        df_base_filtro_tabela = df_filtrado_loja
-
-        col_data_inicial, col_data_final = st.columns(2)
-        
-        data_minima = df_base_filtro_tabela["Data"].min() if not df_base_filtro_tabela.empty and df_base_filtro_tabela["Data"].min() is not pd.NaT else datetime.now().date()
-        data_maxima = df_base_filtro_tabela["Data"].max() if not df_base_filtro_tabela.empty and df_base_filtro_tabela["Data"].max() is not pd.NaT else datetime.now().date()
-        
-        data_min_value = data_minima
-        data_max_value = data_maxima
-        
-        with col_data_inicial:
-            data_inicial = st.date_input("Data Inicial", value=data_min_value, key="filtro_data_ini")
-        with col_data_final:
-            data_final = st.date_input("Data Final", value=data_max_value, key="filtro_data_fim")
-
-        if data_inicial and data_final:
-            data_inicial_dt = pd.to_datetime(data_inicial).date()
-            data_final_dt = pd.to_datetime(data_final).date()
+        if df_filtrado_loja.empty:
+            st.warning("Nenhuma movimentação encontrada para gerar a Tabela Filtrada.")
+        else:
+            st.subheader("📅 Filtrar Movimentações por Período e Loja")
             
-            df_filtrado_final = df_base_filtro_tabela[
-                (df_base_filtro_tabela["Data"] >= data_inicial_dt) &
-                (df_base_filtro_tabela["Data"] <= data_final_dt)
-            ].copy()
+            df_base_filtro_tabela = df_filtrado_loja
+
+            col_data_inicial, col_data_final = st.columns(2)
             
-            if df_filtrado_final.empty:
-                st.warning("Não há movimentações para o período selecionado.")
-            else:
-                st.markdown("#### Tabela Filtrada")
-                
-                df_filtrado_final['Produtos Resumo'] = df_filtrado_final['Produtos Vendidos'].apply(format_produtos_resumo)
-                
-                colunas_filtro_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Status', 'Data Pagamento', 'Produtos Resumo']
+            data_minima = df_base_filtro_tabela["Data"].min() if not df_base_filtro_tabela.empty and df_base_filtro_tabela["Data"].min() is not pd.NaT else datetime.now().date()
+            data_maxima = df_base_filtro_tabela["Data"].max() if not df_base_filtro_tabela.empty and df_base_filtro_tabela["Data"].max() is not pd.NaT else datetime.now().date()
+            
+            data_min_value = data_minima
+            data_max_value = data_maxima
+            
+            with col_data_inicial:
+                data_inicial = st.date_input("Data Inicial", value=data_min_value, key="filtro_data_ini")
+            with col_data_final:
+                data_final = st.date_input("Data Final", value=data_max_value, key="filtro_data_fim")
 
-                # --- Lógica Correta para Estilização Condicional na Tabela Filtrada ---
-                df_styling_filtro = df_filtrado_final[colunas_filtro_tabela + ['Cor_Valor']].copy()
-                styled_df_filtro = df_styling_filtro.style.apply(highlight_value, axis=1)
-                styled_df_filtro = styled_df_filtro.hide(subset=['Cor_Valor'], axis=1)
+            if data_inicial and data_final:
+                data_inicial_dt = pd.to_datetime(data_inicial).date()
+                data_final_dt = pd.to_datetime(data_final).date()
                 
-                # Aplica estilo condicional na tabela filtrada também
-                st.dataframe(
-                    styled_df_filtro,
-                    use_container_width=True,
-                    column_config={
-                        "Valor": st.column_config.NumberColumn(
-                            "Valor (R$)",
-                            format="R$ %.2f",
-                        ),
-                        "Produtos Resumo": st.column_config.TextColumn("Detalhe dos Produtos"),
-                        "Categoria": "Categoria (C. Custo)",
-                        "Data Pagamento": st.column_config.DateColumn("Data Pagt. Previsto/Real", format="DD/MM/YYYY")
-                    }
-                )
+                df_filtrado_final = df_base_filtro_tabela[
+                    (df_base_filtro_tabela["Data"] >= data_inicial_dt) &
+                    (df_base_filtro_tabela["Data"] <= data_final_dt)
+                ].copy()
+                
+                if df_filtrado_final.empty:
+                    st.warning("Não há movimentações para o período selecionado.")
+                else:
+                    st.markdown("#### Tabela Filtrada")
+                    
+                    df_filtrado_final['Produtos Resumo'] = df_filtrado_final['Produtos Vendidos'].apply(format_produtos_resumo)
+                    
+                    colunas_filtro_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Status', 'Data Pagamento', 'Produtos Resumo']
 
-                # --- Resumo do Período Filtrado (Apenas Realizado) ---
-                entradas_filtro, saidas_filtro, saldo_filtro = calcular_resumo(df_filtrado_final)
+                    # --- Lógica Correta para Estilização Condicional na Tabela Filtrada ---
+                    df_styling_filtro = df_filtrado_final[colunas_filtro_tabela + ['Cor_Valor']].copy()
+                    styled_df_filtro = df_styling_filtro.style.apply(highlight_value, axis=1)
+                    styled_df_filtro = styled_df_filtro.hide(subset=['Cor_Valor'], axis=1)
+                    
+                    # Aplica estilo condicional na tabela filtrada também
+                    st.dataframe(
+                        styled_df_filtro,
+                        use_container_width=True,
+                        column_config={
+                            "Valor": st.column_config.NumberColumn(
+                                "Valor (R$)",
+                                format="R$ %.2f",
+                            ),
+                            "Produtos Resumo": st.column_config.TextColumn("Detalhe dos Produtos"),
+                            "Categoria": "Categoria (C. Custo)",
+                            "Data Pagamento": st.column_config.DateColumn("Data Pagt. Previsto/Real", format="DD/MM/YYYY")
+                        }
+                    )
 
-                st.markdown("#### 💰 Resumo do Período Filtrado (Apenas Realizado)")
-                col1_f, col2_f, col3_f = st.columns(3)
-                col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
-                col2_f.metric("Saídas", f"R$ {saidas_filtro:,.2f}")
-                col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
+                    # --- Resumo do Período Filtrado (Apenas Realizado) ---
+                    entradas_filtro, saidas_filtro, saldo_filtro = calcular_resumo(df_filtrado_final)
+
+                    st.markdown("#### 💰 Resumo do Período Filtrado (Apenas Realizado)")
+                    col1_f, col2_f, col3_f = st.columns(3)
+                    col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
+                    col2_f.metric("Saídas", f"R$ {saidas_filtro:,.2f}")
+                    col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
