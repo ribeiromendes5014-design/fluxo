@@ -12,15 +12,14 @@ TOKEN = st.secrets["GITHUB_TOKEN"]
 OWNER = st.secrets["REPO_OWNER"]
 REPO = st.secrets["REPO_NAME"]
 CSV_PATH = st.secrets["CSV_PATH"]
-COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit" # Mensagem de commit padrão para adições
-COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa" # Mensagem de commit para exclusões
-# 'main' é a branch padrão, mas pode ser configurada nos segredos
+COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit"  # Mensagem de commit padrão para adições
+COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa"  # Mensagem de commit para exclusões
 BRANCH = st.secrets.get("BRANCH", "main")
 
 # Cabeçalhos de autenticação para as requisições à API do GitHub
 HEADERS = {
     "Authorization": f"token {TOKEN}",
-    "Accept": "application/vnd.github.com",
+    "Accept": "application/vnd.github.v3+json",  # Corrigido header
 }
 
 # ==================== FUNÇÕES DE INTERAÇÃO COM O GITHUB ====================
@@ -34,20 +33,17 @@ def carregar_dados_do_github():
     
     try:
         response = requests.get(url, headers=HEADERS)
-        response.raise_for_status()  # Lança um erro para códigos de status HTTP ruins (4xx ou 5xx)
+        response.raise_for_status()
         
         content = response.json()
         decoded_content = base64.b64decode(content["content"]).decode("utf-8")
-        # Usa io.StringIO, que é a forma correta de ler strings em memória com pandas
         df = pd.read_csv(io.StringIO(decoded_content), parse_dates=["Data"])
-        
         sha = content["sha"]
         return df, sha
         
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
             st.info("Arquivo CSV não encontrado no GitHub. Criando um novo DataFrame localmente.")
-            # Retorna um DataFrame vazio se o arquivo não existir
             return pd.DataFrame(columns=["Data", "Cliente", "Valor", "Forma de Pagamento", "Tipo"]), None
         else:
             st.error(f"Erro HTTP ao carregar dados do GitHub: {e}")
@@ -61,9 +57,7 @@ def salvar_dados_no_github(df, sha=None, commit_message=COMMIT_MESSAGE):
     Converte o DataFrame para CSV, codifica em Base64 e salva no GitHub.
     Usa o SHA para atualizar o arquivo existente.
     """
-    # Converte o DataFrame para string CSV
     csv_string = df.to_csv(index=False)
-    # Codifica a string CSV em Base64
     csv_encoded = base64.b64encode(csv_string.encode()).decode()
     
     url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{CSV_PATH}"
@@ -75,7 +69,6 @@ def salvar_dados_no_github(df, sha=None, commit_message=COMMIT_MESSAGE):
     }
 
     if sha:
-        # O SHA é necessário para que a API do GitHub saiba qual versão do arquivo atualizar
         payload["sha"] = sha
 
     try:
@@ -90,7 +83,10 @@ def salvar_dados_no_github(df, sha=None, commit_message=COMMIT_MESSAGE):
             
     except requests.exceptions.RequestException as e:
         st.error(f"Erro de requisição ao salvar no GitHub: {e}")
-        st.code(response.json())
+        try:
+            st.code(response.json())
+        except Exception:
+            pass
 
 
 # ==================== INTERFACE STREAMLIT ====================
@@ -107,10 +103,8 @@ with st.sidebar.form("form_movimentacao"):
     enviar = st.form_submit_button("Adicionar Movimentação")
 
 # --- Lógica principal ---
-# Carrega os dados do GitHub ao iniciar o aplicativo
 df, sha = carregar_dados_do_github()
 
-# Se o botão do formulário foi clicado, processa a nova movimentação
 if enviar:
     if not cliente or valor <= 0:
         st.sidebar.warning("Por favor, preencha o nome do cliente e o valor corretamente.")
@@ -122,59 +116,43 @@ if enviar:
             "Forma de Pagamento": forma_pagamento,
             "Tipo": tipo
         }
-        
-        # Adiciona a nova linha ao DataFrame existente
         df_atualizado = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
-        
-        # Salva o DataFrame atualizado no GitHub
         salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE)
-        
         st.success("Movimentação adicionada com sucesso!")
-        st.rerun() # Reruns the app to show the updated table
+        st.experimental_rerun()
 
 # --- Exibição e Análises dos Dados ---
 st.subheader("📊 Movimentações Registradas")
 if df.empty:
     st.info("Nenhuma movimentação registrada ainda.")
 else:
-    # Cria uma cópia do DataFrame e adiciona uma coluna de índice para exibição
     df_exibicao = df.copy()
-    
-    # Ordena o DataFrame pela data de forma decrescente
     df_exibicao = df_exibicao.sort_values(by="Data", ascending=False)
-    
     st.dataframe(df_exibicao, use_container_width=True)
 
-    # --- Opção de exclusão ---
     st.markdown("---")
     st.markdown("### 🗑️ Excluir Movimentações")
-    
-    # Cria uma lista de opções para o multiselect, associando a exibição ao índice real do DF
-    # Adicionando uma verificação para evitar o erro ValueError em datas nulas
+
     opcoes_exclusao = {
-        f"ID: {row.name} - Data: {row['Data'].strftime('%d/%m/%Y') if pd.notnull(row['Data']) else 'Data inválida'} - {row['Cliente']} - R$ {row['Valor']:, .2f}": row.name
+        f"ID: {row.name} - Data: {row['Data'].strftime('%d/%m/%Y') if pd.notnull(row['Data']) else 'Data inválida'} - {row['Cliente']} - R$ {row['Valor']:,.2f}": row.name
         for _, row in df.iterrows()
     }
-    
+
     movimentacoes_a_excluir_str = st.multiselect(
         "Selecione as movimentações que deseja excluir:",
         options=list(opcoes_exclusao.keys())
     )
-    
-    # Extrai os IDs (índices) das strings selecionadas usando o dicionário
     indices_a_excluir = [opcoes_exclusao[s] for s in movimentacoes_a_excluir_str]
 
     if st.button("Excluir Selecionadas"):
         if indices_a_excluir:
-            # Filtra o DataFrame para manter apenas as linhas que não estão na lista de exclusão
             df_atualizado = df.drop(indices_a_excluir)
             salvar_dados_no_github(df_atualizado, sha, COMMIT_MESSAGE_DELETE)
             st.success(f"{len(indices_a_excluir)} movimentação(ões) excluída(s) com sucesso!")
-            st.rerun()
+            st.experimental_rerun()
         else:
             st.warning("Selecione pelo menos uma movimentação para excluir.")
 
-    # Resumo Financeiro
     st.markdown("---")
     st.markdown("### 💰 Resumo Financeiro")
     total_entradas = df_exibicao[df_exibicao["Tipo"] == "Entrada"]["Valor"].sum()
@@ -186,7 +164,6 @@ else:
     col2.metric("Total de Saídas", f"R$ {abs(total_saidas):,.2f}")
     col3.metric("💼 Saldo Final", f"R$ {saldo:,.2f}", delta_color="normal")
 
-    # Filtro por Data
     st.markdown("---")
     st.markdown("### 📅 Filtrar por Período")
     col_data_inicial, col_data_final = st.columns(2)
@@ -197,7 +174,6 @@ else:
 
     if data_inicial and data_final:
         df_filtrado = df_exibicao[(df_exibicao["Data"] >= pd.to_datetime(data_inicial)) & (df_exibicao["Data"] <= pd.to_datetime(data_final))]
-        
         if df_filtrado.empty:
             st.warning("Não há movimentações para o período selecionado.")
         else:
@@ -206,7 +182,7 @@ else:
             entradas_filtro = df_filtrado[df_filtrado["Tipo"] == "Entrada"]["Valor"].sum()
             saidas_filtro = df_filtrado[df_filtrado["Tipo"] == "Saída"]["Valor"].sum()
             saldo_filtro = df_filtrado["Valor"].sum()
-            
+
             st.markdown("#### 💼 Resumo do Período Filtrado")
             col1_f, col2_f, col3_f = st.columns(3)
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
