@@ -128,7 +128,7 @@ def salvar_dados_no_github(df, sha=None, commit_message=COMMIT_MESSAGE):
 
 
 # ==================== INTERFACE STREAMLIT ====================
-st.title("📘 Livro Caixa - Streamlit + GitHub")
+st.title("📘 Livro Caixa")
 
 # --- Formulário de Nova Movimentação na barra lateral ---
 st.sidebar.header("Nova Movimentação")
@@ -235,3 +235,4 @@ else:
             col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
             col2_f.metric("Saídas", f"R$ {abs(saidas_filtro):,.2f}")
             col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
+
