@@ -54,9 +54,12 @@ def salvar_dados(df, sha=None):
 
     if response.status_code in [200, 201]:
         st.success("📁 Dados salvos no GitHub com sucesso!")
+        # Retorna o SHA atualizado para o novo commit
+        return response.json()['content']['sha']
     else:
         st.error("❌ Erro ao salvar no GitHub.")
         st.code(response.json())
+        return sha  # Retorna o SHA antigo se erro
 
 
 # === INTERFACE DO APP ===
@@ -132,3 +135,4 @@ else:
         col1.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
         col2.metric("Saídas", f"R$ {abs(saidas_filtro):,.2f}")
         col3.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
+
