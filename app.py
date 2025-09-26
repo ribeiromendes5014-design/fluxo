@@ -251,6 +251,12 @@ def format_produtos_resumo(produtos_json):
             return "Erro na formatação"
     return ""
 
+# Função para aplicar o destaque condicional na coluna Valor
+def highlight_value(row):
+    color = row['Cor_Valor']
+    return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
+
+
 # ==================== INTERFACE STREAMLIT ====================
 st.set_page_config(layout="wide", page_title="Livro Caixa", page_icon="📘") 
 st.title("📘 Livro Caixa - Gerenciamento de Movimentações")
@@ -570,10 +576,6 @@ if enviar:
 # ========================================================
 tab_mov, tab_rel = st.tabs(["📋 Movimentações e Resumo", "📈 Relatórios e Filtros"])
 
-# Função para aplicar o destaque condicional na coluna Valor
-def highlight_value(row):
-    color = row['Cor_Valor']
-    return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
 
 with tab_mov:
     
@@ -789,7 +791,7 @@ with tab_rel:
     # Aumenta o número de sub-abas
     subtab_dashboard, subtab_filtro, subtab_produtos, subtab_dividas = st.tabs(["Dashboard Geral", "Filtro e Tabela", "Produtos e Lucro", "🧾 Dívidas Pendentes"])
     
-    # FIX: Inicializa df_filtrado_loja e loja_filtro_relatorio fora do 'if empty' para garantir que existam
+    # --- Inicializa df_filtrado_loja e loja_filtro_relatorio no topo para garantir o escopo ---
     df_filtrado_loja = df_exibicao.copy() 
     loja_filtro_relatorio = "Todas as Lojas"
 
