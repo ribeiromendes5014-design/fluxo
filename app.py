@@ -433,7 +433,7 @@ if enviar:
                 st.error("Erro interno: Movimentação original não encontrada para edição.")
                 st.session_state.edit_id = None
                 st.rerun()
-                return
+                # O "return" ilegal foi removido daqui!
 
         else:
             # ADICIONAR: Concatena nova linha
