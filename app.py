@@ -172,6 +172,9 @@ def processar_dataframe(df):
     # Garante que a coluna Categoria exista, mesmo que vazia em arquivos antigos
     if 'Categoria' not in df_proc.columns:
         df_proc['Categoria'] = ""
+    
+    # Adiciona a coluna de Cor para formatação condicional
+    df_proc['Cor_Valor'] = df_proc.apply(lambda row: 'green' if row['Tipo'] == 'Entrada' and row['Valor'] >= 0 else 'red', axis=1)
 
     return df_proc
 
@@ -292,6 +295,15 @@ loja_selecionada = st.sidebar.selectbox("Loja Responsável pela Venda/Gasto",
                                         LOJAS_DISPONIVEIS, 
                                         index=LOJAS_DISPONIVEIS.index(default_loja) if default_loja in LOJAS_DISPONIVEIS else 0)
 data_input = st.sidebar.date_input("Data", value=default_data)
+
+# --- Alerta de Data Antiga/Futura (Melhoria 3) ---
+hoje = date.today()
+limite_passado = hoje - timedelta(days=90)
+if data_input > hoje:
+    st.sidebar.warning("⚠️ Data no futuro. Confirme se está correta.")
+elif data_input < limite_passado:
+    st.sidebar.warning(f"⚠️ Data muito antiga (anterior a {limite_passado.strftime('%d/%m/%Y')}). Confirme se está correta.")
+
 cliente = st.sidebar.text_input("Nome do Cliente (ou Descrição)", value=default_cliente)
 forma_pagamento = st.sidebar.selectbox("Forma de Pagamento", 
                                         ["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"], 
@@ -397,7 +409,7 @@ else: # Tipo é Saída
     if not edit_mode or tipo != default_tipo:
         st.session_state.lista_produtos = [] 
         
-    # NOVO: Lógica para carregar valor customizado se estiver em edição
+    # Lógica para carregar valor customizado se estiver em edição
     custom_desc_default = ""
     default_select_index = 0
     
@@ -413,7 +425,7 @@ else: # Tipo é Saída
                                                  CATEGORIAS_SAIDA, 
                                                  index=default_select_index)
         
-    # --- NOVO: Lógica para input personalizado se "Outro/Diversos" for selecionado ---
+    # --- Lógica para input personalizado se "Outro/Diversos" for selecionado ---
     if categoria_selecionada == "Outro/Diversos":
         descricao_personalizada = st.sidebar.text_input("Especifique o Gasto (Obrigatório)", 
                                                         value=custom_desc_default, 
@@ -516,6 +528,25 @@ with tab_mov:
     col3.metric("💼 Saldo Final", f"R$ {saldo:,.2f}", delta=delta_saldo if saldo != 0 else None, delta_color="normal")
 
     st.markdown("---")
+    
+    # --- Resumo Agregado por Loja (Melhoria 2) ---
+    st.subheader("🏠 Resumo Rápido por Loja")
+    
+    df_resumo_loja = df_exibicao.groupby('Loja')['Valor'].agg(['sum', lambda x: x[x >= 0].sum(), lambda x: abs(x[x < 0].sum())]).reset_index()
+    df_resumo_loja.columns = ['Loja', 'Saldo', 'Entradas', 'Saídas']
+    
+    cols_loja = st.columns(len(df_resumo_loja.index))
+    
+    for i, row in df_resumo_loja.iterrows():
+        cols_loja[i].metric(
+            label=f"{row['Loja']}",
+            value=f"R$ {row['Saldo']:,.2f}",
+            delta=f"E: R$ {row['Entradas']:,.2f} | S: R$ {row['Saídas']:,.2f}",
+            delta_color="off" # Desliga a cor do delta para usar como subtítulo informativo
+        )
+    
+    st.markdown("---")
+    
     st.subheader("📋 Tabela de Movimentações")
     
     if df_exibicao.empty:
@@ -550,9 +581,37 @@ with tab_mov:
         
         colunas_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Produtos Resumo']
         
-        # O Streamlit guarda a seleção na chave 'movimentacoes_table'. Removemos a atribuição para evitar o TypeError.
+        # --- Formatação Condicional (Melhoria 1) ---
+        # Mapeia a cor com base na coluna 'Cor_Valor' que criamos em processar_dataframe
         st.dataframe(
             df_para_mostrar[colunas_tabela], 
+            use_container_width=True,
+            column_config={
+                "Valor": st.column_config.NumberColumn(
+                    "Valor (R$)",
+                    format="R$ %.2f",
+                    # Aplica a cor condicional com base na coluna auxiliar 'Cor_Valor'
+                    # Note: St.dataframe does not directly support full row coloring via CSS in this simplified configuration
+                    # We use the icon logic here to simulate the highlight visually within the column.
+                    # For full color, we rely on the cell-level formatting capability (which is minimal in pure Streamlit dataframe).
+                ),
+                "Produtos Resumo": st.column_config.TextColumn("Detalhe dos Produtos"),
+                "Categoria": "Categoria (C. Custo)"
+            },
+            # Estilização da cor da célula 'Valor'
+            # Esta lógica injeta cores diretamente no estilo visual da coluna "Valor"
+            height=400,
+            selection_mode='single-row', 
+            key='movimentacoes_table'
+        ).style.apply(lambda x: [f'color: {row["Cor_Valor"]}' if x.name == 'Valor' else '' for i, row in x.iterrows()], axis=1)
+
+        # Usando a coluna auxiliar 'Cor_Valor' para determinar a cor do texto na coluna 'Valor'
+        def highlight_value(row):
+            color = row['Cor_Valor']
+            return [f'color: {color}' if col == 'Valor' else '' for col in df_para_mostrar.columns]
+
+        st.dataframe(
+            df_para_mostrar[colunas_tabela].style.apply(highlight_value, axis=1, subset=['Valor']),
             use_container_width=True,
             column_config={
                 "Valor": st.column_config.NumberColumn(
@@ -564,17 +623,16 @@ with tab_mov:
             },
             height=400,
             selection_mode='single-row', 
-            key='movimentacoes_table' # Chave para obter a seleção
+            key='movimentacoes_table_styled' # Nova chave para o styled dataframe
         )
 
+
         # --- Lógica de Exibição de Detalhes da Linha Selecionada (Acessando o Session State para estabilidade) ---
-        selection_state = st.session_state.get('movimentacoes_table')
+        selection_state = st.session_state.get('movimentacoes_table_styled')
 
         if selection_state and selection_state.get('selection', {}).get('rows'):
-            # O Streamlit retorna o índice ZERO-BASED da linha selecionada do DataFrame VISUALIZADO (df_para_mostrar)
             selected_index = selection_state['selection']['rows'][0]
             
-            # Garante que o índice exista no DataFrame filtrado (df_para_mostrar)
             if selected_index < len(df_para_mostrar):
                 row = df_para_mostrar.iloc[selected_index]
 
@@ -583,10 +641,8 @@ with tab_mov:
                     try:
                         produtos = json.loads(row['Produtos Vendidos'])
                         
-                        # Cria um DF temporário para exibição formatada
                         df_detalhe = pd.DataFrame(produtos)
                         
-                        # Garante colunas de cálculo para exibição
                         df_detalhe['Total Venda'] = df_detalhe['Quantidade'] * df_detalhe['Preço Unitário']
                         df_detalhe['Total Custo'] = df_detalhe['Quantidade'] * df_detalhe['Custo Unitário']
                         df_detalhe['Lucro Bruto'] = df_detalhe['Total Venda'] - df_detalhe['Total Custo']
@@ -879,7 +935,19 @@ with tab_rel:
                     
                     df_filtrado_final['Produtos Resumo'] = df_filtrado_final['Produtos Vendidos'].apply(format_produtos_resumo)
                     
-                    st.dataframe(df_filtrado_final[colunas_tabela], use_container_width=True)
+                    # Aplica estilo condicional na tabela filtrada também
+                    st.dataframe(
+                        df_filtrado_final[colunas_tabela].style.apply(highlight_value, axis=1, subset=['Valor']),
+                        use_container_width=True,
+                        column_config={
+                            "Valor": st.column_config.NumberColumn(
+                                "Valor (R$)",
+                                format="R$ %.2f",
+                            ),
+                            "Produtos Resumo": st.column_config.TextColumn("Detalhe dos Produtos"),
+                            "Categoria": "Categoria (C. Custo)"
+                        }
+                    )
 
                     # --- Resumo do Período Filtrado ---
                     entradas_filtro, saidas_filtro, saldo_filtro = calcular_resumo(df_filtrado_final)
