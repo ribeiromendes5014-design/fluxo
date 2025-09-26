@@ -28,7 +28,7 @@ ARQ_LOCAL = "livro_caixa.csv"
 # COLUNA PADRÃO ATUALIZADA para incluir 'Loja'
 COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo"]
 
-# Lojas disponíveis para seleção (ATUALIZADO CONFORME SOLICITADO)
+# Lojas disponíveis para seleção
 LOJAS_DISPONIVEIS = ["Doce&bella", "Papelaria", "Fotografia", "Outro"]
 
 # ========================================================
@@ -149,7 +149,11 @@ def processar_dataframe(df):
     # Remove linhas onde a data não pôde ser convertida
     df_proc.dropna(subset=['Data'], inplace=True)
     
-    # Ordena e adiciona ID Visível
+    # --- CORREÇÃO AQUI: RESETAR O ÍNDICE E CRIAR O ID VISÍVEL ---
+    # Isso garante que df_proc tenha um índice limpo de 0 a N-1.
+    df_proc = df_proc.reset_index(drop=False) # Preserva o índice original na coluna 'index'
+    df_proc.rename(columns={'index': 'original_index'}, inplace=True)
+    
     df_proc = df_proc.sort_values(by="Data", ascending=False).reset_index(drop=True)
     df_proc.insert(0, 'ID Visível', df_proc.index + 1)
     
@@ -247,23 +251,30 @@ with tab_mov:
 
         st.markdown("---")
 
-        # --- EXCLUSÃO (Mantida na aba principal de Movimentações) ---
+        # --- EXCLUSÃO (CORRIGIDA) ---
         st.markdown("### 🗑️ Excluir Movimentações")
+        
+        # Mapeamento do nome de exibição para o ÍNDICE ORIGINAL (original_index)
         opcoes_exclusao = {
-            f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Loja']} | R$ {row['Valor']:,.2f}": row.name 
+            f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Loja']} | R$ {row['Valor']:,.2f}": row['original_index'] 
             for index, row in df_exibicao.iterrows()
         }
+        
         movimentacoes_a_excluir_str = st.multiselect(
             "Selecione as movimentações que deseja excluir:",
             options=list(opcoes_exclusao.keys()),
             key="multi_excluir"
         )
+        # Os índices a serem excluídos são os VALORES do dicionário, que são os índices originais
         indices_a_excluir = [opcoes_exclusao[s] for s in movimentacoes_a_excluir_str]
 
         if st.button("Excluir Selecionadas e Salvar no GitHub", type="primary"):
             if indices_a_excluir:
+                # Usa o índice original (do st.session_state.df) para o drop
                 st.session_state.df = st.session_state.df.drop(indices_a_excluir, errors='ignore')
+                
                 if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
+                    # Limpa o cache para forçar o recarregamento dos dados
                     st.cache_data.clear()
                     st.rerun()
             else:
@@ -279,8 +290,9 @@ with tab_rel:
         # FILTRO GLOBAL DE LOJA PARA RELATÓRIOS
         # Garante que a lista de lojas no filtro reflita as lojas reais no CSV
         lojas_unicas_no_df = df_exibicao["Loja"].unique().tolist()
-        todas_lojas = ["Todas as Lojas"] + lojas_unicas_no_df
-        
+        todas_lojas = ["Todas as Lojas"] + [l for l in LOJAS_DISPONIVEIS if l in lojas_unicas_no_df] + [l for l in lojas_unicas_no_df if l not in LOJAS_DISPONIVEIS and l != "Todas as Lojas"]
+        todas_lojas = list(dict.fromkeys(todas_lojas)) # Remove duplicatas
+
         loja_filtro_relatorio = st.selectbox(
             "Selecione a Loja para Filtrar Relatórios",
             options=todas_lojas,
