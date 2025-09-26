@@ -155,6 +155,15 @@ def processar_dataframe(df):
         
     df_proc = df.copy()
     
+    # --- GARANTE A EXISTÊNCIA DAS COLUNAS ESSENCIAIS ANTES DO PROCESSAMENTO (FIX PARA KEYERROR) ---
+    if 'Categoria' not in df_proc.columns:
+        df_proc['Categoria'] = ""
+    if 'Status' not in df_proc.columns: 
+        df_proc['Status'] = "Realizada"
+    if 'Data Pagamento' not in df_proc.columns:
+        df_proc['Data Pagamento'] = pd.NaT 
+    # --- FIM GARANTIA DE COLUNAS ---
+
     # Conversão de Valor
     df_proc["Valor"] = pd.to_numeric(df_proc["Valor"], errors="coerce").fillna(0.0)
 
@@ -162,10 +171,8 @@ def processar_dataframe(df):
     df_proc["Data"] = pd.to_datetime(df_proc["Data"], errors='coerce').dt.date
     df_proc["Data_dt"] = pd.to_datetime(df_proc["Data"], errors='coerce') # Data para ordenação
     
-    if "Data Pagamento" in df_proc.columns:
-        df_proc["Data Pagamento"] = pd.to_datetime(df_proc["Data Pagamento"], errors='coerce').dt.date
-    else:
-        df_proc["Data Pagamento"] = pd.NaT # Cria a coluna se não existir
+    # Agora 'Data Pagamento' existe garantidamente
+    df_proc["Data Pagamento"] = pd.to_datetime(df_proc["Data Pagamento"], errors='coerce').dt.date
     
     # Remove linhas onde a data não pôde ser convertida
     df_proc.dropna(subset=['Data_dt'], inplace=True)
@@ -194,11 +201,6 @@ def processar_dataframe(df):
     df_proc = df_proc.sort_values(by="Data_dt", ascending=False).reset_index(drop=True)
     df_proc.insert(0, 'ID Visível', df_proc.index + 1)
     
-    # Garante que a coluna Categoria exista, mesmo que vazia em arquivos antigos
-    if 'Categoria' not in df_proc.columns:
-        df_proc['Categoria'] = ""
-    if 'Status' not in df_proc.columns:
-        df_proc['Status'] = "Realizada"
     
     # Adiciona a coluna de Cor para formatação condicional
     df_proc['Cor_Valor'] = df_proc.apply(lambda row: 'green' if row['Tipo'] == 'Entrada' and row['Valor'] >= 0 else 'red', axis=1)
