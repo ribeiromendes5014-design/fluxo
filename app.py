@@ -192,16 +192,21 @@ def processar_dataframe(df):
     else:
         # 2. Calula Saldo Acumulado (requer ordenação por data ascendente)
         df_proc_sorted_asc = df_realizadas.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]).reset_index(drop=True)
-        df_proc_sorted_asc['Saldo Acumulado'] = df_proc_sorted_asc['Valor'].cumsum()
+        # Usa um nome temporário único: TEMP_SALDO
+        df_proc_sorted_asc['TEMP_SALDO'] = df_proc_sorted_asc['Valor'].cumsum()
         
-        # Junta o saldo acumulado de volta ao DF principal (usando o índice original como chave)
-        df_proc = pd.merge(df_proc, df_proc_sorted_asc[['original_index', 'Saldo Acumulado']], 
-                           on='original_index', how='left', suffixes=('', '_new'))
+        # Junta o saldo acumulado de volta ao DF principal
+        df_proc = pd.merge(
+            df_proc, 
+            df_proc_sorted_asc[['original_index', 'TEMP_SALDO']], 
+            on='original_index', 
+            how='left'
+        )
         
-        # 3. Aplica fillna para preencher valores nulos (ffill para dívidas no meio do DF, 0 para antes do primeiro registro)
-        # O KeyError 'Saldo Acumulado_new' é corrigido pela verificação 'if df_realizadas.empty' acima
-        df_proc['Saldo Acumulado'] = df_proc['Saldo Acumulado_new'].fillna(method='ffill').fillna(0)
-        df_proc.drop(columns=['Saldo Acumulado_new'], inplace=True)
+        # 3. Aplica fillna para preencher valores nulos e atribui ao nome final
+        # O erro KeyError: 'Saldo Acumulado_new' foi resolvido usando TEMP_SALDO
+        df_proc['Saldo Acumulado'] = df_proc['TEMP_SALDO'].fillna(method='ffill').fillna(0)
+        df_proc.drop(columns=['TEMP_SALDO'], inplace=True)
 
 
     # 4. Retorna à ordenação para exibição (Data DESC)
