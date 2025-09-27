@@ -12,51 +12,52 @@ import plotly.express as px
 import base64 
 
 # =====================================
-# Funções auxiliares (CORRIGIDO: API ZXing com tratamento de erros de conexão)
+# Funções auxiliares (CORRIGIDO: Troca API ZXing por WebQR - JSON)
 # =====================================
 
 def ler_codigo_barras_api(image_bytes):
     """
-    Decodifica códigos de barras de uma imagem usando a API pública ZXing.
-    Inclui tratamento de erros de conexão e parse de HTML.
+    Decodifica códigos de barras de uma imagem usando a API pública WebQR (JSON).
+    É mais robusta contra mudanças de formato de resposta do que o HTML.
     """
-    # Endpoint original que você disse que funcionava
-    URL_DECODER_ZXING = "https://zxing.org/w/decode"
+    # API alternativa: WebQR (mais estável que ZXing e retorna JSON)
+    URL_DECODER_WEBQR = "https://api.qrserver.com/v1/read-qr-code/"
     
     try:
-        # Define o arquivo com o mimetype que a API ZXing espera
-        files = {"f": ("barcode.png", image_bytes, "image/png")}
+        # A API WebQR espera o arquivo no campo 'file' ou 'f'
+        files = {"file": ("barcode.png", image_bytes, "image/png")} 
         
         # Faz a requisição com um timeout de 30 segundos
-        response = requests.post(URL_DECODER_ZXING, files=files, timeout=30) 
+        response = requests.post(URL_DECODER_WEBQR, files=files, timeout=30) 
 
         if response.status_code != 200:
-            st.error(f"❌ Erro na API ZXing. Status HTTP: {response.status_code}")
+            if 'streamlit' in globals():
+                st.error(f"❌ Erro na API WebQR. Status HTTP: {response.status_code}")
             return []
 
-        # Parse de HTML para extrair o código (lógica original)
-        text = response.text
+        # A resposta é JSON.
+        data = response.json()
         codigos = []
-        if "<pre>" in text:
-            partes = text.split("<pre>")
-            for p in partes[1:]:
-                codigo = p.split("</pre>")[0].strip()
-                if codigo and not codigo.startswith("Erro na decodificação"):
-                    codigos.append(codigo)
-
-        # Se estiver em ambiente Streamlit, exibe o debug
+        
+        # Navega na estrutura JSON da resposta
+        if data and isinstance(data, list) and data[0].get('symbol'):
+            for symbol in data[0]['symbol']:
+                # O campo 'data' contém o número do código de barras
+                if symbol['data'] is not None:
+                    codigos.append(symbol['data'].strip())
+        
         if 'streamlit' in globals():
-             st.write("Debug API ZXing:", codigos)
+             st.write("Debug API WebQR:", codigos)
         
         if not codigos and 'streamlit' in globals():
-             st.warning("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
+             st.warning("⚠️ API WebQR não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
              
         return codigos
 
     except ConnectionError as ce:
         # CAPTURA O ERRO 'Connection refused'
         if 'streamlit' in globals():
-            st.error(f"❌ Erro de Conexão (Rede Bloqueada): O servidor {URL_DECODER_ZXING} recusou a conexão. O problema é na rede do seu host.")
+            st.error(f"❌ Erro de Conexão (Rede): Falha ao conectar ao servidor WebQR. Detalhe: {ce}")
         return []
         
     except RequestException as e:
@@ -150,7 +151,7 @@ def to_float(valor_str):
     except:
         return 0.0
 
-# REMOVIDA A FUNÇÃO ler_codigo_barras_api MOCK AQUI, POIS FOI COLOCADA NO INÍCIO
+# A função ler_codigo_barras_api foi movida para o topo.
 
 def prox_id(df, coluna_id="ID"):
     """Função auxiliar para criar um novo ID sequencial."""
@@ -560,7 +561,7 @@ def gestao_produtos():
                 # --- Escanear com câmera (Produto Simples/Pai) ---
                 foto_codigo = st.camera_input("📷 Escanear código de barras / QR Code", key="cad_cam")
                 if foto_codigo is not None:
-                    # Usa o getbuffer() no Streamlit para obter os bytes da imagem
+                    # **CORREÇÃO:** Usa o getbuffer() para Streamlit Camera Input
                     imagem_bytes = foto_codigo.getbuffer() 
                     codigos_lidos = ler_codigo_barras_api(imagem_bytes)
                     if codigos_lidos:
@@ -574,7 +575,7 @@ def gestao_produtos():
                 # --- Upload de imagem do código de barras (Produto Simples/Pai) ---
                 foto_codigo_upload = st.file_uploader("📤 Upload de imagem do código de barras", type=["png", "jpg", "jpeg"], key="cad_cb_upload")
                 if foto_codigo_upload is not None:
-                    # Usa o getvalue() para obter os bytes da imagem de upload
+                    # **CORREÇÃO:** Usa o getvalue() para Streamlit File Uploader
                     imagem_bytes = foto_codigo_upload.getvalue() 
                     codigos_lidos = ler_codigo_barras_api(imagem_bytes)
                     if codigos_lidos:
@@ -628,7 +629,7 @@ def gestao_produtos():
                     # Checa qual input de imagem foi usado (Upload ou Câmera)
                     foto_lida = var_foto_upload or var_foto_cam
                     if foto_lida:
-                        # Usa getvalue() para upload e getbuffer() para camera input
+                        # **CORREÇÃO:** Usa getvalue() para upload e getbuffer() para camera input
                         imagem_bytes = foto_lida.getvalue() if var_foto_upload else foto_lida.getbuffer()
                         codigos_lidos = ler_codigo_barras_api(imagem_bytes)
                         if codigos_lidos:
@@ -903,7 +904,7 @@ def gestao_produtos():
 
                         foto_codigo_edit = st.camera_input("📷 Atualizar código de barras", key=f"edit_cam_{eid}")
                         if foto_codigo_edit is not None:
-                            # Usa getbuffer() para camera input
+                            # **CORREÇÃO:** Usa getbuffer() para camera input
                             codigo_lido = ler_codigo_barras_api(foto_codigo_edit.getbuffer()) 
                             if codigo_lido:
                                 novo_cb = codigo_lido[0]
@@ -1922,8 +1923,8 @@ def livro_caixa():
 
                 col_data_inicial, col_data_final = st.columns(2)
                 
-                data_minima = df_base_filtro_tabela["Data"].min() if not df_base_filtro_tabela.empty and pd.notna(df_base_filtro_tabela["Data"].min()) else hoje
-                data_maxima = df_base_filtro_tabela["Data"].max() if not df_base_filtro_tabela.empty and pd.notna(df_base_filtro_tabela["Data"].max()) else hoje
+                data_minima = df_base_filtro_tabela["Data"].min() if pd.notna(df_base_filtro_tabela["Data"].min()) else hoje
+                data_maxima = df_base_filtro_tabela["Data"].max() if pd.notna(df_base_filtro_tabela["Data"].max()) else hoje
                 
                 data_min_value = data_minima if pd.notna(data_minima) else hoje
                 data_max_value = data_maxima if pd.notna(data_maxima) else hoje
