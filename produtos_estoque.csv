@@ -1,4 +1,6 @@
 ID,Nome,Marca,Categoria,Quantidade,PrecoCusto,PrecoVista,PrecoCartao,Validade,FotoURL,CodigoBarras,PaiID
-1,Camiseta Básica P,Marca X,Vestuário,50,20.0,49.9,56.24,,1234567890123,,
-2,Calça Jeans M,Marca Y,Vestuário,20,55.0,129.9,146.41,,2345678901234,,
-3,Bolsa de Couro,Marca Z,Acessórios,15,80.0,199.9,225.32,,3456789012345,,
+1,Camiseta Básica P,Marca A,Vestuário,50,15.00,30.00,33.81,2026-12-31,,1234567890123,
+2,Serviço de Impressão,Serviços,Serviços,9999,5.00,10.00,11.27,,,,
+3,Caneca (Pai),Atelier,Brindes,0,8.50,22.00,24.79,2027-12-31,,,
+4,Caneca - Rosa,Atelier,Brindes,10,8.50,22.00,24.79,2027-12-31,,400000000001,3
+5,Caneca - Azul,Atelier,Brindes,10,8.50,22.00,24.79,2027-12-31,,400000000002,3
