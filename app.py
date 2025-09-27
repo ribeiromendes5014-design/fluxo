@@ -117,7 +117,12 @@ def hash_df(df):
 def load_csv_github(url: str) -> pd.DataFrame | None:
     """Carrega um arquivo CSV diretamente do GitHub (URL raw)."""
     try:
-        df = pd.read_csv(url, dtype=str)
+        # Usa headers para evitar problemas de cache do GitHub, se possível
+        response = requests.get(url)
+        response.raise_for_status() # Lança erro para 4xx/5xx status codes
+        
+        df = pd.read_csv(StringIO(response.text), dtype=str)
+        
         # Garante que, se o arquivo for lido, mas estiver quase vazio (apenas cabeçalhos), retorne None
         if df.empty or len(df.columns) < 2:
             return None
@@ -442,6 +447,7 @@ def gestao_produtos():
     st.header("📦 Gestão de Produtos e Estoque")
 
     # Lógica de Salvamento Automático para sincronizar alterações feitas pelo Livro Caixa
+    # Esta linha é chamada APENAS para sincronizar alterações vindas de outras páginas (Livro Caixa)
     save_data_github_produtos(produtos, ARQ_PRODUTOS, COMMIT_MESSAGE_PROD)
 
 
