@@ -39,3 +39,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-09-26,Doce&bella,compra,-152.92,PIX,Saída,,,Realizada,
 2025-09-26,Doce&bella,venda,15.0,PIX,Entrada,,,Realizada,
 2025-09-26,Doce&bella,Ana carolina,15.0,PIX,Entrada,"[{""Produto"": ""Gloss transparente"", ""Quantidade"": 1, ""Pre\u00e7o Unit\u00e1rio"": 15.0}]",,Realizada,
+2025-09-27,Doce&bella,Tais,15.0,PIX,Entrada,,,Pendente,2025-09-27
