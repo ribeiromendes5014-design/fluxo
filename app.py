@@ -760,7 +760,9 @@ def gestao_produtos():
 
             for index, pai in produtos_pai.iterrows():
                 with st.container(border=True):
-                    c = st.columns([1, 3, 1, 1, 1])
+                    # Dividindo em mais colunas para os detalhes de preço
+                    c = st.columns([1, 2.5, 1, 1, 1, 0.5, 0.5]) # Imagem, Nome/Marca/Cat, Estoque, Validade, Preços, Editar, Excluir
+                    
                     if str(pai["FotoURL"]).strip():
                         try:
                             c[0].image(pai["FotoURL"], width=80)
@@ -779,51 +781,63 @@ def gestao_produtos():
                     
                     c[2].markdown(f"**Estoque Total:** {estoque_total}")
                     c[3].write(f"Validade: {pai['Validade']}")
-                    col_btn = c[4]
+                    
+                    # Detalhes de preço do item Pai
+                    pv = to_float(pai['PrecoVista'])
+                    pc = to_float(pai['PrecoCartao'])
+                    pc_calc = round(pv / FATOR_CARTAO, 2)
+                    
+                    # Exibe os preços e o custo
+                    c[4].markdown(
+                        f"**Custo:** R$ {to_float(pai['PrecoCusto']):,.2f}\n"
+                        f"**Vista:** R$ {pv:,.2f}\n"
+                        f"**Cartão:** R$ {pc_calc:,.2f}"
+                    )
+                    
+                    col_btn_edit = c[5]
+                    col_btn_delete = c[6]
 
                     try:
                         eid = int(pai["ID"])
                     except Exception:
                         continue
-
-                    acao = col_btn.selectbox(
-                        "Ação",
-                        ["Nenhuma", "✏️ Editar", "🗑️ Excluir"],
-                        key=f"acao_pai_{index}_{eid}"
-                    )
-
-                    if acao == "✏️ Editar":
+                    
+                    # BOTÕES MINIMALISTAS
+                    if col_btn_edit.button("✏️", key=f"edit_pai_{index}_{eid}", help="Editar produto"):
                         st.session_state["edit_prod"] = eid
+                        st.rerun()
 
-                    if acao == "🗑️ Excluir":
-                        if col_btn.button("Confirmar exclusão", key=f"conf_del_pai_{index}_{eid}"):
-                            # Apaga o pai e os filhos
-                            produtos = produtos[produtos["ID"] != str(eid)]
-                            produtos = produtos[produtos["PaiID"] != str(eid)]
+                    if col_btn_delete.button("🗑️", key=f"del_pai_{index}_{eid}", help="Excluir produto"):
+                        # O Streamlit não tem confirmação em linha, então usamos a exclusão direta aqui
+                        # O usuário terá que recarregar para ver o item sumir
+                        
+                        # Apaga o pai e os filhos
+                        produtos = produtos[produtos["ID"] != str(eid)]
+                        produtos = produtos[produtos["PaiID"] != str(eid)]
 
-                            st.session_state["produtos"] = produtos
+                        st.session_state["produtos"] = produtos
+                        
+                        nome_pai = str(pai.get('Nome', 'Produto Desconhecido'))
+                        
+                        if nome_pai.lower() in ('nan', 'none', ''):
+                            nome_pai = 'Produto Desconhecido'
                             
-                            # Tenta salvar imediatamente e limpa o cache
-                            nome_pai = str(pai.get('Nome', 'Produto Desconhecido'))
-                            
-                            # Correção de robustez: Garante que o nome seja uma string válida
-                            if nome_pai.lower() in ('nan', 'none', ''):
-                                nome_pai = 'Produto Desconhecido'
-                                
-                            commit_msg_pai = f"Exclusão do produto pai {nome_pai}"
+                        commit_msg_pai = f"Exclusão do produto pai {nome_pai}"
 
-                            if salvar_produtos_no_github(produtos, commit_msg_pai):
-                                inicializar_produtos.clear() # Limpa o cache para forçar o recarregamento do novo CSV
-                                st.warning(f"Produto {nome_pai} e suas variações excluídas!")
-                            else:
-                                st.error("❌ Erro ao salvar a exclusão no GitHub. O produto pode reaparecer.")
+                        if salvar_produtos_no_github(produtos, commit_msg_pai):
+                            inicializar_produtos.clear() 
+                            st.warning(f"Produto {nome_pai} e suas variações excluídas! Recarregando...")
+                        else:
+                            st.error("❌ Erro ao salvar a exclusão no GitHub. O produto pode reaparecer.")
+                        
+                        st.rerun()
                             
-                            st.rerun()
 
                     if not filhos_do_pai.empty:
-                        with st.expander(f"Variações de {pai['Nome']}"):
+                        with st.expander(f"Variações de {pai['Nome']} ({len(filhos_do_pai)} variações)"):
                             for index_var, var in filhos_do_pai.iterrows():
-                                c_var = st.columns([1, 3, 1, 1, 1])
+                                c_var = st.columns([1, 2.5, 1, 1, 1, 0.5, 0.5]) # Mesmo layout
+                                
                                 if str(var["FotoURL"]).strip():
                                     try:
                                         c_var[0].image(var["FotoURL"], width=60)
@@ -834,45 +848,52 @@ def gestao_produtos():
 
                                 cb_var = f' • CB: {var["CodigoBarras"]}' if str(var.get("CodigoBarras", "")).strip() else ""
                                 c_var[1].markdown(f"**{var['Nome']}** \nMarca: {var['Marca']} \nCat: {var['Categoria']}{cb_var}")
+                                
                                 c_var[2].write(f"Estoque: {var['Quantidade']}")
-                                c_var[3].write(f"Preço V/C: R$ {var['PrecoVista']:.2f} / R$ {var['PrecoCartao']:.2f}")
-                                col_btn_var = c_var[4]
+                                c_var[3].write(f"Validade: {var['Validade']}")
+
+                                # Detalhes de preço da Variação
+                                pv_var = to_float(var['PrecoVista'])
+                                pc_var = to_float(var['PrecoCartao'])
+                                pc_var_calc = round(pv_var / FATOR_CARTAO, 2)
+                                
+                                c_var[4].markdown(
+                                    f"**Custo:** R$ {to_float(var['PrecoCusto']):,.2f}\n"
+                                    f"**Vista:** R$ {pv_var:,.2f}\n"
+                                    f"**Cartão:** R$ {pc_var_calc:,.2f}"
+                                )
+                                
+                                col_btn_edit_var = c_var[5]
+                                col_btn_delete_var = c_var[6]
 
                                 try:
                                     eid_var = int(var["ID"])
                                 except Exception:
                                     continue
-
-                                acao_var = col_btn_var.selectbox(
-                                    "Ação",
-                                    ["Nenhuma", "✏️ Editar", "🗑️ Excluir"],
-                                    key=f"acao_filho_{index_var}_{eid_var}"
-                                )
-
-                                if acao_var == "✏️ Editar":
+                                
+                                if col_btn_edit_var.button("✏️", key=f"edit_filho_{index_var}_{eid_var}", help="Editar variação"):
                                     st.session_state["edit_prod"] = eid_var
+                                    st.rerun()
 
-                                if acao_var == "🗑️ Excluir":
-                                    if col_btn_var.button("Confirmar exclusão", key=f"conf_del_filho_{index_var}_{eid_var}"):
-                                        produtos = produtos[produtos["ID"] != str(eid_var)]
-                                        st.session_state["produtos"] = produtos
+                                if col_btn_delete_var.button("🗑️", key=f"del_filho_{index_var}_{eid_var}", help="Excluir variação"):
+                                    
+                                    produtos = produtos[produtos["ID"] != str(eid_var)]
+                                    st.session_state["produtos"] = produtos
+                                    
+                                    nome_var = str(var.get('Nome', 'Variação Desconhecida'))
+                                    
+                                    if nome_var.lower() in ('nan', 'none', ''):
+                                        nome_var = 'Variação Desconhecida'
                                         
-                                        # Tenta salvar imediatamente e limpa o cache
-                                        nome_var = str(var.get('Nome', 'Variação Desconhecida'))
-                                        
-                                        # Correção de robustez
-                                        if nome_var.lower() in ('nan', 'none', ''):
-                                            nome_var = 'Variação Desconhecida'
-                                            
-                                        commit_msg_var = f"Exclusão da variação {nome_var}"
-                                        
-                                        if salvar_produtos_no_github(produtos, "Novo produto cadastrado"):
-                                            inicializar_produtos.clear() # Limpa o cache para forçar o recarregamento do novo CSV
-                                            st.warning(f"Variação {nome_var} excluída!")
-                                        else:
-                                            st.error("❌ Erro ao salvar a exclusão no GitHub. O produto pode reaparecer.")
+                                    commit_msg_var = f"Exclusão da variação {nome_var}"
+                                    
+                                    if salvar_produtos_no_github(produtos, commit_msg_var):
+                                        inicializar_produtos.clear() 
+                                        st.warning(f"Variação {nome_var} excluída! Recarregando...")
+                                    else:
+                                        st.error("❌ Erro ao salvar a exclusão no GitHub. O produto pode reaparecer.")
 
-                                        st.rerun()
+                                    st.rerun()
 
             # Editor inline (para pais e filhos)
             if "edit_prod" in st.session_state:
