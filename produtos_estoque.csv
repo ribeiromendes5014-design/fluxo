@@ -1,4 +1,3 @@
 ID,Nome,Marca,Categoria,Quantidade,PrecoCusto,PrecoVista,PrecoCartao,Validade,FotoURL,CodigoBarras,PaiID
 1,Camiseta Básica P,Marca X,Vestuário,50,20.0,49.9,56.24,,1234567890123,,
-2,Calça Jeans M,Marca Y,Vestuário,20,55.0,129.9,146.41,,2345678901234,,
 3,Bolsa de Couro,Marca Z,Acessórios,15,80.0,199.9,225.32,,3456789012345,,
