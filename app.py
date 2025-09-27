@@ -308,6 +308,8 @@ def processar_dataframe(df):
             how='left'
         )
         
+        # O Saldo Acumulado é a soma cumulativa apenas das realizadas. 
+        # Preenche com o valor anterior para manter a continuidade visual
         df_proc['Saldo Acumulado'] = df_proc['TEMP_SALDO'].fillna(method='ffill').fillna(0)
         df_proc.drop(columns=['TEMP_SALDO'], inplace=True, errors='ignore')
 
@@ -1023,7 +1025,8 @@ def livro_caixa():
             default_produtos_json = movimentacao_para_editar['Produtos Vendidos'] if pd.notna(movimentacao_para_editar['Produtos Vendidos']) else ""
             default_categoria = movimentacao_para_editar['Categoria']
             default_status = movimentacao_para_editar['Status'] 
-            default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else None 
+            # Se for Pendente, mantém a data de pagamento prevista. Se Realizada, usa a data da transação ou a que está salva.
+            default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None) 
             
             # Carrega os produtos na lista de sessão (se for entrada)
             if default_tipo == "Entrada" and default_produtos_json:
@@ -1221,6 +1224,26 @@ def livro_caixa():
             # Campos de Status (Repetição de estado forçada para resetar com o form)
             status_selecionado_form = st.radio("Status", ["Realizada", "Pendente"], index=0 if default_status == "Realizada" else 1, key="input_status_form")
             
+            
+            # --- CORREÇÃO DO UNBOUNDLOCALERROR E LÓGICA DE DATA DE PAGAMENTO ---
+            data_pagamento_final = None # Inicializa a variável
+            
+            if status_selecionado_form == "Pendente":
+                # Se for Pendente, mostra o campo opcional para Data Prevista
+                prev_date_value = default_data_pagamento if default_data_pagamento else data_input
+                
+                data_prevista_pendente = st.date_input(
+                    "Data de Pagamento Prevista (Opcional)", 
+                    value=prev_date_value, 
+                    key="input_data_pagamento_prevista"
+                )
+                data_pagamento_final = data_prevista_pendente
+            else:
+                # Se for Realizada, a Data Pagamento é a Data da Transação
+                data_pagamento_final = data_input
+            # --- FIM CORREÇÃO ---
+
+
             # Valor final (apenas exibição, o valor real vem de fora do form)
             st.caption(f"Valor Final da Movimentação: R$ {valor_final_movimentacao:,.2f}")
 
@@ -1300,7 +1323,7 @@ def livro_caixa():
 
 
                     # MONTAGEM FINAL DA LINHA
-                    data_pagamento_final = data_input if status_selecionado_form == "Realizada" else data_pagamento_final # Se Pendente, usa o valor de fora do form
+                    # data_pagamento_final já está definido no bloco condicional acima
                     
                     nova_linha_data = {
                         "Data": data_input,
@@ -1999,4 +2022,3 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
-
