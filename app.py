@@ -858,9 +858,11 @@ def livro_caixa():
         lambda row: f"{row.ID} | {row.Nome} ({row.Marca}) | Estoque: {row.Quantidade}", axis=1
     ).tolist()
     
-    # Função para extrair ID do produto
-    def extrair_id(opcoes_str):
-        return opcoes_str.split(' | ')[0] if ' | ' in opcoes_produtos else None
+    # Função para extrair ID do produto (melhorada)
+    def extrair_id_do_nome(opcoes_str):
+        if ' | ' in opcoes_str:
+            return opcoes_str.split(' | ')[0]
+        return None
 
 
     # =================================================================
@@ -884,8 +886,6 @@ def livro_caixa():
     # Se estiver em modo de edição, carrega os dados
     if edit_mode:
         original_idx_to_edit = st.session_state.edit_id
-        
-        # Filtra o df_exibicao (que tem o original_index)
         linha_df_exibicao = df_exibicao[df_exibicao['original_index'] == original_idx_to_edit]
 
         if not linha_df_exibicao.empty:
@@ -911,6 +911,7 @@ def livro_caixa():
                         p['Quantidade'] = float(p.get('Quantidade', 0))
                         p['Preço Unitário'] = float(p.get('Preço Unitário', 0))
                         p['Custo Unitário'] = float(p.get('Custo Unitário', 0))
+                        p['Produto_ID'] = str(p.get('Produto_ID', '')) # Garante o ID
                     st.session_state.lista_produtos = [p for p in produtos_list if p['Quantidade'] > 0] 
                 except:
                     st.session_state.lista_produtos = []
@@ -932,148 +933,165 @@ def livro_caixa():
     with st.sidebar:
         st.header("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
         
-        with st.form("form_movimentacao_sidebar", clear_on_submit=not edit_mode):
+        # --- INPUTS FORA DO FORM (Para controle de RERUN e Estado) ---
+        tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1, key="input_tipo")
+        
+        valor_calculado = 0.0
+        produtos_vendidos_json = ""
+        categoria_selecionada = ""
+        
+        if tipo == "Entrada":
+            st.markdown("#### 🛍️ Detalhes dos Produtos (Entrada)")
             
-            loja_selecionada = st.selectbox("Loja Responsável", 
-                                            LOJAS_DISPONIVEIS, 
-                                            index=LOJAS_DISPONIVEIS.index(default_loja) if default_loja in LOJAS_DISPONIVEIS else 0,
-                                            key="input_loja")
-            data_input = st.date_input("Data", value=default_data, key="input_data")
-
-            # --- Alerta de Data Antiga/Futura ---
-            hoje = date.today()
-            limite_passado = hoje - timedelta(days=90)
-            if data_input > hoje:
-                st.warning("⚠️ Data no futuro. Confirme se está correta.")
-            elif data_input < limite_passado:
-                st.warning(f"⚠️ Data muito antiga (anterior a {limite_passado.strftime('%d/%m/%Y')}). Confirme se está correta.")
-
-            cliente = st.text_input("Nome do Cliente (ou Descrição)", value=default_cliente, key="input_cliente")
-            forma_pagamento = st.selectbox("Forma de Pagamento", 
-                                            FORMAS_PAGAMENTO, 
-                                            index=FORMAS_PAGAMENTO.index(default_forma) if default_forma in FORMAS_PAGAMENTO else 0,
-                                            key="input_forma_pagamento")
-            tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1, key="input_tipo")
-
-            # --- STATUS ---
-            st.markdown("#### 🔄 Status da Transação")
-            status_selecionado = st.radio("Status", ["Realizada", "Pendente"], index=0 if default_status == "Realizada" else 1, key="input_status")
-
-            data_pagamento_final = None 
-            if status_selecionado == "Pendente":
-                data_pagamento_prevista = st.date_input(
-                    "Data Prevista de Liquidação (Opcional)", 
-                    value=default_data_pagamento if default_data_pagamento is not None and default_status == "Pendente" else None, 
-                    key="input_data_prevista"
-                )
-                data_pagamento_final = data_pagamento_prevista
-                st.info("⚠️ Transações Pendentes NÃO afetam o Saldo Atual.")
-            elif status_selecionado == "Realizada":
-                # Usamos a data de transação como data de pagamento se for Realizada
-                data_pagamento_final = data_input 
-            
-            # --- LÓGICA DE PRODUTOS PARA ENTRADA / CATEGORIA PARA SAÍDA ---
-            valor_calculado = 0.0
-            produtos_vendidos_json = ""
-            categoria_selecionada = ""
-
-            if tipo == "Entrada":
-                st.markdown("#### 🛍️ Detalhes dos Produtos (Entrada)")
+            if st.session_state.lista_produtos:
+                df_produtos = pd.DataFrame(st.session_state.lista_produtos)
+                df_produtos['Quantidade'] = pd.to_numeric(df_produtos['Quantidade'], errors='coerce').fillna(0)
+                df_produtos['Preço Unitário'] = pd.to_numeric(df_produtos['Preço Unitário'], errors='coerce').fillna(0.0)
+                df_produtos['Custo Unitário'] = pd.to_numeric(df_produtos['Custo Unitário'], errors='coerce').fillna(0.0)
                 
-                if st.session_state.lista_produtos:
-                    df_produtos = pd.DataFrame(st.session_state.lista_produtos)
-                    df_produtos['Quantidade'] = pd.to_numeric(df_produtos['Quantidade'], errors='coerce').fillna(0)
-                    df_produtos['Preço Unitário'] = pd.to_numeric(df_produtos['Preço Unitário'], errors='coerce').fillna(0.0)
-                    df_produtos['Custo Unitário'] = pd.to_numeric(df_produtos['Custo Unitário'], errors='coerce').fillna(0.0)
-                    
-                    valor_calculado = (df_produtos['Quantidade'] * df_produtos['Preço Unitário']).sum()
-                    produtos_para_json = df_produtos[['Produto', 'Quantidade', 'Preço Unitário', 'Custo Unitário']].to_dict('records')
-                    produtos_vendidos_json = json.dumps(produtos_para_json)
-                    
-                    st.success(f"Soma Total da Venda Calculada: R$ {valor_calculado:,.2f}")
+                valor_calculado = (df_produtos['Quantidade'] * df_produtos['Preço Unitário']).sum()
                 
-                # Input de valor manual ou calculado
-                valor_input_manual = st.number_input(
-                    "Valor Total (R$)", 
-                    value=valor_calculado if valor_calculado > 0.0 else default_valor,
-                    min_value=0.01, 
-                    format="%.2f",
-                    disabled=(valor_calculado > 0.0), 
-                    key="input_valor_entrada"
-                )
-                valor_final_movimentacao = valor_calculado if valor_calculado > 0.0 else valor_input_manual
+                # Prepara o JSON para a submissão final
+                produtos_para_json = df_produtos[['Produto_ID', 'Produto', 'Quantidade', 'Preço Unitário', 'Custo Unitário']].to_dict('records')
+                produtos_vendidos_json = json.dumps(produtos_para_json)
+                
+                st.success(f"Soma Total da Venda Calculada: R$ {valor_calculado:,.2f}")
 
-                with st.expander("➕ Adicionar/Limpar Lista de Produtos", expanded=False):
-                    with st.container():
-                        st.markdown("##### Produtos Atuais:")
-                        if st.session_state.lista_produtos:
-                            df_exibicao_produtos = pd.DataFrame(st.session_state.lista_produtos)
-                            st.dataframe(df_exibicao_produtos[['Produto', 'Quantidade', 'Preço Unitário']], use_container_width=True, hide_index=True)
-                        else:
-                            st.info("Lista de produtos vazia.")
+            with st.expander("➕ Adicionar/Limpar Lista de Produtos", expanded=False):
+                with st.container():
+                    st.markdown("##### Produtos Atuais:")
+                    if st.session_state.lista_produtos:
+                        df_exibicao_produtos = pd.DataFrame(st.session_state.lista_produtos)
+                        st.dataframe(df_exibicao_produtos[['Produto', 'Quantidade', 'Preço Unitário']], use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Lista de produtos vazia.")
+
+                    # --- Inputs de Produto para Adicionar ---
+                    produto_selecionado = st.selectbox("Selecione o Produto (ID | Nome)", opcoes_produtos, key="input_produto_selecionado")
+                    
+                    produto_id_selecionado = extrair_id_do_nome(produto_selecionado)
+                    produto_row_completa = produtos_para_venda[produtos_para_venda["ID"] == produto_id_selecionado]
+                    
+                    if not produto_row_completa.empty:
+                        produto_data = produto_row_completa.iloc[0]
+                        nome_produto = produto_data['Nome']
+                        preco_sugerido = produto_data['PrecoVista']
+                        custo_unit = produto_data['PrecoCusto']
+                        estoque_disp = produto_data['Quantidade']
 
                         col_p1, col_p2 = st.columns(2)
                         with col_p1:
-                            nome_produto = st.text_input("Nome do Produto", key="input_nome_prod_edit")
+                            quantidade_input = st.number_input("Qtd", min_value=1, value=1, step=1, max_value=int(estoque_disp) if estoque_disp > 0 else 1, key="input_qtd_prod_edit")
                         with col_p2:
-                            quantidade_input = st.number_input("Qtd", min_value=0.01, value=1.0, step=1.0, key="input_qtd_prod_edit")
+                            preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=float(preco_sugerido), key="input_preco_prod_edit")
                         
-                        col_p3, col_p4 = st.columns(2)
-                        with col_p3:
-                            preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", key="input_preco_prod_edit")
-                        with col_p4:
-                            custo_unitario_input = st.number_input("Custo Unitário (R$)", min_value=0.00, value=0.00, format="%.2f", key="input_custo_prod_edit")
+                        st.caption(f"Custo Unitário: R$ {custo_unit:,.2f}")
                         
-                        if st.button("Adicionar Item", use_container_width=True):
-                            if nome_produto and preco_unitario_input > 0 and quantidade_input > 0:
+                        # --- Botão para Adicionar Item (FORA DO FORM PRINCIPAL) ---
+                        if st.button("Adicionar Item à Venda", key="adicionar_item_button", use_container_width=True):
+                            if quantidade_input > 0:
                                 st.session_state.lista_produtos.append({
+                                    "Produto_ID": produto_id_selecionado, # Novo campo para débito
                                     "Produto": nome_produto,
                                     "Quantidade": quantidade_input,
                                     "Preço Unitário": preco_unitario_input,
-                                    "Custo Unitário": custo_unitario_input 
+                                    "Custo Unitário": custo_unit 
                                 })
                                 st.rerun()
                             else:
-                                st.warning("Preencha o nome, quantidade e preço unitário corretamente.")
-                        
-                        if st.button("Limpar Lista", type="secondary"):
-                            st.session_state.lista_produtos = []
-                            st.rerun()
+                                st.warning("A quantidade deve ser maior que zero.")
+                    else:
+                        # Fallback para entrada manual se não for selecionado do estoque
+                        nome_produto_manual = st.text_input("Nome do Produto (Manual)", key="input_nome_prod_manual")
+                        quantidade_manual = st.number_input("Qtd Manual", min_value=0.01, value=1.0, step=1.0, key="input_qtd_prod_manual")
+                        preco_unitario_manual = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", key="input_preco_prod_manual")
+                        custo_unitario_manual = st.number_input("Custo Unitário (R$)", min_value=0.00, value=0.00, format="%.2f", key="input_custo_prod_manual")
 
-            else: # Tipo é Saída
-                default_select_index = 0
-                custom_desc_default = ""
-                
-                # Lógica para pré-selecionar categoria em edição
-                if default_categoria in CATEGORIAS_SAIDA:
-                    default_select_index = CATEGORIAS_SAIDA.index(default_categoria)
-                elif default_categoria.startswith("Outro: "):
-                    default_select_index = CATEGORIAS_SAIDA.index("Outro/Diversos") if "Outro/Diversos" in CATEGORIAS_SAIDA else 0
-                    custom_desc_default = default_categoria.replace("Outro: ", "")
-                
-                st.markdown("#### ⚙️ Centro de Custo (Saída)")
-                categoria_selecionada = st.selectbox("Categoria de Gasto", 
-                                                    CATEGORIAS_SAIDA, 
-                                                    index=default_select_index,
-                                                    key="input_categoria_saida")
+                        if st.button("Adicionar Item Manual", key="adicionar_item_manual_button", use_container_width=True):
+                             if nome_produto_manual and quantidade_manual > 0:
+                                st.session_state.lista_produtos.append({
+                                    "Produto_ID": "", # Vazio para item manual
+                                    "Produto": nome_produto_manual,
+                                    "Quantidade": quantidade_manual,
+                                    "Preço Unitário": preco_unitario_manual,
+                                    "Custo Unitário": custo_unitario_manual 
+                                })
+                                st.rerun()
                     
-                if categoria_selecionada == "Outro/Diversos":
-                    descricao_personalizada = st.text_input("Especifique o Gasto", 
-                                                             value=custom_desc_default, 
-                                                             key="input_custom_category")
-                    if descricao_personalizada:
-                        categoria_selecionada = f"Outro: {descricao_personalizada}"
-                    
-                valor_input_manual = st.number_input(
-                    "Valor (R$)", 
-                    value=default_valor, 
-                    min_value=0.01, 
-                    format="%.2f", 
-                    key="input_valor_saida"
-                )
-                valor_final_movimentacao = valor_input_manual
+                    if st.button("Limpar Lista de Produtos", key="limpar_lista_button", type="secondary"):
+                        st.session_state.lista_produtos = []
+                        st.rerun()
+            
+            # Valor final da movimentação (se lista vazia, permite input manual)
+            valor_input_manual = st.number_input(
+                "Valor Total (R$)", 
+                value=valor_calculado if valor_calculado > 0.0 else default_valor,
+                min_value=0.01, 
+                format="%.2f",
+                disabled=(valor_calculado > 0.0), # Desabilita se houver valor calculado
+                key="input_valor_entrada"
+            )
+            valor_final_movimentacao = valor_calculado if valor_calculado > 0.0 else valor_input_manual
 
-            # --- BOTÕES DE SUBMISSÃO ---
+            
+        else: # Tipo é Saída
+            # Lógica de categoria fora do form principal
+            default_select_index = 0
+            custom_desc_default = ""
+            
+            if default_categoria in CATEGORIAS_SAIDA:
+                default_select_index = CATEGORIAS_SAIDA.index(default_categoria)
+            elif default_categoria.startswith("Outro: "):
+                default_select_index = CATEGORIAS_SAIDA.index("Outro/Diversos") if "Outro/Diversos" in CATEGORIAS_SAIDA else 0
+                custom_desc_default = default_categoria.replace("Outro: ", "")
+            
+            st.markdown("#### ⚙️ Centro de Custo (Saída)")
+            categoria_selecionada = st.selectbox("Categoria de Gasto", 
+                                                CATEGORIAS_SAIDA, 
+                                                index=default_select_index,
+                                                key="input_categoria_saida")
+                
+            if categoria_selecionada == "Outro/Diversos":
+                descricao_personalizada = st.text_input("Especifique o Gasto", 
+                                                         value=custom_desc_default, 
+                                                         key="input_custom_category")
+                if descricao_personalizada:
+                    categoria_selecionada = f"Outro: {descricao_personalizada}"
+                
+            valor_input_manual = st.number_input(
+                "Valor (R$)", 
+                value=default_valor, 
+                min_value=0.01, 
+                format="%.2f", 
+                key="input_valor_saida"
+            )
+            valor_final_movimentacao = valor_input_manual
+
+        # --- FIM DOS INPUTS FORA DO FORM ---
+
+        # --- INÍCIO DO FORM PRINCIPAL DE SUBMISSÃO ---
+        with st.form("form_movimentacao_sidebar", clear_on_submit=not edit_mode):
+            
+            # Inputs restantes que precisam ser resetados na submissão
+            loja_selecionada = st.selectbox("Loja Responsável", 
+                                            LOJAS_DISPONIVEIS, 
+                                            index=LOJAS_DISPONIVEIS.index(default_loja) if default_loja in LOJAS_DISPONIVEIS else 0,
+                                            key="input_loja_form")
+            data_input = st.date_input("Data", value=default_data, key="input_data_form")
+            cliente = st.text_input("Nome do Cliente (ou Descrição)", value=default_cliente, key="input_cliente_form")
+            forma_pagamento = st.selectbox("Forma de Pagamento", 
+                                            FORMAS_PAGAMENTO, 
+                                            index=FORMAS_PAGAMENTO.index(default_forma) if default_forma in FORMAS_PAGAMENTO else 0,
+                                            key="input_forma_pagamento_form")
+            
+            # Campos de Status (Repetição de estado forçada para resetar com o form)
+            status_selecionado_form = st.radio("Status", ["Realizada", "Pendente"], index=0 if default_status == "Realizada" else 1, key="input_status_form")
+            
+            # Valor final (apenas exibição, o valor real vem de fora do form)
+            st.caption(f"Valor Final da Movimentação: R$ {valor_final_movimentacao:,.2f}")
+
+
+            # --- Botões de Submissão ---
             if edit_mode:
                 col_save, col_cancel = st.columns(2)
                 with col_save:
@@ -1084,15 +1102,10 @@ def livro_caixa():
                 enviar = st.form_submit_button("Adicionar Movimentação e Salvar", type="primary", use_container_width=True)
                 cancelar = False 
 
-            # Lógica de Cancelamento
-            if cancelar:
-                st.session_state.edit_id = None
-                st.session_state.lista_produtos = []
-                st.rerun()
-
-            # --- Lógica principal (Adicionar/Editar) ---
+            # --- Lógica principal (Adicionar/Editar) - Executada no Submit ---
             if enviar:
                 
+                # Revalidação e Lógica de Armazenamento
                 if valor_final_movimentacao <= 0:
                     st.error("O valor deve ser maior que R$ 0,00.")
                 elif tipo == "Saída" and categoria_selecionada == "Outro/Diversos":
@@ -1104,73 +1117,57 @@ def livro_caixa():
                         cliente_desc = f"Venda de {len(st.session_state.lista_produtos)} produto(s)"
                     else:
                         cliente_desc = cliente
-
-                    # --- LÓGICA DE ESTOQUE E REVERSÃO (APENAS PARA EDIÇÃO/EXCLUSÃO) ---
-                    # 1. Reversão (Se estava Realizada e mudou para Pendente OU se o tipo/produtos mudaram)
-                    
-                    produtos_vendidos_antigos = []
+                        
+                    # LÓGICA DE ESTOQUE e REVERSÃO
                     if edit_mode:
                         original_row = df_dividas.loc[st.session_state.edit_id]
                         
-                        # Se o status antigo era Realizada E o novo status é Pendente, precisamos estornar o estoque.
-                        if original_row["Status"] == "Realizada" and status_selecionado == "Pendente" and original_row["Tipo"] == "Entrada":
+                        # Se status antigo Realizada -> novo Pendente
+                        if original_row["Status"] == "Realizada" and status_selecionado_form == "Pendente" and original_row["Tipo"] == "Entrada":
                             try:
                                 produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
                                 for item in produtos_vendidos_antigos:
                                     ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
-                                st.warning("Estoque estornado (venda Realizada -> Pendente).")
-                            except Exception as e:
-                                st.error(f"Erro ao estornar estoque durante edição: {e}")
-                                
-                        # Lógica complexa de edição de estoque: Credita o antigo e debita o novo, só se o status continuar Realizada
-                        elif original_row["Status"] == "Realizada" and status_selecionado == "Realizada" and original_row["Tipo"] == "Entrada":
-                            # 1. Credita a quantidade antiga (se houver)
-                            try:
-                                produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
-                                for item in produtos_vendidos_antigos:
-                                    ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
-                            except:
-                                pass # Ignora se não houver JSON válido
+                            except: pass
                             
-                            # 2. Debita a nova quantidade
+                        # Se status continua Realizada, ajusta a diferença
+                        elif original_row["Status"] == "Realizada" and status_selecionado_form == "Realizada" and original_row["Tipo"] == "Entrada":
+                            # Credita o antigo e debita o novo
+                            try:
+                                produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
+                                for item in produtos_vendidos_antigos:
+                                    ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
+                            except: pass
+                            
                             if produtos_vendidos_json:
                                 produtos_vendidos_novos = json.loads(produtos_vendidos_json)
                                 for item in produtos_vendidos_novos:
                                     ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                            st.info("Estoque ajustado (reversão e novo débito).")
-
-                        # Salva o ajuste de estoque
+                            
+                        # Salva ajuste de estoque
                         save_data_github_produtos(st.session_state.produtos, ARQ_PRODUTOS, "Ajuste de estoque por edição de venda")
 
-                    # --- FIM LÓGICA DE ESTOQUE E REVERSÃO ---
+                    # LÓGICA DE DÉBITO INICIAL (Nova Realizada)
+                    elif not edit_mode and tipo == "Entrada" and status_selecionado_form == "Realizada" and st.session_state.lista_produtos:
+                        if produtos_vendidos_json:
+                            produtos_vendidos_novos = json.loads(produtos_vendidos_json)
+                            for item in produtos_vendidos_novos:
+                                ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                        save_data_github_produtos(st.session_state.produtos, ARQ_PRODUTOS, "Débito de estoque por nova venda")
 
-                    # --- LÓGICA DE DEBITO INICIAL (APENAS PARA NOVA REALIZADA) ---
-                    elif not edit_mode and tipo == "Entrada" and status_selecionado == "Realizada" and st.session_state.lista_produtos:
-                        produtos_vendidos_novos = json.loads(produtos_vendidos_json)
-                        for item in produtos_vendidos_novos:
-                            # Ajuste necessário: a lista de produtos na sessão não tem o 'id', apenas o 'Produto'
-                            # Precisamos do ID. O ideal é usar o ID no item da lista de produtos da sidebar.
-                            # Para evitar quebras, ajustamos o produto JSON aqui se o ID estiver faltando.
-                            # (O produto_para_json no formulário acima está incompleto, vou manter a lógica anterior que usava o ID)
-                            # **REVER: A LÓGICA DE PRODUTOS DA SIDEBAR PRECISA DO ID.**
-                            
-                            # Usaremos o produto completo da lista de sessão para debitar.
-                            # Como a lista de sessão NÃO tem o ID do produto, vou fazer um DEBITO SIMPLES AQUI
-                            # e marcar para o usuário CORRIGIR o input de produtos para incluir o ID.
-                            pass # Ignorando débito por complexidade atual do input da sidebar
 
-                    # --- MONTAGEM DA LINHA PARA SALVAR ---
+                    # MONTAGEM FINAL DA LINHA
                     nova_linha_data = {
                         "Data": data_input,
                         "Loja": loja_selecionada, 
-                        "Cliente": cliente_desc,
+                        "Cliente": cliente, # Usa o cliente do formulário
                         "Valor": valor_armazenado, 
                         "Forma de Pagamento": forma_pagamento,
                         "Tipo": tipo,
                         "Produtos Vendidos": produtos_vendidos_json,
                         "Categoria": categoria_selecionada,
-                        "Status": status_selecionado, 
-                        "Data Pagamento": data_pagamento_final 
+                        "Status": status_selecionado_form, 
+                        "Data Pagamento": data_input if status_selecionado_form == "Realizada" else data_pagamento_final 
                     }
                     
                     if edit_mode:
@@ -1245,7 +1242,7 @@ def livro_caixa():
         contas_a_pagar_vencidas = df_vencidas[df_vencidas["Tipo"] == "Saída"]["Valor"].abs().sum()
         
         num_receber = df_vencidas[df_vencidas["Tipo"] == "Entrada"].shape[0]
-        num_pagar = df_vencidas[df_vencidas["Tipo"] == "Saída"].shape[0]
+        num_pagar = df_vencidas[df_vendas["Tipo"] == "Saída"].shape[0]
 
         if num_receber > 0 or num_pagar > 0:
             alert_message = "### ⚠️ DÍVIDAS PENDENTES VENCIDAS (ou Vencendo Hoje)!"
