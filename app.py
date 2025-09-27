@@ -1317,7 +1317,7 @@ def livro_caixa():
                 
                 # Para garantir que o estado do rádio seja persistido APÓS o submit, usamos session state.
                 # Como o rádio não está no form, ele é renderizado imediatamente, permitindo a mudança de campos.
-                data_status_selecionado = st.radio(
+                data_status_selecionado_previsto = st.radio(
                     "Data de Pagamento Prevista:",
                     options=data_status_opcoes,
                     index=default_data_status_index,
@@ -1325,7 +1325,7 @@ def livro_caixa():
                     horizontal=True
                 )
                 
-                if data_status_selecionado == "Com Data Prevista":
+                if data_status_selecionado_previsto == "Com Data Prevista":
                     # Se for Pendente COM data, mostra o campo
                     prev_date_value = default_data_pagamento if data_prevista_existe else data_input
                     
@@ -1769,20 +1769,56 @@ def livro_caixa():
         # O teste df_filtrado_loja.empty garante que a lógica de relatórios só ocorra com dados.
 
         with subtab_dividas:
-            st.header("🧾 Gerenciamento de Dívidas Pendentes")
+            st.header("🧾 Gerenciamento e Relatório de Dívidas Pendentes")
             
-            df_pendente = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
+            df_pendente_completo = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
             
-            if df_pendente.empty:
+            if df_pendente_completo.empty:
                 st.info("🎉 Não há Contas a Pagar ou Receber pendentes!")
             else:
                 
-                # --- Separação Contas a Receber e Pagar ---
-                df_receber = df_pendente[df_pendente["Tipo"] == "Entrada"].reset_index(drop=True)
-                df_pagar = df_pendente[df_pendente["Tipo"] == "Saída"].reset_index(drop=True)
+                # --- CALCULO DO RESUMO PENDENTE ---
+                total_a_receber = df_pendente_completo[df_pendente_completo["Tipo"] == "Entrada"]["Valor"].sum()
+                total_a_pagar = abs(df_pendente_completo[df_pendente_completo["Tipo"] == "Saída"]["Valor"].sum()) 
                 
                 st.markdown("---")
-                st.markdown("### 📥 Contas a Receber (Vendas Pendentes)")
+                st.subheader("💰 Resumo das Dívidas (Impacto no Fluxo de Caixa Futuro)")
+                col_rp1, col_rp2, col_rp3 = st.columns(3)
+                
+                col_rp1.metric("Total a Receber Pendente", f"R$ {total_a_receber:,.2f}", delta_color="off")
+                col_rp2.metric("Total a Pagar Pendente", f"R$ {total_a_pagar:,.2f}", delta_color="off")
+                col_rp3.metric("Saldo Líquido Pendente", f"R$ {total_a_receber - total_a_pagar:,.2f}", delta=f"R$ {total_a_receber - total_a_pagar:,.2f}" if total_a_receber - total_a_pagar != 0 else None, delta_color="normal")
+                
+                st.markdown("---")
+                
+                # --- GRÁFICO: Distribuição de Dívidas por Loja/Tipo ---
+                st.subheader("📈 Distribuição de Dívidas Pendentes por Loja")
+                
+                df_grafico_dividas = df_pendente_completo.copy()
+                df_grafico_dividas['Valor Absoluto'] = df_grafico_dividas['Valor'].abs()
+                df_grafico_dividas['Tipo Movimentação'] = df_grafico_dividas['Tipo'].apply(lambda x: 'Receber' if x == 'Entrada' else 'Pagar')
+                
+                fig_dividas_loja = px.bar(
+                    df_grafico_dividas,
+                    x='Loja',
+                    y='Valor Absoluto',
+                    color='Tipo Movimentação',
+                    title='Total Pendente por Loja (A Receber vs. A Pagar)',
+                    labels={'Valor Absoluto': 'Valor Pendente (R$)', 'Loja': 'Loja'},
+                    color_discrete_map={'Receber': 'green', 'Pagar': 'red'},
+                    height=400
+                )
+                fig_dividas_loja.update_layout(xaxis={'categoryorder':'total descending'})
+                st.plotly_chart(fig_dividas_loja, use_container_width=True)
+                
+                st.markdown("---")
+                st.subheader("📋 Detalhamento e Conclusão de Dívidas")
+                
+                # --- Separação Contas a Receber e Pagar ---
+                df_receber = df_pendente_completo[df_pendente_completo["Tipo"] == "Entrada"].reset_index(drop=True)
+                df_pagar = df_pendente_completo[df_pendente_completo["Tipo"] == "Saída"].reset_index(drop=True)
+                
+                st.markdown("##### 📥 Contas a Receber (Vendas Pendentes)")
                 
                 if df_receber.empty:
                     st.info("Nenhuma venda pendente para receber.")
@@ -1802,7 +1838,7 @@ def livro_caixa():
                     st.info(f"Total a Receber: R$ {df_receber['Valor'].sum():,.2f}")
                     
                 st.markdown("---")
-                st.markdown("### 📤 Contas a Pagar (Despesas Pendentes)")
+                st.markdown("##### 📤 Contas a Pagar (Despesas Pendentes)")
                 
                 if df_pagar.empty:
                     st.info("Nenhuma despesa pendente para pagar.")
@@ -1822,7 +1858,7 @@ def livro_caixa():
                     st.info(f"Total a Pagar: R$ {abs(df_pagar['Valor'].sum()):,.2f}")
 
                 st.markdown("---")
-                st.markdown("### ✅ Concluir Pagamentos Pendentes")
+                st.markdown("### ✅ Concluir Pagamentos Selecionados")
 
                 selecao_receber = st.session_state.get('tabela_receber', {}).get('selection', {}).get('rows', [])
                 selecao_pagar = st.session_state.get('tabela_pagar', {}).get('selection', {}).get('rows', [])
