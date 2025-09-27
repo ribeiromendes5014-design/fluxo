@@ -30,38 +30,57 @@ def ler_codigo_barras_api(image_bytes):
     """
     Tenta decodificar usando WebQR (QR Codes).
     Se falhar, usa ZXing (QR + códigos de barras lineares).
+    Exibe o retorno cru das APIs para debug.
     """
-    # 1. Tenta com WebQR
     codigos = []
+
+    # 1. Tenta com WebQR
     try:
         URL_DECODER_WEBQR = "https://api.qrserver.com/v1/read-qr-code/"
         files = {"file": ("barcode.png", image_bytes, "image/png")} 
         response = requests.post(URL_DECODER_WEBQR, files=files, timeout=30)
+
         if response.status_code == 200:
             data = response.json()
             if data and isinstance(data, list) and data[0].get('symbol'):
                 for symbol in data[0]['symbol']:
                     if symbol['data'] is not None:
                         codigos.append(symbol['data'].strip())
-    except:
-        pass
 
-    # 2. Se nada foi encontrado → fallback ZXing
+            if 'streamlit' in globals():
+                st.write("📡 Debug WebQR (resposta JSON):", data)
+
+    except Exception as e:
+        if 'streamlit' in globals():
+            st.error(f"❌ Erro WebQR: {e}")
+
+    # 2. Se nada foi encontrado → tenta ZXing
     if not codigos:
         try:
             url = "https://zxing.org/w/decode.jspx"
             files = {"file": ("barcode.png", image_bytes, "image/png")}
             resp = requests.post(url, files=files, timeout=30)
+
             if resp.status_code == 200:
+                if 'streamlit' in globals():
+                    st.write("📡 Debug ZXing (resposta HTML):")
+                    st.code(resp.text[:1000])  # mostra só os primeiros 1000 caracteres p/ debug
+
                 from bs4 import BeautifulSoup
                 soup = BeautifulSoup(resp.text, "html.parser")
                 pre = soup.find("pre")
                 if pre:
                     codigos = [pre.get_text(strip=True)]
-        except:
-            pass
+
+        except Exception as e:
+            if 'streamlit' in globals():
+                st.error(f"❌ Erro ZXing: {e}")
+
+    if not codigos and 'streamlit' in globals():
+        st.warning("⚠️ Nenhum código decodificado (verifique a imagem e o log acima).")
 
     return codigos
+
 
 
 
@@ -1984,4 +2003,5 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
+
 
