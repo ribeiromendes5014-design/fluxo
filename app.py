@@ -10,23 +10,17 @@ import hashlib
 import ast
 import plotly.express as px
 import base64 
-import streamlit as st
-import pandas as pd
-import os
-from datetime import date, datetime, timedelta
-from PIL import Image, ImageEnhance, UnidentifiedImageError
-from io import BytesIO
-import requests  
-from github import Github
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, Image as RLImage
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-from reportlab.lib.units import mm
-from reportlab.pdfgen import canvas
-import pytz
-import requests
-from requests.exceptions import ConnectionError, RequestException
+
+# Importa a biblioteca PyGithub para gerenciamento de persistência
+try:
+    from github import Github 
+except ImportError:
+    # Fallback para ambientes que não permitem o import de PyGithub, mas a persistência falhará.
+    class Github:
+        def __init__(self, token): pass
+        def get_repo(self, repo_name): return self 
+        def update_file(self, path, msg, content, sha, branch): pass
+        def create_file(self, path, msg, content, branch): pass
 
 # =====================================
 # Funções auxiliares (CORRIGIDO: Troca API ZXing por WebQR - JSON)
@@ -87,17 +81,6 @@ def ler_codigo_barras_api(image_bytes):
         if 'streamlit' in globals():
             st.error(f"❌ Erro inesperado: {e}")
         return []
-
-# Importa a biblioteca PyGithub para gerenciamento de persistência
-try:
-    from github import Github 
-except ImportError:
-    # Fallback para ambientes que não permitem o import de PyGithub, mas a persistência falhará.
-    class Github:
-        def __init__(self, token): pass
-        def get_repo(self, repo_name): return self 
-        def update_file(self, path, msg, content, sha, branch): pass
-        def create_file(self, path, msg, content, branch): pass
 
 
 # ==================== CONFIGURAÇÕES DO APLICATIVO E CONSTANTES ====================
@@ -167,8 +150,6 @@ def to_float(valor_str):
         return float(str(valor_str).replace(",", ".").strip())
     except:
         return 0.0
-
-# A função ler_codigo_barras_api foi movida para o topo.
 
 def prox_id(df, coluna_id="ID"):
     """Função auxiliar para criar um novo ID sequencial."""
@@ -2021,4 +2002,3 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
-
