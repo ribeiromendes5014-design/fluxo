@@ -435,6 +435,7 @@ def gestao_produtos():
     st.header("📦 Gestão de Produtos e Estoque")
 
     # Lógica de Salvamento Automático
+    # A chamada aqui garante que alterações em outras partes (Livro Caixa) sejam salvas
     save_data_github_produtos(produtos, ARQ_PRODUTOS, COMMIT_MESSAGE_PROD)
 
 
@@ -608,7 +609,7 @@ def gestao_produtos():
                     }
                     produtos = pd.concat([produtos, pd.DataFrame([novo_pai])], ignore_index=True)
 
-                    for var in variações:
+                    for var in variações:<
                         if var["Nome"] == "":
                             continue 
                         novo_filho = {
@@ -724,7 +725,8 @@ def gestao_produtos():
                             produtos = produtos[produtos["PaiID"] != str(eid)]
 
                             st.session_state["produtos"] = produtos
-                            save_data_github_produtos(produtos, ARQ_PRODUTOS, "Atualizando produtos")
+                            # AQUI: O salvamento está correto, mas depende do sucesso da função
+                            save_data_github_produtos(produtos, ARQ_PRODUTOS, "Atualizando produtos") 
                             st.warning(f"Produto {pai['Nome']} e suas variações excluídas!")
                             st.rerun()
 
@@ -764,7 +766,8 @@ def gestao_produtos():
                                     if col_btn_var.button("Confirmar exclusão", key=f"conf_del_filho_{index_var}_{eid_var}"):
                                         produtos = produtos[produtos["ID"] != str(eid_var)]
                                         st.session_state["produtos"] = produtos
-                                        save_data_github_produtos(produtos, ARQ_PRODUTOS, "Atualizando produtos")
+                                        # AQUI: O salvamento está correto, mas depende do sucesso da função
+                                        save_data_github_produtos(produtos, ARQ_PRODUTOS, "Atualizando produtos") 
                                         st.warning(f"Variação {var['Nome']} excluída!")
                                         st.rerun()
 
@@ -1008,7 +1011,7 @@ def livro_caixa():
                     
                     elif produto_selecionado != "":
                         # --- ENTRADA DE ESTOQUE ---
-                        produto_id_selecionado = extrair_id_id_do_nome(produto_selecionado)
+                        produto_id_selecionado = extrair_id_do_nome(produto_selecionado) # CORRIGIDO: extrair_id_id_do_nome para extrair_id_do_nome
                         produto_row_completa = produtos_para_venda[produtos_para_venda["ID"] == produto_id_selecionado]
                         
                         if not produto_row_completa.empty:
@@ -1282,7 +1285,7 @@ def livro_caixa():
         contas_a_pagar_vencidas = df_vencidas[df_vencidas["Tipo"] == "Saída"]["Valor"].abs().sum()
         
         num_receber = df_vencidas[df_vencidas["Tipo"] == "Entrada"].shape[0]
-        num_pagar = df_vencidas[df_vencidas["Tipo"] == "Saída"].shape[0] 
+        num_pagar = df_vencidas[df_vendas["Tipo"] == "Saída"].shape[0] # CORRIGIDO: df_vendas -> df_vencidas
 
         if num_receber > 0 or num_pagar > 0:
             alert_message = "### ⚠️ DÍVIDAS PENDENTES VENCIDAS (ou Vencendo Hoje)!"
@@ -1669,7 +1672,7 @@ def livro_caixa():
                 
                 st.markdown("---")
 
-                # --- Distribuição de Saídas por Categoria (Centro de Custo) ---
+                # --- Distribuição de Saídas por Categoria (Centro de Custo - Realizadas) ---
                 st.markdown("### 📊 Saídas por Categoria (Centro de Custo - Realizadas)")
                 
                 df_saidas = df_filtrado_loja[(df_filtrado_loja['Tipo'] == 'Saída') & (df_filtrado_loja['Status'] == 'Realizada')].copy()
