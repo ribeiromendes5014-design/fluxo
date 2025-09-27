@@ -1,3 +1,4 @@
 ID,Nome,Marca,Categoria,Quantidade,PrecoCusto,PrecoVista,PrecoCartao,Validade,FotoURL,CodigoBarras,PaiID
 2,Calça Jeans M,Marca Y,Vestuário,20,55.0,129.9,146.41,,2345678901234,,
 3,Bolsa de Couro,Marca Z,Acessórios,15,80.0,199.9,225.32,,3456789012345,,
+4,teste,,,1,0.0,50.0,56.36,2025-09-27,,,
