@@ -748,7 +748,7 @@ def gestao_produtos():
                                 
                             commit_msg_pai = f"Exclusão do produto pai {nome_pai}"
 
-                            if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, commit_msg_pai):
+                            if salvar_produtos_no_github(produtos, commit_msg_pai):
                                 inicializar_produtos.clear() # Limpa o cache para forçar o recarregamento do novo CSV
                                 st.warning(f"Produto {nome_pai} e suas variações excluídas!")
                             else:
@@ -1936,3 +1936,4 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
+
