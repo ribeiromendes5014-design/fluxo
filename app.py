@@ -175,6 +175,7 @@ def processar_dataframe(df):
     df_proc["Data"] = pd.to_datetime(df_proc["Data"], errors='coerce').dt.date
     df_proc["Data_dt"] = pd.to_datetime(df_proc["Data"], errors='coerce') # Data para ordenação
     
+    # CORREÇÃO: Força a coluna "Data Pagamento" para datetime.date
     df_proc["Data Pagamento"] = pd.to_datetime(df_proc["Data Pagamento"], errors='coerce').dt.date
     
     # Remove linhas onde a data de transação não pôde ser convertida
@@ -667,10 +668,12 @@ with tab_mov:
     # 1. Filtrar transações pendentes com data de pagamento válida
     df_pendente_alerta = df_exibicao[
         (df_exibicao["Status"] == "Pendente") & 
+        # A coluna Data Pagamento já é datetime.date devido à correção em processar_dataframe
         (pd.notna(df_exibicao["Data Pagamento"]))
     ].copy()
 
     # 2. Filtrar apenas as vencidas (Data Pagamento <= hoje)
+    # A comparação agora funciona porque a coluna é consistentemente datetime.date
     df_vencidas = df_pendente_alerta[
         df_pendente_alerta["Data Pagamento"] <= hoje_date
     ]
