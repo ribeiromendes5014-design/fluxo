@@ -124,6 +124,7 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
     except Exception:
         return None
 
+@st.cache_data(show_spinner="Carregando dados...")
 def carregar_livro_caixa():
     """Orquestra o carregamento do Livro Caixa."""
     df = None
@@ -195,6 +196,7 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
 
 # ==================== FUNÇÕES DE PROCESSAMENTO DE DADOS (ff.py) ====================
 
+@st.cache_data(show_spinner=False)
 def processar_dataframe(df):
     """
     Padroniza o DataFrame para uso na UI: conversão de tipos, cálculo de saldo acumulado e ordenação.
@@ -318,6 +320,7 @@ def highlight_value(row):
 # LÓGICA DE ESTOQUE (USADA PELO LIVRO CAIXA)
 # ==============================================================================
 
+@st.cache_data(show_spinner="Carregando produtos do estoque...")
 def inicializar_produtos():
     """Carrega ou inicializa o DataFrame de produtos."""
     COLUNAS_PRODUTOS = [
@@ -325,23 +328,29 @@ def inicializar_produtos():
         "PrecoVista", "PrecoCartao", "Validade", "FotoURL", "CodigoBarras", "PaiID"
     ]
     
+    # Verifica se o DataFrame de produtos já está na sessão
     if "produtos" not in st.session_state:
+        # Tenta carregar do GitHub
         df_carregado = load_csv_github(URL_PRODUTOS)
         
         if df_carregado is None or df_carregado.empty:
-            st.session_state.produtos = pd.DataFrame(columns=COLUNAS_PRODUTOS)
+            df_base = pd.DataFrame(columns=COLUNAS_PRODUTOS)
         else:
-            for col in COLUNAS_PRODUTOS:
-                if col not in df_carregado.columns:
-                    df_carregado[col] = ''
+            df_base = df_carregado
             
-            # Garante tipos corretos
-            df_carregado["Quantidade"] = pd.to_numeric(df_carregado["Quantidade"], errors='coerce').fillna(0).astype(int)
-            df_carregado["PrecoCusto"] = pd.to_numeric(df_carregado["PrecoCusto"], errors='coerce').fillna(0.0)
-            df_carregado["PrecoVista"] = pd.to_numeric(df_carregado["PrecoVista"], errors='coerce').fillna(0.0)
-            df_carregado["PrecoCartao"] = pd.to_numeric(df_carregado["PrecoCartao"], errors='coerce').fillna(0.0)
-            
-            st.session_state.produtos = df_carregado
+        # Garante a existência de todas as colunas
+        for col in COLUNAS_PRODUTOS:
+            if col not in df_base.columns:
+                df_base[col] = ''
+        
+        # Garante tipos corretos
+        df_base["Quantidade"] = pd.to_numeric(df_base["Quantidade"], errors='coerce').fillna(0).astype(int)
+        df_base["PrecoCusto"] = pd.to_numeric(df_base["PrecoCusto"], errors='coerce').fillna(0.0)
+        df_base["PrecoVista"] = pd.to_numeric(df_base["PrecoVista"], errors='coerce').fillna(0.0)
+        df_base["PrecoCartao"] = pd.to_numeric(df_base["PrecoCartao"], errors='coerce').fillna(0.0)
+        
+        # Armazena o DataFrame na sessão
+        st.session_state.produtos = df_base
             
     return st.session_state.produtos
 
@@ -828,7 +837,7 @@ def gestao_produtos():
 # ==============================================================================
 
 def livro_caixa():
-    st.set_page_config(layout="wide", page_title="Livro Caixa", page_icon="📘") 
+    #st.set_page_config(layout="wide", page_title="Livro Caixa", page_icon="📘") # REMOVIDO: Apenas uma chamada é permitida
     st.title("📘 Livro Caixa - Gerenciamento de Movimentações")
 
     # --- Inicialização e Constantes Locais ---
@@ -858,6 +867,11 @@ def livro_caixa():
         lambda row: f"{row.ID} | {row.Nome} ({row.Marca}) | Estoque: {row.Quantidade}", axis=1
     ).tolist()
     
+    # Adiciona a opção manual
+    OPCAO_MANUAL = "Adicionar Item Manual (Sem Controle de Estoque)"
+    opcoes_produtos.append(OPCAO_MANUAL)
+
+
     # Função para extrair ID do produto (melhorada)
     def extrair_id_do_nome(opcoes_str):
         if ' | ' in opcoes_str:
@@ -969,39 +983,9 @@ def livro_caixa():
                     # --- Inputs de Produto para Adicionar ---
                     produto_selecionado = st.selectbox("Selecione o Produto (ID | Nome)", opcoes_produtos, key="input_produto_selecionado")
                     
-                    produto_id_selecionado = extrair_id_do_nome(produto_selecionado)
-                    produto_row_completa = produtos_para_venda[produtos_para_venda["ID"] == produto_id_selecionado]
                     
-                    if not produto_row_completa.empty:
-                        produto_data = produto_row_completa.iloc[0]
-                        nome_produto = produto_data['Nome']
-                        preco_sugerido = produto_data['PrecoVista']
-                        custo_unit = produto_data['PrecoCusto']
-                        estoque_disp = produto_data['Quantidade']
-
-                        col_p1, col_p2 = st.columns(2)
-                        with col_p1:
-                            quantidade_input = st.number_input("Qtd", min_value=1, value=1, step=1, max_value=int(estoque_disp) if estoque_disp > 0 else 1, key="input_qtd_prod_edit")
-                        with col_p2:
-                            preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=float(preco_sugerido), key="input_preco_prod_edit")
-                        
-                        st.caption(f"Custo Unitário: R$ {custo_unit:,.2f}")
-                        
-                        # --- Botão para Adicionar Item (FORA DO FORM PRINCIPAL) ---
-                        if st.button("Adicionar Item à Venda", key="adicionar_item_button", use_container_width=True):
-                            if quantidade_input > 0:
-                                st.session_state.lista_produtos.append({
-                                    "Produto_ID": produto_id_selecionado, # Novo campo para débito
-                                    "Produto": nome_produto,
-                                    "Quantidade": quantidade_input,
-                                    "Preço Unitário": preco_unitario_input,
-                                    "Custo Unitário": custo_unit 
-                                })
-                                st.rerun()
-                            else:
-                                st.warning("A quantidade deve ser maior que zero.")
-                    else:
-                        # Fallback para entrada manual se não for selecionado do estoque
+                    if produto_selecionado == OPCAO_MANUAL:
+                        # --- ENTRADA MANUAL ---
                         nome_produto_manual = st.text_input("Nome do Produto (Manual)", key="input_nome_prod_manual")
                         quantidade_manual = st.number_input("Qtd Manual", min_value=0.01, value=1.0, step=1.0, key="input_qtd_prod_manual")
                         preco_unitario_manual = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", key="input_preco_prod_manual")
@@ -1010,15 +994,57 @@ def livro_caixa():
                         if st.button("Adicionar Item Manual", key="adicionar_item_manual_button", use_container_width=True):
                              if nome_produto_manual and quantidade_manual > 0:
                                 st.session_state.lista_produtos.append({
-                                    "Produto_ID": "", # Vazio para item manual
+                                    "Produto_ID": "", # Vazio para item manual (sem controle de estoque)
                                     "Produto": nome_produto_manual,
                                     "Quantidade": quantidade_manual,
                                     "Preço Unitário": preco_unitario_manual,
                                     "Custo Unitário": custo_unitario_manual 
                                 })
                                 st.rerun()
+                             else:
+                                 st.warning("Preencha o nome e a quantidade para o item manual.")
+                        # --- FIM ENTRADA MANUAL ---
+
                     
-                    if st.button("Limpar Lista de Produtos", key="limpar_lista_button", type="secondary"):
+                    elif produto_selecionado != "":
+                        # --- ENTRADA DE ESTOQUE ---
+                        produto_id_selecionado = extrair_id_id_do_nome(produto_selecionado)
+                        produto_row_completa = produtos_para_venda[produtos_para_venda["ID"] == produto_id_selecionado]
+                        
+                        if not produto_row_completa.empty:
+                            produto_data = produto_row_completa.iloc[0]
+                            nome_produto = produto_data['Nome']
+                            preco_sugerido = produto_data['PrecoVista']
+                            custo_unit = produto_data['PrecoCusto']
+                            estoque_disp = produto_data['Quantidade']
+
+                            col_p1, col_p2 = st.columns(2)
+                            with col_p1:
+                                # O max_value garante que não possa vender mais do que tem no estoque
+                                quantidade_input = st.number_input("Qtd", min_value=1, value=1, step=1, max_value=int(estoque_disp) if estoque_disp > 0 else 1, key="input_qtd_prod_edit")
+                            with col_p2:
+                                preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=float(preco_sugerido), key="input_preco_prod_edit")
+                            
+                            st.caption(f"Custo Unitário: R$ {custo_unit:,.2f}")
+                            
+                            if st.button("Adicionar Item à Venda", key="adicionar_item_button", use_container_width=True):
+                                if quantidade_input > 0 and quantidade_input <= estoque_disp:
+                                    st.session_state.lista_produtos.append({
+                                        "Produto_ID": produto_id_selecionado, # Chave para débito de estoque
+                                        "Produto": nome_produto,
+                                        "Quantidade": quantidade_input,
+                                        "Preço Unitário": preco_unitario_input,
+                                        "Custo Unitário": custo_unit 
+                                    })
+                                    st.rerun()
+                                elif quantidade_input > estoque_disp:
+                                    st.warning(f"A quantidade ({quantidade_input}) excede o estoque disponível ({estoque_disp}).")
+                                else:
+                                    st.warning("A quantidade deve ser maior que zero.")
+                        # --- FIM ENTRADA DE ESTOQUE ---
+                        
+                    
+                    if st.button("Limpar Lista de Produtos", key="limpar_lista_button", type="secondary", use_container_width=True):
                         st.session_state.lista_produtos = []
                         st.rerun()
             
@@ -1127,22 +1153,26 @@ def livro_caixa():
                             try:
                                 produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
                                 for item in produtos_vendidos_antigos:
-                                    ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
+                                    if item.get("Produto_ID"): # Só credita se tiver ID de estoque
+                                        ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
                             except: pass
                             
                         # Se status continua Realizada, ajusta a diferença
                         elif original_row["Status"] == "Realizada" and status_selecionado_form == "Realizada" and original_row["Tipo"] == "Entrada":
-                            # Credita o antigo e debita o novo
+                            # Credita o estoque antigo (se existia)
                             try:
                                 produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
                                 for item in produtos_vendidos_antigos:
-                                    ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
+                                    if item.get("Produto_ID"):
+                                        ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
                             except: pass
                             
+                            # Debita o novo estoque (se houver lista atualizada e itens com ID)
                             if produtos_vendidos_json:
                                 produtos_vendidos_novos = json.loads(produtos_vendidos_json)
                                 for item in produtos_vendidos_novos:
-                                    ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                                    if item.get("Produto_ID"):
+                                        ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
                             
                         # Salva ajuste de estoque
                         save_data_github_produtos(st.session_state.produtos, ARQ_PRODUTOS, "Ajuste de estoque por edição de venda")
@@ -1152,11 +1182,14 @@ def livro_caixa():
                         if produtos_vendidos_json:
                             produtos_vendidos_novos = json.loads(produtos_vendidos_json)
                             for item in produtos_vendidos_novos:
-                                ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                                if item.get("Produto_ID"): # Só debita se tiver ID de estoque
+                                    ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
                         save_data_github_produtos(st.session_state.produtos, ARQ_PRODUTOS, "Débito de estoque por nova venda")
 
 
                     # MONTAGEM FINAL DA LINHA
+                    data_pagamento_final = data_input if status_selecionado_form == "Realizada" else data_pagamento_final # Se Pendente, usa o valor de fora do form
+                    
                     nova_linha_data = {
                         "Data": data_input,
                         "Loja": loja_selecionada, 
@@ -1167,7 +1200,7 @@ def livro_caixa():
                         "Produtos Vendidos": produtos_vendidos_json,
                         "Categoria": categoria_selecionada,
                         "Status": status_selecionado_form, 
-                        "Data Pagamento": data_input if status_selecionado_form == "Realizada" else data_pagamento_final 
+                        "Data Pagamento": data_pagamento_final
                     }
                     
                     if edit_mode:
@@ -1183,6 +1216,13 @@ def livro_caixa():
                     st.session_state.lista_produtos = [] 
                     st.cache_data.clear()
                     st.rerun()
+
+
+            # Lógica de Cancelamento (fora do bloco 'if enviar')
+            if cancelar:
+                st.session_state.edit_id = None
+                st.session_state.lista_produtos = []
+                st.rerun()
 
 
     # ========================================================
@@ -1242,7 +1282,7 @@ def livro_caixa():
         contas_a_pagar_vencidas = df_vencidas[df_vencidas["Tipo"] == "Saída"]["Valor"].abs().sum()
         
         num_receber = df_vencidas[df_vencidas["Tipo"] == "Entrada"].shape[0]
-        num_pagar = df_vencidas[df_vencidas["Tipo"] == "Saída"].shape[0] # CORRIGIDO: df_vendas -> df_vencidas
+        num_pagar = df_vencidas[df_vencidas["Tipo"] == "Saída"].shape[0] 
 
         if num_receber > 0 or num_pagar > 0:
             alert_message = "### ⚠️ DÍVIDAS PENDENTES VENCIDAS (ou Vencendo Hoje)!"
@@ -1438,12 +1478,11 @@ def livro_caixa():
                             
                             # Lógica de estorno de estoque
                             row_original_df = df_dividas.loc[original_idx_selecionado]
-                            if row_original_df['Status'] == "Realizada" and row_original_df["Tipo"] == "Entrada" and row_original_df["Produtos Vendidos"]:
+                            if row_original_df['Status'] == "Realizada" and row_original_df["Tipo"] == "Entrada" and row_original_df["Produtos Vendidos"] and row_original_df["Produtos Vendidos"] != "":
                                 try:
                                     produtos_vendidos = ast.literal_eval(row_original_df['Produtos Vendidos'])
                                     for item in produtos_vendidos:
-                                        # Assumimos que a lista de produtos tem o 'id'
-                                        produto_id = item.get("Produto_ID") # Precisa ser ajustado na entrada
+                                        produto_id = item.get("Produto_ID")
                                         if produto_id: 
                                             ajustar_estoque(produto_id, item["Quantidade"], "creditar")
                                     save_data_github_produtos(st.session_state.produtos, ARQ_PRODUTOS, "Crédito de estoque por exclusão de venda")
@@ -1581,11 +1620,10 @@ def livro_caixa():
                                 
                                 # 2. LÓGICA DE DÉBITO DE ESTOQUE (SE FOR VENDA)
                                 original_row = df_dividas.loc[original_idx]
-                                if original_row['Tipo'] == "Entrada" and original_row["Produtos Vendidos"]:
+                                if original_row['Tipo'] == "Entrada" and original_row["Produtos Vendidos"] and original_row["Produtos Vendidos"] != "":
                                     try:
                                         produtos_vendidos = ast.literal_eval(original_row['Produtos Vendidos'])
                                         for item in produtos_vendidos:
-                                            # Assumimos que a lista de produtos tem o 'id'
                                             produto_id = item.get("Produto_ID")
                                             if produto_id: 
                                                 ajustar_estoque(produto_id, item["Quantidade"], "debitar")
@@ -1694,7 +1732,7 @@ def livro_caixa():
                     
                     lista_produtos_agregada = []
                     for index, row in df_entradas_produtos.iterrows():
-                        if pd.notna(row['Produtos Vendidos']) and row['Produtos Vendidos']:
+                        if pd.notna(row['Produtos Vendidos']) and row['Produtos Vendidos'] and row['Produtos Vendidos'] != "":
                             try:
                                 produtos = json.loads(row['Produtos Vendidos'])
                                 for p in produtos:
