@@ -23,63 +23,63 @@ except ImportError:
         def create_file(self, path, msg, content, branch): pass
 
 # =====================================
-# Funções auxiliares (CORRIGIDO: Troca API ZXing por WebQR - JSON)
+# Funções auxiliares (Troca API ZXing por WebQR - JSON)
 # =====================================
 
 def ler_codigo_barras_api(image_bytes):
     """
-    Decodifica códigos de barras (1D e QR) usando a API pública ZXing.
-    Mais robusta que WebQR porque suporta EAN/UPC/Code128 além de QR Codes.
+    Decodifica códigos de barras (1D e QR) usando a API pública WebQR (JSON).
     """
-    URL_DECODER_ZXING = "https://zxing.org/w/decode"
+    # API alternativa: WebQR (mais estável que ZXing e retorna JSON)
+    URL_DECODER_WEBQR = "https://api.qrserver.com/v1/read-qr-code/"
     
     try:
-        # ⚠️ IMPORTANTE: ZXing espera o arquivo no campo 'f', não 'file'
-        files = {"f": ("barcode.png", image_bytes, "image/png")}
+        # A API WebQR espera o arquivo no campo 'file' ou 'f'
+        files = {"file": ("barcode.png", image_bytes, "image/png")} 
         
-        response = requests.post(URL_DECODER_ZXING, files=files, timeout=30)
+        # Faz a requisição com um timeout de 30 segundos
+        response = requests.post(URL_DECODER_WEBQR, files=files, timeout=30) 
 
         if response.status_code != 200:
             if 'streamlit' in globals():
-                st.error(f"❌ Erro na API ZXing. Status HTTP: {response.status_code}")
+                st.error(f"❌ Erro na API WebQR. Status HTTP: {response.status_code}")
             return []
 
-        text = response.text
+        # A resposta é JSON.
+        data = response.json()
         codigos = []
-
-        # Parse simples do HTML retornado
-        if "<pre>" in text:
-            partes = text.split("<pre>")
-            for p in partes[1:]:
-                codigo = p.split("</pre>")[0].strip()
-                if codigo and not codigo.startswith("Erro na decodificação"):
-                    codigos.append(codigo)
-
+        
+        # Navega na estrutura JSON da resposta
+        if data and isinstance(data, list) and data[0].get('symbol'):
+            for symbol in data[0]['symbol']:
+                # O campo 'data' contém o número do código de barras
+                if symbol['data'] is not None:
+                    codigos.append(symbol['data'].strip())
+        
         if 'streamlit' in globals():
-            st.write("Debug API ZXing:", codigos)
-
+             st.write("Debug API WebQR:", codigos)
+        
         if not codigos and 'streamlit' in globals():
-            st.warning("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
-
+             st.warning("⚠️ API WebQR não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
+             
         return codigos
 
     except ConnectionError as ce:
+        # CAPTURA O ERRO 'Connection refused'
         if 'streamlit' in globals():
-            st.error(f"❌ Erro de Conexão: O servidor ZXing recusou a conexão. Detalhe: {ce}")
+            st.error(f"❌ Erro de Conexão (Rede): Falha ao conectar ao servidor WebQR. Detalhe: {ce}")
         return []
         
     except RequestException as e:
+        # CAPTURA OUTROS ERROS (Timeout, etc.)
         if 'streamlit' in globals():
-            st.error(f"❌ Erro de Requisição (Timeout/Outro): Falha ao completar a chamada à API ZXing. Detalhe: {e}")
+            st.error(f"❌ Erro de Requisição (Timeout/Outro): Falha ao completar a chamada à API. Detalhe: {e}")
         return []
-    
+        
     except Exception as e:
         if 'streamlit' in globals():
             st.error(f"❌ Erro inesperado: {e}")
         return []
-
-
-
 
 
 # ==================== CONFIGURAÇÕES DO APLICATIVO E CONSTANTES ====================
@@ -509,77 +509,78 @@ def gestao_produtos():
 
 
     # ================================
-# SUBABAS
-# ================================
-tab_cadastro, tab_lista = st.tabs(["📝 Cadastro de Produtos", "📑 Lista & Busca"])
+    # SUBABAS
+    # ================================
+    tab_cadastro, tab_lista = st.tabs(["📝 Cadastro de Produtos", "📑 Lista & Busca"])
 
-# ================================
-# SUBABA: CADASTRO
-# ================================
-with tab_cadastro:
-    st.subheader("📝 Cadastro de Produtos")
-    
-    if 'codigo_barras' not in st.session_state:
-        st.session_state["codigo_barras"] = ""
-    if 'cb_grade_lidos' not in st.session_state:
-        st.session_state.cb_grade_lidos = {}
+    # ================================
+    # SUBABA: CADASTRO
+    # ================================
+    with tab_cadastro:
+        st.subheader("📝 Cadastro de Produtos")
+        
+        if 'codigo_barras' not in st.session_state:
+            st.session_state["codigo_barras"] = ""
+        if 'cb_grade_lidos' not in st.session_state:
+            st.session_state.cb_grade_lidos = {}
 
-    # --- Cadastro ---
-    with st.expander("Cadastrar novo produto", expanded=True):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            tipo_produto = st.radio("Tipo de produto", ["Produto simples", "Produto com variações (grade)"], key="cad_tipo_produto")
-            nome = st.text_input("Nome", key="cad_nome")
-            marca = st.text_input("Marca", key="cad_marca")
-            categoria = st.text_input("Categoria", key="cad_categoria")
 
-        with c2:
-            if tipo_produto == "Produto simples":
-                qtd = st.number_input("Quantidade", min_value=0, step=1, value=0, key="cad_qtd")
-                preco_custo = st.text_input("Preço de Custo", value="0,00", key="cad_preco_custo")
-                preco_vista = st.text_input("Preço à Vista", value="0,00", key="cad_preco_vista")
-                preco_cartao = 0.0
-                try:
-                    preco_cartao = round(to_float(preco_vista) / FATOR_CARTAO, 2)
-                except Exception:
+        # --- Cadastro ---
+        with st.expander("Cadastrar novo produto", expanded=True):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                tipo_produto = st.radio("Tipo de produto", ["Produto simples", "Produto com variações (grade)"], key="cad_tipo_produto")
+                nome = st.text_input("Nome", key="cad_nome")
+                marca = st.text_input("Marca", key="cad_marca")
+                categoria = st.text_input("Categoria", key="cad_categoria")
+
+            with c2:
+                if tipo_produto == "Produto simples":
+                    qtd = st.number_input("Quantidade", min_value=0, step=1, value=0, key="cad_qtd")
+                    preco_custo = st.text_input("Preço de Custo", value="0,00", key="cad_preco_custo")
+                    preco_vista = st.text_input("Preço à Vista", value="0,00", key="cad_preco_vista")
                     preco_cartao = 0.0
-                st.text_input("Preço no Cartão (auto)", value=str(preco_cartao).replace(".", ","), disabled=True, key="cad_preco_cartao")
-            else:
-                st.info("Cadastre as variações abaixo (grade).")
-
-        with c3:
-            validade = st.date_input("Validade (opcional)", value=date.today(), key="cad_validade")
-            foto_url = st.text_input("URL da Foto (opcional)", key="cad_foto_url")
-            st.file_uploader("📷 Enviar Foto", type=["png", "jpg", "jpeg"], key="cad_foto") 
-            
-            # 🔹 Campo já vinculado diretamente ao session_state
-            codigo_barras = st.text_input("Código de Barras (Pai/Simples)", key="codigo_barras")
-
-            # --- Escanear com câmera (Produto Simples/Pai) ---
-            foto_codigo = st.camera_input("📷 Escanear código de barras / QR Code", key="cad_cam")
-            if foto_codigo is not None:
-                imagem_bytes = foto_codigo.getbuffer() 
-                codigos_lidos = ler_codigo_barras_api(imagem_bytes)
-                if codigos_lidos:
-                    st.session_state["codigo_barras"] = codigos_lidos[0]
-                    st.success(f"Código lido: **{codigos_lidos[0]}**")
-                    st.rerun() 
+                    try:
+                        preco_cartao = round(to_float(preco_vista) / FATOR_CARTAO, 2)
+                    except Exception:
+                        preco_cartao = 0.0
+                    st.text_input("Preço no Cartão (auto)", value=str(preco_cartao).replace(".", ","), disabled=True, key="cad_preco_cartao")
                 else:
-                    st.error("❌ Não foi possível ler nenhum código.")
+                    st.info("Cadastre as variações abaixo (grade).")
 
-            # --- Upload de imagem do código de barras (Produto Simples/Pai) ---
-            foto_codigo_upload = st.file_uploader("📤 Upload de imagem do código de barras", type=["png", "jpg", "jpeg"], key="cad_cb_upload")
-            if foto_codigo_upload is not None:
-                imagem_bytes = foto_codigo_upload.getvalue() 
-                codigos_lidos = ler_codigo_barras_api(imagem_bytes)
-                if codigos_lidos:
-                    st.session_state["codigo_barras"] = codigos_lidos[0]
-                    st.success(f"Código lido via upload: **{codigos_lidos[0]}**")
-                    st.rerun() 
-                else:
-                    st.error("❌ Não foi possível ler nenhum código da imagem enviada.")
+            with c3:
+                validade = st.date_input("Validade (opcional)", value=date.today(), key="cad_validade")
+                foto_url = st.text_input("URL da Foto (opcional)", key="cad_foto_url")
+                st.file_uploader("📷 Enviar Foto", type=["png", "jpg", "jpeg"], key="cad_foto") 
+                
+                # O campo de texto usa o valor do session_state (que é preenchido pela leitura)
+                codigo_barras = st.text_input("Código de Barras (Pai/Simples)", value=st.session_state["codigo_barras"], key="cad_cb")
 
+                # --- Escanear com câmera (Produto Simples/Pai) ---
+                foto_codigo = st.camera_input("📷 Escanear código de barras / QR Code", key="cad_cam")
+                if foto_codigo is not None:
+                    imagem_bytes = foto_codigo.getbuffer() 
+                    codigos_lidos = ler_codigo_barras_api(imagem_bytes)
+                    if codigos_lidos:
+                        # Preenche o valor no session_state e força o re-run
+                        st.session_state["codigo_barras"] = codigos_lidos[0]
+                        st.success(f"Código lido: **{st.session_state['codigo_barras']}**")
+                        st.rerun() 
+                    else:
+                        st.error("❌ Não foi possível ler nenhum código.")
 
+                # --- Upload de imagem do código de barras (Produto Simples/Pai) ---
+                foto_codigo_upload = st.file_uploader("📤 Upload de imagem do código de barras", type=["png", "jpg", "jpeg"], key="cad_cb_upload")
+                if foto_codigo_upload is not None:
+                    imagem_bytes = foto_codigo_upload.getvalue() 
+                    codigos_lidos = ler_codigo_barras_api(imagem_bytes)
+                    if codigos_lidos:
+                        # Preenche o valor no session_state e força o re-run
+                        st.session_state["codigo_barras"] = codigos_lidos[0]
+                        st.success(f"Código lido via upload: **{st.session_state['codigo_barras']}**")
+                        st.rerun() 
+                    else:
+                        st.error("❌ Não foi possível ler nenhum código da imagem enviada.")
 
             # --- Cadastro da grade (variações) ---
             variações = []
@@ -601,6 +602,7 @@ with tab_cadastro:
                     var_cb_c1, var_cb_c2, var_cb_c3 = st.columns([2, 1, 1])
 
                     with var_cb_c1:
+                        # O campo de texto da variação lê o valor salvo na sessão
                         valor_cb_inicial = st.session_state.cb_grade_lidos.get(f"var_cb_{i}", "")
                         var_codigo_barras = st.text_input(
                             f"Código de barras variação {i+1}", 
@@ -621,14 +623,13 @@ with tab_cadastro:
                             key=f"var_cb_cam_{i}"
                         )
                     
-                    # Checa qual input de imagem foi usado (Upload ou Câmera)
+                    # Logica de leitura do Código de Barras para a Variação
                     foto_lida = var_foto_upload or var_foto_cam
                     if foto_lida:
-                        # **CORREÇÃO:** Usa getvalue() para upload e getbuffer() para camera input
                         imagem_bytes = foto_lida.getvalue() if var_foto_upload else foto_lida.getbuffer()
                         codigos_lidos = ler_codigo_barras_api(imagem_bytes)
                         if codigos_lidos:
-                            # Armazena o código lido no estado de sessão da grade
+                            # Preenche o valor na sessão da grade e força o re-run
                             st.session_state.cb_grade_lidos[f"var_cb_{i}"] = codigos_lidos[0]
                             st.success(f"CB Variação {i+1} lido: **{codigos_lidos[0]}**")
                             st.rerun() 
@@ -703,6 +704,7 @@ with tab_cadastro:
                         produtos = pd.concat([produtos, pd.DataFrame([novo_filho])], ignore_index=True)
 
                 st.session_state["produtos"] = produtos # Atualiza a sessão
+                # Limpa os estados para resetar o formulário
                 if 'cb_grade_lidos' in st.session_state:
                     del st.session_state.cb_grade_lidos 
                 if 'codigo_barras' in st.session_state:
@@ -1999,8 +2001,3 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
-
-
-
-
-
