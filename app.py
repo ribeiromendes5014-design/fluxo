@@ -843,8 +843,8 @@ def gestao_produtos():
                     preco_html = (
                         f'<div class="custom-price-block">'
                         f'<small>Custo: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>'
-                        f'**Valor:** R$ {pv:,.2f}<br>'
-                        f'**Cartao:** R$ {pc_calc:,.2f}'
+                        f'Valor: R$ {pv:,.2f}<br>'
+                        f'Cartao: R$ {pc_calc:,.2f}'
                         f'</div>'
                     )
                     c[4].markdown(preco_html, unsafe_allow_html=True)
@@ -2215,4 +2215,5 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
+
 
