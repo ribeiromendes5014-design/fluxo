@@ -28,59 +28,41 @@ except ImportError:
 
 def ler_codigo_barras_api(image_bytes):
     """
-    Decodifica códigos de barras de uma imagem usando a API pública WebQR (JSON).
-    É mais robusta contra mudanças de formato de resposta do que o HTML.
+    Tenta decodificar usando WebQR (QR Codes).
+    Se falhar, usa ZXing (QR + códigos de barras lineares).
     """
-    # API alternativa: WebQR (mais estável que ZXing e retorna JSON)
-    URL_DECODER_WEBQR = "https://api.qrserver.com/v1/read-qr-code/"
-    
+    # 1. Tenta com WebQR
+    codigos = []
     try:
-        # A API WebQR espera o arquivo no campo 'file' ou 'f'
+        URL_DECODER_WEBQR = "https://api.qrserver.com/v1/read-qr-code/"
         files = {"file": ("barcode.png", image_bytes, "image/png")} 
-        
-        # Faz a requisição com um timeout de 30 segundos
-        response = requests.post(URL_DECODER_WEBQR, files=files, timeout=30) 
+        response = requests.post(URL_DECODER_WEBQR, files=files, timeout=30)
+        if response.status_code == 200:
+            data = response.json()
+            if data and isinstance(data, list) and data[0].get('symbol'):
+                for symbol in data[0]['symbol']:
+                    if symbol['data'] is not None:
+                        codigos.append(symbol['data'].strip())
+    except:
+        pass
 
-        if response.status_code != 200:
-            if 'streamlit' in globals():
-                st.error(f"❌ Erro na API WebQR. Status HTTP: {response.status_code}")
-            return []
+    # 2. Se nada foi encontrado → fallback ZXing
+    if not codigos:
+        try:
+            url = "https://zxing.org/w/decode.jspx"
+            files = {"file": ("barcode.png", image_bytes, "image/png")}
+            resp = requests.post(url, files=files, timeout=30)
+            if resp.status_code == 200:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(resp.text, "html.parser")
+                pre = soup.find("pre")
+                if pre:
+                    codigos = [pre.get_text(strip=True)]
+        except:
+            pass
 
-        # A resposta é JSON.
-        data = response.json()
-        codigos = []
-        
-        # Navega na estrutura JSON da resposta
-        if data and isinstance(data, list) and data[0].get('symbol'):
-            for symbol in data[0]['symbol']:
-                # O campo 'data' contém o número do código de barras
-                if symbol['data'] is not None:
-                    codigos.append(symbol['data'].strip())
-        
-        if 'streamlit' in globals():
-             st.write("Debug API WebQR:", codigos)
-        
-        if not codigos and 'streamlit' in globals():
-             st.warning("⚠️ API WebQR não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
-             
-        return codigos
+    return codigos
 
-    except ConnectionError as ce:
-        # CAPTURA O ERRO 'Connection refused'
-        if 'streamlit' in globals():
-            st.error(f"❌ Erro de Conexão (Rede): Falha ao conectar ao servidor WebQR. Detalhe: {ce}")
-        return []
-        
-    except RequestException as e:
-        # CAPTURA OUTROS ERROS (Timeout, etc.)
-        if 'streamlit' in globals():
-            st.error(f"❌ Erro de Requisição (Timeout/Outro): Falha ao completar a chamada à API. Detalhe: {e}")
-        return []
-        
-    except Exception as e:
-        if 'streamlit' in globals():
-            st.error(f"❌ Erro inesperado: {e}")
-        return []
 
 
 # ==================== CONFIGURAÇÕES DO APLICATIVO E CONSTANTES ====================
@@ -2002,3 +1984,4 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
+
