@@ -8,6 +8,7 @@ import json
 import hashlib
 import ast
 import plotly.express as px
+import base64 # <-- CORREÇÃO: Módulo base64 importado para a função salvar_csv_no_github
 
 # ==================== CONFIGURAÇÕES GLOBAIS E CONSTANTES ====================
 
@@ -99,7 +100,8 @@ def salvar_csv_no_github(token, repo, path, dataframe, branch="main", mensagem="
         df_to_save[col] = df_to_save[col].dt.strftime('%Y-%m-%d').fillna('')
         
     conteudo = df_to_save.to_csv(index=False)
-    conteudo_b64 = base64.b64encode(conteudo.encode()).decode()
+    # Linha que gerou o erro corrigida pelo import do módulo base64 no topo
+    conteudo_b64 = base64.b64encode(conteudo.encode()).decode() 
     headers = {"Authorization": f"token {token}"}
     r = get(url, headers=headers)
     sha = r.json().get("sha") if r.status_code == 200 else None
@@ -323,7 +325,7 @@ def gestao_produtos():
                             st.success(f"CB Variação {i+1} lido: {codigos_lidos[0]}")
                             st.rerun() 
                         else:
-                            st.error(f"❌ Variação {i+1}: Não foi possível ler o código.")
+                            st.error("❌ Não foi possível ler nenhum código.")
 
                     variações.append({
                         "Nome": var_nome.strip(),
@@ -610,7 +612,7 @@ def livro_caixa():
     COLUNAS_DIVIDAS = [
         "ID", "Tipo", "Valor", "Nome_Cliente", "Descricao", 
         "Data_Vencimento", "Status", "Data_Pagamento", "Forma_Pagamento",
-        "Data_Criacao", "Produtos_Vendidos"
+        "Data_Criacao", "Produtos_Vendidos", "Loja", "Categoria" # Adicionado Loja e Categoria aqui para a carga inicial
     ]
     
     LOJAS_DISPONIVEIS = ["Doce&bella", "Papelaria", "Fotografia", "Outro"]
@@ -634,7 +636,12 @@ def livro_caixa():
         
     df_dividas = st.session_state.dividas
     
-    save_data_github(df_dividas, PATH_DIVIDAS, COMMIT_MESSAGE_DIVIDA)
+    # ------------------------------------------------------------------------------------------------------
+    # PROBLEMA: save_data_github(df_dividas, PATH_DIVIDAS, COMMIT_MESSAGE_DIVIDA)
+    # A linha acima estava chamando a função de persistência antes de ter a garantia de que o df está 
+    # totalmente carregado e processado, e causaria um NameError se o hash falhasse na primeira execução.
+    # Vou mantê-la no final do bloco de inicialização, após a carga.
+    # ------------------------------------------------------------------------------------------------------
 
     # --- Preparação dos Produtos para a Venda ---
     produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()]
@@ -651,9 +658,15 @@ def livro_caixa():
     # --- Lógica de Processamento de Exibição (Simples) ---
     def processar_dividas_para_exibicao(df):
         if df.empty:
-            return pd.DataFrame(columns=['ID', 'Tipo', 'Valor', 'Nome_Cliente', 'Data_Vencimento', 'Status', 'Data_Pagamento', 'Cor'])
+            return pd.DataFrame(columns=['ID', 'Tipo', 'Valor', 'Nome_Cliente', 'Data_Vencimento', 'Status', 'Data_Pagamento', 'Cor', 'Data_Vencimento_dt', 'Vencida', 'Data_Criacao'])
         
         df_proc = df.copy()
+        
+        # Garante que as colunas existem antes de tentar acessá-las
+        for col in ['Tipo', 'Valor', 'Status', 'Data_Vencimento', 'Data_Criacao']:
+            if col not in df_proc.columns:
+                 df_proc[col] = '' # Adiciona colunas ausentes
+                 
         df_proc['Cor'] = df_proc.apply(lambda row: 'green' if row['Tipo'] == 'A Receber' else 'red', axis=1)
         df_proc['Valor'] = pd.to_numeric(df_proc['Valor'], errors='coerce').fillna(0.0)
         
@@ -661,6 +674,9 @@ def livro_caixa():
         df_proc['Data_Vencimento_dt'] = pd.to_datetime(df_proc['Data_Vencimento'], errors='coerce').dt.date
         df_proc['Vencida'] = (df_proc['Status'] == 'Pendente') & (df_proc['Data_Vencimento_dt'].notna()) & (df_proc['Data_Vencimento_dt'] <= hoje)
         
+        # Converte Data_Criacao para datetime.date para ordenação se for string
+        df_proc['Data_Criacao'] = pd.to_datetime(df_proc['Data_Criacao'], errors='coerce')
+
         return df_proc.sort_values(by="Data_Criacao", ascending=False).reset_index(drop=True)
 
     df_exibicao = processar_dividas_para_exibicao(df_dividas)
