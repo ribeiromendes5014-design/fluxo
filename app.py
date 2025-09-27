@@ -842,9 +842,9 @@ def gestao_produtos():
                     # Formatando o bloco de preços de forma mais limpa
                     preco_html = (
                         f'<div class="custom-price-block">'
-                        f'<small>Custo: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>'
-                        f'Valor: R$ {pv:,.2f}<br>'
-                        f'Cartao: R$ {pc_calc:,.2f}'
+                        f'<small>C: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>'
+                        f'**V:** R$ {pv:,.2f}<br>'
+                        f'**C:** R$ {pc_calc:,.2f}'
                         f'</div>'
                     )
                     c[4].markdown(preco_html, unsafe_allow_html=True)
@@ -936,6 +936,7 @@ def gestao_produtos():
                 if not row.empty:
                     st.subheader("Editar produto")
                     row = row.iloc[0]
+                    # Layout dos inputs de edição (3 colunas, 3 itens por coluna)
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         novo_nome = st.text_input("Nome", value=row["Nome"], key=f"edit_nome_{eid}")
@@ -962,9 +963,12 @@ def gestao_produtos():
                                 novo_cb = codigo_lido[0]
                                 st.success(f"Código lido: **{novo_cb}**")
 
-                    col_save, col_cancel = st.columns([1, 1])
+                    # ALINHAMENTO DOS BOTÕES DE AÇÃO: Usar colunas vazias para empurrar os botões para a direita
+                    col_empty_left, col_save, col_cancel = st.columns([4, 1, 1])
+                    
                     with col_save:
-                        if st.button("Salvar alterações", key=f"save_{eid}"):
+                        # Botão "Salvar" 
+                        if st.button("💾 Salvar", key=f"save_{eid}", use_container_width=True):
                             
                             novo_preco_cartao = round(to_float(novo_preco_vista) / FATOR_CARTAO, 2) if to_float(novo_preco_vista) > 0 else 0.0
 
@@ -992,7 +996,8 @@ def gestao_produtos():
                             st.rerun()
                             
                     with col_cancel:
-                        if st.button("Cancelar edição", key=f"cancel_{eid}"):
+                        # Botão "Cancelar"
+                        if st.button("❌ Cancelar", key=f"cancel_{eid}", use_container_width=True):
                             del st.session_state["edit_prod"]
                             st.rerun()
 
@@ -2215,6 +2220,3 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
-
-
-
