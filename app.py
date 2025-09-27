@@ -987,6 +987,18 @@ def livro_caixa():
         if ' | ' in opcoes_str:
             return opcoes_str.split(' | ')[0]
         return None
+        
+    # Variáveis de controle de input manual
+    if "input_nome_prod_manual" not in st.session_state:
+        st.session_state.input_nome_prod_manual = ""
+    if "input_qtd_prod_manual" not in st.session_state:
+        st.session_state.input_qtd_prod_manual = 1.0
+    if "input_preco_prod_manual" not in st.session_state:
+        st.session_state.input_preco_prod_manual = 0.01
+    if "input_custo_prod_manual" not in st.session_state:
+        st.session_state.input_custo_prod_manual = 0.00
+    if "input_produto_selecionado" not in st.session_state:
+        st.session_state.input_produto_selecionado = ""
 
 
     # =================================================================
@@ -1096,7 +1108,7 @@ def livro_caixa():
                 
                 st.success(f"Soma Total da Venda Calculada: R$ {valor_calculado:,.2f}")
 
-            with st.expander("➕ Adicionar/Limpar Lista de Produtos", expanded=False):
+            with st.expander("➕ Adicionar/Limpar Lista de Produtos", expanded=True):
                 with st.container():
                     st.markdown("##### Produtos Atuais:")
                     if st.session_state.lista_produtos:
@@ -1106,29 +1118,68 @@ def livro_caixa():
                         st.info("Lista de produtos vazia.")
 
                     # --- Inputs de Produto para Adicionar ---
-                    produto_selecionado = st.selectbox("Selecione o Produto (ID | Nome)", opcoes_produtos, key="input_produto_selecionado")
+                    # Usa o valor do session state para que ele possa ser limpo depois da submissão
+                    produto_selecionado = st.selectbox(
+                        "Selecione o Produto (ID | Nome)", 
+                        opcoes_produtos, 
+                        key="input_produto_selecionado",
+                        index=opcoes_produtos.index(st.session_state.input_produto_selecionado) if st.session_state.input_produto_selecionado in opcoes_produtos else 0
+                    )
                     
                     
                     if produto_selecionado == OPCAO_MANUAL:
                         # --- ENTRADA MANUAL ---
-                        nome_produto_manual = st.text_input("Nome do Produto (Manual)", key="input_nome_prod_manual")
-                        quantidade_manual = st.number_input("Qtd Manual", min_value=0.01, value=1.0, step=1.0, key="input_qtd_prod_manual")
-                        preco_unitario_manual = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", key="input_preco_prod_manual")
-                        custo_unitario_manual = st.number_input("Custo Unitário (R$)", min_value=0.00, value=0.00, format="%.2f", key="input_custo_prod_manual")
+                        nome_produto_manual = st.text_input(
+                            "Nome do Produto (Manual)", 
+                            value=st.session_state.input_nome_prod_manual,
+                            key="input_nome_prod_manual"
+                        )
+                        quantidade_manual = st.number_input(
+                            "Qtd Manual", 
+                            min_value=0.01, 
+                            value=st.session_state.input_qtd_prod_manual, 
+                            step=1.0, 
+                            key="input_qtd_prod_manual"
+                        )
+                        preco_unitario_manual = st.number_input(
+                            "Preço Unitário (R$)", 
+                            min_value=0.01, 
+                            format="%.2f", 
+                            value=st.session_state.input_preco_prod_manual,
+                            key="input_preco_prod_manual"
+                        )
+                        custo_unitario_manual = st.number_input(
+                            "Custo Unitário (R$)", 
+                            min_value=0.00, 
+                            value=st.session_state.input_custo_prod_manual,
+                            format="%.2f", 
+                            key="input_custo_prod_manual"
+                        )
+
+                        def callback_adicionar_manual(nome, qtd, preco, custo):
+                            if nome and qtd > 0:
+                                st.session_state.lista_produtos.append({
+                                    "Produto_ID": "", 
+                                    "Produto": nome,
+                                    "Quantidade": qtd,
+                                    "Preço Unitário": preco,
+                                    "Custo Unitário": custo 
+                                })
+                                # Limpa os campos após a adição bem-sucedida
+                                st.session_state.input_nome_prod_manual = ""
+                                st.session_state.input_qtd_prod_manual = 1.0
+                                st.session_state.input_preco_prod_manual = 0.01
+                                st.session_state.input_custo_prod_manual = 0.00
+                                st.session_state.input_produto_selecionado = "" # Limpa o seletor
 
                         if st.button("Adicionar Item Manual", key="adicionar_item_manual_button", use_container_width=True):
-                             if nome_produto_manual and quantidade_manual > 0:
-                                # **CORREÇÃO:** Adiciona o item à lista e *depois* força o rerun
-                                st.session_state.lista_produtos.append({
-                                    "Produto_ID": "", # Vazio para item manual (sem controle de estoque)
-                                    "Produto": nome_produto_manual,
-                                    "Quantidade": quantidade_manual,
-                                    "Preço Unitário": preco_unitario_manual,
-                                    "Custo Unitário": custo_unitario_manual 
-                                })
-                                st.rerun()
-                             else:
-                                 st.warning("Preencha o nome e a quantidade para o item manual.")
+                             callback_adicionar_manual(
+                                 nome_produto_manual, 
+                                 quantidade_manual, 
+                                 preco_unitario_manual, 
+                                 custo_unitario_manual
+                             )
+                             st.rerun() # Força a atualização da lista de produtos e do seletor
                         # --- FIM ENTRADA MANUAL ---
 
                     
@@ -1152,22 +1203,29 @@ def livro_caixa():
                                 preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=float(preco_sugerido), key="input_preco_prod_edit")
                             
                             st.caption(f"Custo Unitário: R$ {custo_unit:,.2f}")
-                            
-                            if st.button("Adicionar Item à Venda", key="adicionar_item_button", use_container_width=True):
-                                if quantidade_input > 0 and quantidade_input <= estoque_disp:
-                                    # **CORREÇÃO:** Adiciona o item à lista e *depois* força o rerun
+
+                            def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo):
+                                if qtd > 0 and qtd <= estoque_disp:
                                     st.session_state.lista_produtos.append({
-                                        "Produto_ID": produto_id_selecionado, # Chave para débito de estoque
-                                        "Produto": nome_produto,
-                                        "Quantidade": quantidade_input,
-                                        "Preço Unitário": preco_unitario_input,
-                                        "Custo Unitário": custo_unit 
+                                        "Produto_ID": prod_id, # Chave para débito de estoque
+                                        "Produto": prod_nome,
+                                        "Quantidade": qtd,
+                                        "Preço Unitário": preco,
+                                        "Custo Unitário": custo 
                                     })
-                                    st.rerun()
-                                elif quantidade_input > estoque_disp:
-                                    st.warning(f"A quantidade ({quantidade_input}) excede o estoque disponível ({estoque_disp}).")
+                                    st.session_state.input_produto_selecionado = "" # Limpa o seletor
                                 else:
-                                    st.warning("A quantidade deve ser maior que zero.")
+                                    st.warning("A quantidade excede o estoque ou é inválida.")
+
+                            if st.button("Adicionar Item à Venda", key="adicionar_item_button", use_container_width=True):
+                                callback_adicionar_estoque(
+                                    produto_id_selecionado, 
+                                    nome_produto, 
+                                    quantidade_input, 
+                                    preco_unitario_input, 
+                                    custo_unit
+                                )
+                                st.rerun()
                         # --- FIM ENTRADA DE ESTOQUE ---
                         
                     
