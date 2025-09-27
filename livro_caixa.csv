@@ -42,3 +42,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-09-27,Doce&bella,Tais,25.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Corretivo"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 10.0, ""Custo Unit\u00e1rio"": 0.0}, {""Produto_ID"": """", ""Produto"": ""Primer"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 15.0, ""Custo Unit\u00e1rio"": 0.0}]",,Pendente,
 2025-09-27,Doce&bella,Vanessa,10.0,Dinheiro,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Chaveiro Stitch"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 10.0, ""Custo Unit\u00e1rio"": 0.0}]",,Pendente,
 2025-09-27,Doce&bella,Andriele,16.9,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Rimel"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 16.9, ""Custo Unit\u00e1rio"": 0.0}]",,Pendente,
+2025-09-27,Doce&bella,Tininha,70.0,PIX,Entrada,,,Pendente,2025-10-01
