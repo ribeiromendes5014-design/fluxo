@@ -757,100 +757,131 @@ def gestao_produtos():
         else:
             produtos_pai = produtos_filtrados[produtos_filtrados["PaiID"].isnull()]
             produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull()]
+            
+            # --- Cabeçalho da Tabela (Melhor UX) ---
+            st.markdown("""
+                <style>
+                .custom-header {
+                    display: grid;
+                    grid-template-columns: 80px 2.5fr 1fr 1fr 1.5fr 0.5fr 0.5fr;
+                    font-weight: bold;
+                    padding: 8px 0;
+                    border-bottom: 1px solid #ccc;
+                    margin-bottom: 5px;
+                }
+                .custom-row {
+                    display: grid;
+                    grid-template-columns: 80px 2.5fr 1fr 1fr 1.5fr 0.5fr 0.5fr;
+                    padding: 5px 0;
+                    align-items: center;
+                    gap: 5px;
+                }
+                .stButton > button {
+                    height: 32px;
+                    width: 32px;
+                    padding: 0;
+                    margin: 0;
+                    border-radius: 5px;
+                    border: 1px solid #ddd;
+                    background-color: #f0f2f6;
+                }
+                .stButton > button:hover {
+                    background-color: #e0e0e0;
+                }
+                </style>
+                <div class="custom-header">
+                    <div></div>
+                    <div>Produto & Marca</div>
+                    <div>Estoque</div>
+                    <div>Validade</div>
+                    <div>Preços (Custo/Vista/Cartão)</div>
+                    <div>Edição</div>
+                    <div>Excluir</div>
+                </div>
+            """, unsafe_allow_html=True)
+
 
             for index, pai in produtos_pai.iterrows():
                 with st.container(border=True):
-                    # Dividindo em mais colunas para os detalhes de preço
-                    c = st.columns([1, 2.5, 1, 1, 1, 0.5, 0.5]) # Imagem, Nome/Marca/Cat, Estoque, Validade, Preços, Editar, Excluir
+                    # Usaremos 7 colunas, mas a organização visual será feita com markdown/HTML para melhor controle.
+                    c = st.columns([1, 2.5, 1, 1, 1.5, 0.5, 0.5]) 
                     
+                    # --- 1. Imagem ---
                     if str(pai["FotoURL"]).strip():
                         try:
-                            c[0].image(pai["FotoURL"], width=80)
+                            c[0].image(pai["FotoURL"], width=60)
                         except Exception:
                             c[0].write("Sem imagem")
                     else:
                         c[0].write("—")
 
+                    # --- 2. Nome/Marca/Categoria ---
                     cb = f' • CB: {pai["CodigoBarras"]}' if str(pai.get("CodigoBarras", "")).strip() else ""
-                    c[1].markdown(f"**{pai['Nome']}** \nMarca: {pai['Marca']} \nCat: {pai['Categoria']}{cb}")
+                    c[1].markdown(f"**{pai['Nome']}**\n<small>Marca: {pai['Marca']} | Cat: {pai['Categoria']}</small>", unsafe_allow_html=True)
                     
+                    # --- 3. Estoque ---
                     estoque_total = pai['Quantidade']
                     filhos_do_pai = produtos_filho[produtos_filho["PaiID"] == str(pai["ID"])]
                     if not filhos_do_pai.empty:
                         estoque_total = filhos_do_pai['Quantidade'].sum()
                     
-                    c[2].markdown(f"**Estoque Total:** {estoque_total}")
-                    c[3].write(f"Validade: {pai['Validade']}")
+                    c[2].markdown(f"**{estoque_total}**")
                     
-                    # Detalhes de preço do item Pai
+                    # --- 4. Validade ---
+                    c[3].write(f"{pai['Validade']}")
+                    
+                    # --- 5. Detalhes de Preço (Custo/Vista/Cartão) ---
                     pv = to_float(pai['PrecoVista'])
                     pc = to_float(pai['PrecoCartao'])
                     pc_calc = round(pv / FATOR_CARTAO, 2)
                     
-                    # Exibe os preços e o custo
                     c[4].markdown(
-                        f"**Custo:** R$ {to_float(pai['PrecoCusto']):,.2f}\n"
-                        f"**Vista:** R$ {pv:,.2f}\n"
-                        f"**Cartão:** R$ {pc_calc:,.2f}"
+                        f"<small>C: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>"
+                        f"**V:** R$ {pv:,.2f}<br>"
+                        f"**C:** R$ {pc_calc:,.2f}",
+                        unsafe_allow_html=True
                     )
                     
-                    col_btn_edit = c[5]
-                    col_btn_delete = c[6]
-
+                    # --- 6 & 7. Ações Minimalistas (Editar & Excluir) ---
                     try:
                         eid = int(pai["ID"])
                     except Exception:
-                        continue
-                    
-                    # BOTÕES MINIMALISTAS
-                    if col_btn_edit.button("✏️", key=f"edit_pai_{index}_{eid}", help="Editar produto"):
+                        eid = index
+
+                    if c[5].button("✏️", key=f"edit_pai_{index}_{eid}", help="Editar produto"):
                         st.session_state["edit_prod"] = eid
                         st.rerun()
 
-                    if col_btn_delete.button("🗑️", key=f"del_pai_{index}_{eid}", help="Excluir produto"):
-                        # O Streamlit não tem confirmação em linha, então usamos a exclusão direta aqui
-                        # O usuário terá que recarregar para ver o item sumir
-                        
-                        # Apaga o pai e os filhos
+                    if c[6].button("🗑️", key=f"del_pai_{index}_{eid}", help="Excluir produto"):
+                        # Lógica de exclusão direta (mais simples para UX)
                         produtos = produtos[produtos["ID"] != str(eid)]
                         produtos = produtos[produtos["PaiID"] != str(eid)]
-
                         st.session_state["produtos"] = produtos
                         
                         nome_pai = str(pai.get('Nome', 'Produto Desconhecido'))
-                        
-                        if nome_pai.lower() in ('nan', 'none', ''):
-                            nome_pai = 'Produto Desconhecido'
-                            
-                        commit_msg_pai = f"Exclusão do produto pai {nome_pai}"
-
-                        if salvar_produtos_no_github(produtos, commit_msg_pai):
+                        if salvar_produtos_no_github(produtos, f"Exclusão do produto pai {nome_pai}"):
                             inicializar_produtos.clear() 
-                            st.warning(f"Produto {nome_pai} e suas variações excluídas! Recarregando...")
-                        else:
-                            st.error("❌ Erro ao salvar a exclusão no GitHub. O produto pode reaparecer.")
-                        
                         st.rerun()
                             
 
                     if not filhos_do_pai.empty:
                         with st.expander(f"Variações de {pai['Nome']} ({len(filhos_do_pai)} variações)"):
                             for index_var, var in filhos_do_pai.iterrows():
-                                c_var = st.columns([1, 2.5, 1, 1, 1, 0.5, 0.5]) # Mesmo layout
+                                c_var = st.columns([1, 2.5, 1, 1, 1.5, 0.5, 0.5]) 
                                 
                                 if str(var["FotoURL"]).strip():
                                     try:
                                         c_var[0].image(var["FotoURL"], width=60)
                                     except Exception:
-                                        c_var[0].write("Sem imagem")
+                                        c_var[0].write("—")
                                 else:
                                     c_var[0].write("—")
 
                                 cb_var = f' • CB: {var["CodigoBarras"]}' if str(var.get("CodigoBarras", "")).strip() else ""
-                                c_var[1].markdown(f"**{var['Nome']}** \nMarca: {var['Marca']} \nCat: {var['Categoria']}{cb_var}")
+                                c_var[1].markdown(f"**{var['Nome']}**\n<small>Marca: {var['Marca']} | Cat: {var['Categoria']}</small>", unsafe_allow_html=True)
                                 
-                                c_var[2].write(f"Estoque: {var['Quantidade']}")
-                                c_var[3].write(f"Validade: {var['Validade']}")
+                                c_var[2].write(f"{var['Quantidade']}")
+                                c_var[3].write(f"{var['Validade']}")
 
                                 # Detalhes de preço da Variação
                                 pv_var = to_float(var['PrecoVista'])
@@ -858,41 +889,28 @@ def gestao_produtos():
                                 pc_var_calc = round(pv_var / FATOR_CARTAO, 2)
                                 
                                 c_var[4].markdown(
-                                    f"**Custo:** R$ {to_float(var['PrecoCusto']):,.2f}\n"
-                                    f"**Vista:** R$ {pv_var:,.2f}\n"
-                                    f"**Cartão:** R$ {pc_var_calc:,.2f}"
+                                    f"<small>C: R$ {to_float(var['PrecoCusto']):,.2f}</small><br>"
+                                    f"**V:** R$ {pv_var:,.2f}<br>"
+                                    f"**C:** R$ {pc_var_calc:,.2f}",
+                                    unsafe_allow_html=True
                                 )
                                 
-                                col_btn_edit_var = c_var[5]
-                                col_btn_delete_var = c_var[6]
-
                                 try:
                                     eid_var = int(var["ID"])
                                 except Exception:
-                                    continue
+                                    eid_var = index_var
                                 
-                                if col_btn_edit_var.button("✏️", key=f"edit_filho_{index_var}_{eid_var}", help="Editar variação"):
+                                if c_var[5].button("✏️", key=f"edit_filho_{index_var}_{eid_var}", help="Editar variação"):
                                     st.session_state["edit_prod"] = eid_var
                                     st.rerun()
 
-                                if col_btn_delete_var.button("🗑️", key=f"del_filho_{index_var}_{eid_var}", help="Excluir variação"):
-                                    
+                                if c_var[6].button("🗑️", key=f"del_filho_{index_var}_{eid_var}", help="Excluir variação"):
                                     produtos = produtos[produtos["ID"] != str(eid_var)]
                                     st.session_state["produtos"] = produtos
                                     
                                     nome_var = str(var.get('Nome', 'Variação Desconhecida'))
-                                    
-                                    if nome_var.lower() in ('nan', 'none', ''):
-                                        nome_var = 'Variação Desconhecida'
-                                        
-                                    commit_msg_var = f"Exclusão da variação {nome_var}"
-                                    
-                                    if salvar_produtos_no_github(produtos, commit_msg_var):
+                                    if salvar_produtos_no_github(produtos, f"Exclusão da variação {nome_var}"):
                                         inicializar_produtos.clear() 
-                                        st.warning(f"Variação {nome_var} excluída! Recarregando...")
-                                    else:
-                                        st.error("❌ Erro ao salvar a exclusão no GitHub. O produto pode reaparecer.")
-
                                     st.rerun()
 
             # Editor inline (para pais e filhos)
@@ -2065,6 +2083,7 @@ def livro_caixa():
                             color='Total Venda'
                         )
                         fig_top_venda.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
+                            
                         st.plotly_chart(fig_top_venda, use_container_width=True)
                         
                         if df_produtos_agregados['Lucro Bruto'].sum() > 0:
