@@ -870,12 +870,11 @@ with tab_rel:
     loja_filtro_relatorio = "Todas as Lojas"  # Inicializa fora da condicional
     
     # === CORREÇÃO CRÍTICA DO NAMERROR ===
+    # Garante que df_filtrado_loja é definida em AMBOS os caminhos
     if df_exibicao.empty:
         st.info("Não há dados suficientes para gerar relatórios e filtros.")
         # Se df_exibicao estiver vazio, df_filtrado_loja deve ser um DF vazio com todas as colunas esperadas
-        df_filtrado_loja = pd.DataFrame(columns=COLUNAS_PADRAO + [
-            "ID Visível", "original_index", "Data_dt", "Saldo Acumulado", "Cor_Valor"
-        ])
+        df_filtrado_loja = pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
         
     else:
         # --- 4. FILTRO GLOBAL DE LOJA ---
@@ -1238,4 +1237,3 @@ with tab_rel:
                     col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
                     col2_f.metric("Saídas", f"R$ {saidas_filtro:,.2f}")
                     col3_f.metric("Saldo", f"R$ {saldo_filtro:,.2f}")
-
