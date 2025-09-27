@@ -802,7 +802,7 @@ def gestao_produtos():
                                             
                                         commit_msg_var = f"Exclusão da variação {nome_var}"
                                         
-                                        if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, commit_msg_var):
+                                        if salvar_produtos_no_github(produtos, commit_msg_pai):
                                             inicializar_produtos.clear() # Limpa o cache para forçar o recarregamento do novo CSV
                                             st.warning(f"Variação {nome_var} excluída!")
                                         else:
@@ -1936,4 +1936,5 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
+
 
