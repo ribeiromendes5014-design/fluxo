@@ -729,7 +729,14 @@ def gestao_produtos():
                             
                             # Tenta salvar imediatamente e limpa o cache
                             nome_pai = str(pai.get('Nome', 'Produto Desconhecido'))
-                            if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, f"Exclusão do produto pai {nome_pai}"):
+                            
+                            # Correção de robustez: Garante que o nome seja uma string válida
+                            if nome_pai.lower() in ('nan', 'none', ''):
+                                nome_pai = 'Produto Desconhecido'
+                                
+                            commit_msg_pai = f"Exclusão do produto pai {nome_pai}"
+
+                            if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, commit_msg_pai):
                                 inicializar_produtos.clear() # Limpa o cache para forçar o recarregamento do novo CSV
                                 st.warning(f"Produto {nome_pai} e suas variações excluídas!")
                             else:
@@ -776,7 +783,14 @@ def gestao_produtos():
                                         
                                         # Tenta salvar imediatamente e limpa o cache
                                         nome_var = str(var.get('Nome', 'Variação Desconhecida'))
-                                        if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, f"Exclusão da variação {nome_var}"):
+                                        
+                                        # Correção de robustez
+                                        if nome_var.lower() in ('nan', 'none', ''):
+                                            nome_var = 'Variação Desconhecida'
+                                            
+                                        commit_msg_var = f"Exclusão da variação {nome_var}"
+                                        
+                                        if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, commit_msg_var):
                                             inicializar_produtos.clear() # Limpa o cache para forçar o recarregamento do novo CSV
                                             st.warning(f"Variação {nome_var} excluída!")
                                         else:
@@ -1301,7 +1315,7 @@ def livro_caixa():
         contas_a_receber_vencidas = df_vencidas[df_vencidas["Tipo"] == "Entrada"]["Valor"].abs().sum()
         contas_a_pagar_vencidas = df_vencidas[df_vencidas["Tipo"] == "Saída"]["Valor"].abs().sum()
         
-        num_receber = df_vencidas[df_vencidas["Tipo"] == "Entrada"].shape[0]
+        num_receber = df_vencidas[df_vendas["Tipo"] == "Entrada"].shape[0]
         num_pagar = df_vencidas[df_vencidas["Tipo"] == "Saída"].shape[0] 
 
         if num_receber > 0 or num_pagar > 0:
