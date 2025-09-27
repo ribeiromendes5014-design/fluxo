@@ -668,17 +668,22 @@ with tab_mov:
     # 1. Filtrar transações pendentes com data de pagamento válida
     df_pendente_alerta = df_exibicao[
         (df_exibicao["Status"] == "Pendente") & 
-        # A coluna Data Pagamento já é datetime.date devido à correção em processar_dataframe
         (pd.notna(df_exibicao["Data Pagamento"]))
     ].copy()
 
-    # 2. Filtrar apenas as vencidas (Data Pagamento <= hoje)
-    # A comparação agora funciona porque a coluna é consistentemente datetime.date
+    # 2. CONVERSÃO EXPLÍCITA E FILTRAGEM
+    # Garante que a coluna está no tipo datetime.date para a comparação
+    df_pendente_alerta["Data Pagamento"] = pd.to_datetime(df_pendente_alerta["Data Pagamento"], errors='coerce').dt.date
+    
+    # Remove qualquer linha que não conseguiu ser convertida após a filtragem inicial
+    df_pendente_alerta.dropna(subset=["Data Pagamento"], inplace=True)
+    
+    # 3. Filtrar apenas as vencidas (Data Pagamento <= hoje)
     df_vencidas = df_pendente_alerta[
         df_pendente_alerta["Data Pagamento"] <= hoje_date
     ]
 
-    # 3. Calcular contagens e somas
+    # 4. Calcular contagens e somas
     contas_a_receber_vencidas = df_vencidas[df_vencidas["Tipo"] == "Entrada"]["Valor"].abs().sum()
     contas_a_pagar_vencidas = df_vencidas[df_vencidas["Tipo"] == "Saída"]["Valor"].abs().sum()
     
