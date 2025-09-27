@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, date
 import requests
 from io import StringIO
 import io, os
-import json
+import json 
 # Importa a biblioteca PyGithub para gerenciamento de persistência
 from github import Github
 import plotly.express as px
@@ -24,23 +24,16 @@ except KeyError:
 COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit (com produtos/categorias)"
 COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa"
 COMMIT_MESSAGE_EDIT = "Edita movimentação via Streamlit"
-COMMIT_MESSAGE_DEBT_REALIZED = "Conclui dívidas pendentes"
 
 ARQ_LOCAL = "livro_caixa.csv"
-# COLUNA PADRÃO ATUALIZADA: Adiciona 'Status' e 'Data Pagamento'
-COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo", "Produtos Vendidos", "Categoria", "Status", "Data Pagamento"]
-# NOVO: Lista completa de colunas processadas para garantir consistência no fallback do DataFrame
-COLUNAS_COMPLETAS_PROCESSADAS = COLUNAS_PADRAO + ["ID Visível", "original_index", "Data_dt", "Saldo Acumulado", "Cor_Valor"]
-
+# COLUNA PADRÃO ATUALIZADA para incluir 'Produtos Vendidos' e 'Categoria'
+COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo", "Produtos Vendidos", "Categoria"]
 
 # Lojas disponíveis para seleção
 LOJAS_DISPONIVEIS = ["Doce&bella", "Papelaria", "Fotografia", "Outro"]
 
 # Categorias de Saída (Centro de Custo)
 CATEGORIAS_SAIDA = ["Aluguel", "Salários/Pessoal", "Marketing/Publicidade", "Fornecedores/Matéria Prima", "Despesas Fixas", "Impostos/Taxas", "Outro/Diversos", "Não Categorizado"]
-
-# Formas de pagamento para conclusão de dívidas
-FORMAS_PAGAMENTO = ["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"]
 
 # ========================================================
 # FUNÇÕES DE PERSISTÊNCIA (adaptadas do loja.py)
@@ -99,8 +92,7 @@ def carregar_livro_caixa():
     # Garante que as colunas padrão existam e preenche novas colunas com ""
     for col in COLUNAS_PADRAO:
         if col not in df.columns:
-            # Novo: 'Status' padrão é 'Realizada' para compatibilidade com dados antigos
-            df[col] = "Realizada" if col == "Status" else "" 
+            df[col] = "" 
             
     # Retorna apenas as colunas padrão na ordem correta
     return df[COLUNAS_PADRAO]
@@ -112,15 +104,11 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
 
     # Prepara DataFrame para envio ao GitHub
     df_temp = df.copy()
-    
-    # Prepara os dados para serem salvos como string (CSV)
-    # Garante que as datas sejam strings no formato ISO para salvar corretamente
-    for col_date in ['Data', 'Data Pagamento']:
-        if col_date in df_temp.columns:
-            # Converte para datetime e depois para string ISO se for uma data válida
-            df_temp[col_date] = pd.to_datetime(df_temp[col_date], errors='coerce').apply(
-                lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
-            )
+    if 'Data' in df_temp.columns:
+        # Garante que as datas sejam strings no formato ISO para salvar corretamente
+        df_temp['Data'] = df_temp['Data'].apply(
+            lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) and hasattr(x, 'strftime') else x
+        )
 
     try:
         g = Github(TOKEN)
@@ -153,31 +141,18 @@ def processar_dataframe(df):
     Retorna o DataFrame processado.
     """
     if df.empty:
-        # Retorna DF vazio com todas as colunas esperadas (incluindo as colunas de processamento)
-        return pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
+        return pd.DataFrame(columns=COLUNAS_PADRAO + ["ID Visível", "original_index", "Data_dt", "Saldo Acumulado"])
         
     df_proc = df.copy()
     
-    # --- GARANTE A EXISTÊNCIA DAS COLUNAS ESSENCIAIS ANTES DO PROCESSAMENTO ---
-    # As colunas são garantidas em carregar_livro_caixa, mas reforçamos a tipagem aqui.
-    if 'Categoria' not in df_proc.columns:
-        df_proc['Categoria'] = ""
-    if 'Status' not in df_proc.columns: 
-        df_proc['Status'] = "Realizada"
-    if 'Data Pagamento' not in df_proc.columns:
-        df_proc['Data Pagamento'] = pd.NaT 
-    # --- FIM GARANTIA DE COLUNAS ---
-
     # Conversão de Valor
     df_proc["Valor"] = pd.to_numeric(df_proc["Valor"], errors="coerce").fillna(0.0)
 
-    # Conversão de Data e Data Pagamento
+    # Conversão de Data
     df_proc["Data"] = pd.to_datetime(df_proc["Data"], errors='coerce').dt.date
     df_proc["Data_dt"] = pd.to_datetime(df_proc["Data"], errors='coerce') # Data para ordenação
     
-    df_proc["Data Pagamento"] = pd.to_datetime(df_proc["Data Pagamento"], errors='coerce').dt.date
-    
-    # Remove linhas onde a data de transação não pôde ser convertida
+    # Remove linhas onde a data não pôde ser convertida
     df_proc.dropna(subset=['Data_dt'], inplace=True)
     
     # --- RESETAR O ÍNDICE E CALCULAR SALDO ACUMULADO ---
@@ -186,35 +161,17 @@ def processar_dataframe(df):
     df_proc = df_proc.reset_index(drop=False) 
     df_proc.rename(columns={'index': 'original_index'}, inplace=True)
     
-    # Inicializa Saldo Acumulado para todas as linhas
-    df_proc['Saldo Acumulado'] = 0.0 
+    # 2. Calula Saldo Acumulado (requer ordenação por data ascendente)
+    df_proc_sorted_asc = df_proc.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]).reset_index(drop=True)
+    df_proc_sorted_asc['Saldo Acumulado'] = df_proc_sorted_asc['Valor'].cumsum()
     
-    # Filtra o DataFrame para calcular o Saldo Acumulado APENAS com transações REALIZADAS
-    df_realizadas = df_proc[df_proc['Status'] == 'Realizada'].copy()
-
-    if not df_realizadas.empty:
-        # 2. Calula Saldo Acumulado (requer ordenação por data ascendente)
-        # Ordena apenas as realizadas para o cálculo de cumsum
-        df_realizadas_sorted_asc = df_realizadas.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]).reset_index(drop=True)
-        df_realizadas_sorted_asc['TEMP_SALDO'] = df_realizadas_sorted_asc['Valor'].cumsum()
-        
-        # Junta o saldo acumulado de volta ao DF principal (usando o original_index)
-        df_proc = pd.merge(
-            df_proc, 
-            df_realizadas_sorted_asc[['original_index', 'TEMP_SALDO']], 
-            on='original_index', 
-            how='left'
-        )
-        
-        # 3. CORREÇÃO: Usa ffill para propagar o último saldo realizado para as linhas pendentes (que têm NaN)
-        df_proc['Saldo Acumulado'] = df_proc['TEMP_SALDO'].fillna(method='ffill').fillna(0)
-        df_proc.drop(columns=['TEMP_SALDO'], inplace=True, errors='ignore')
-
-
-    # 4. Retorna à ordenação para exibição (Data DESC)
-    df_proc = df_proc.sort_values(by="Data_dt", ascending=False).reset_index(drop=True)
+    # 3. Retorna à ordenação para exibição (Data DESC)
+    df_proc = df_proc_sorted_asc.sort_values(by="Data_dt", ascending=False).reset_index(drop=True)
     df_proc.insert(0, 'ID Visível', df_proc.index + 1)
     
+    # Garante que a coluna Categoria exista, mesmo que vazia em arquivos antigos
+    if 'Categoria' not in df_proc.columns:
+        df_proc['Categoria'] = ""
     
     # Adiciona a coluna de Cor para formatação condicional
     df_proc['Cor_Valor'] = df_proc.apply(lambda row: 'green' if row['Tipo'] == 'Entrada' and row['Valor'] >= 0 else 'red', axis=1)
@@ -222,66 +179,35 @@ def processar_dataframe(df):
     return df_proc
 
 def calcular_resumo(df):
-    """Calcula e retorna o resumo financeiro (Entradas, Saídas, Saldo) APENAS de transações Realizadas."""
-    # Filtra apenas transações realizadas para o resumo do caixa
-    df_realizada = df[df['Status'] == 'Realizada']
-    
-    if df_realizada.empty:
+    """Calcula e retorna o resumo financeiro (Entradas, Saídas, Saldo)."""
+    if df.empty:
         return 0.0, 0.0, 0.0
         
-    total_entradas = df_realizada[df_realizada["Tipo"] == "Entrada"]["Valor"].sum()
-    total_saidas = abs(df_realizada[df_realizada["Tipo"] == "Saída"]["Valor"].sum()) 
-    saldo = df_realizada["Valor"].sum()
+    total_entradas = df[df["Tipo"] == "Entrada"]["Valor"].sum()
+    total_saidas = abs(df[df["Tipo"] == "Saída"]["Valor"].sum()) 
+    saldo = df["Valor"].sum()
     return total_entradas, total_saidas, saldo
 
 # Função para formatar a coluna 'Produtos Vendidos'
 def format_produtos_resumo(produtos_json):
-    if pd.isna(produtos_json) or produtos_json == "":
-        return ""
-    
     if produtos_json:
         try:
-            # Tenta carregar o JSON
             produtos = json.loads(produtos_json)
-            # Garante que é uma lista de dicionários
-            if not isinstance(produtos, list) or not all(isinstance(p, dict) for p in produtos):
-                return "Dados inválidos"
-
             count = len(produtos)
             if count > 0:
-                primeiro = produtos[0].get('Produto', 'Produto Desconhecido')
-                
-                # Inicializa totais
-                total_custo = 0.0
-                total_venda = 0.0
-
-                # Itera para calcular custos e vendas, tratando erros de conversão
-                for p in produtos:
-                    try:
-                        qtd = float(p.get('Quantidade', 0))
-                        preco_unitario = float(p.get('Preço Unitário', 0))
-                        custo_unitario = float(p.get('Custo Unitário', 0))
-                        
-                        total_custo += custo_unitario * qtd
-                        total_venda += preco_unitario * qtd
-                    except ValueError:
-                        # Ignora produtos com valores não numéricos
-                        continue
-                        
+                primeiro = produtos[0]['Produto']
+                # Adiciona informação de lucro (se disponível)
+                # Garante valores padrão (0) se as chaves estiverem faltando
+                total_custo = sum(float(p.get('Custo Unitário', 0)) * float(p.get('Quantidade', 0)) for p in produtos)
+                total_venda = sum(float(p.get('Preço Unitário', 0)) * float(p.get('Quantidade', 0)) for p in produtos)
                 lucro = total_venda - total_custo
                 
                 lucro_str = f"| Lucro R$ {lucro:,.2f}" if lucro != 0 else ""
                 
                 return f"{count} item(s): {primeiro}... {lucro_str}"
         except:
-            return "Erro na formatação/JSON Inválido"
+            return "Erro na formatação"
     return ""
-
-# Função para aplicar o destaque condicional na coluna Valor
-def highlight_value(row):
-    color = row['Cor_Valor']
-    return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
-
 
 # ==================== INTERFACE STREAMLIT ====================
 st.set_page_config(layout="wide", page_title="Livro Caixa", page_icon="📘") 
@@ -296,9 +222,6 @@ if "lista_produtos" not in st.session_state:
     
 if "edit_id" not in st.session_state:
     st.session_state.edit_id = None
-    
-if "operacao_selecionada" not in st.session_state:
-    st.session_state.operacao_selecionada = "Editar" 
 
 # DataFrame usado na exibição e análise (já processado)
 df_exibicao = processar_dataframe(st.session_state.df)
@@ -319,14 +242,12 @@ default_forma = "Dinheiro"
 default_tipo = "Entrada"
 default_produtos_json = ""
 default_categoria = CATEGORIAS_SAIDA[0]
-default_status = "Realizada" # Novo campo
-default_data_pagamento = None # Novo campo
 
 # Se estiver em modo de edição, carrega os dados
 if edit_mode:
     original_idx_to_edit = st.session_state.edit_id
     
-    # Filtra o df_exibicao (que tem o original_index)
+    # Encontra a linha no df_exibicao (que tem o index limpo)
     linha_df_exibicao = df_exibicao[df_exibicao['original_index'] == original_idx_to_edit]
 
     if not linha_df_exibicao.empty:
@@ -334,29 +255,24 @@ if edit_mode:
         
         # Define os valores padrão para a edição
         default_loja = movimentacao_para_editar['Loja']
-        default_data = movimentacao_para_editar['Data'] if pd.notna(movimentacao_para_editar['Data']) else datetime.now().date()
+        default_data = movimentacao_para_editar['Data']
         default_cliente = movimentacao_para_editar['Cliente']
-        # Valor é o valor absoluto para preencher o number_input corretamente
-        default_valor = abs(movimentacao_para_editar['Valor']) if movimentacao_para_editar['Valor'] != 0 else 0.01 
+        default_valor = abs(movimentacao_para_editar['Valor'])
         default_forma = movimentacao_para_editar['Forma de Pagamento']
         default_tipo = movimentacao_para_editar['Tipo']
-        default_produtos_json = movimentacao_para_editar['Produtos Vendidos'] if pd.notna(movimentacao_para_editar['Produtos Vendidos']) else ""
+        default_produtos_json = movimentacao_para_editar['Produtos Vendidos']
         default_categoria = movimentacao_para_editar['Categoria']
-        default_status = movimentacao_para_editar['Status'] # Carrega Status
-        # Ajusta Data Pagamento para o formato esperado pelo date_input (date object ou None)
-        default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else None 
         
         # Carrega os produtos na lista de sessão (se for entrada)
         if default_tipo == "Entrada" and default_produtos_json:
             try:
+                # Garante que os valores numéricos sejam floats para o cálculo correto
                 produtos_list = json.loads(default_produtos_json)
-                # Garante que os valores numéricos dos produtos estejam como float
                 for p in produtos_list:
-                    # Usamos .get com fallback para 0 e try/except para garantir que a conversão funcione
-                    p['Quantidade'] = float(p.get('Quantidade', 0))
-                    p['Preço Unitário'] = float(p.get('Preço Unitário', 0))
-                    p['Custo Unitário'] = float(p.get('Custo Unitário', 0))
-                st.session_state.lista_produtos = [p for p in produtos_list if p['Quantidade'] > 0] # Filtra produtos vazios/inválidos
+                     p['Quantidade'] = float(p.get('Quantidade', 0))
+                     p['Preço Unitário'] = float(p.get('Preço Unitário', 0))
+                     p['Custo Unitário'] = float(p.get('Custo Unitário', 0))
+                st.session_state.lista_produtos = produtos_list
             except:
                 st.session_state.lista_produtos = []
         elif default_tipo == "Saída":
@@ -365,10 +281,11 @@ if edit_mode:
         st.sidebar.warning(f"Modo EDIÇÃO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
         
     else:
+        # Se o ID não for encontrado (ex: deletado), sai do modo de edição
         st.session_state.edit_id = None
         edit_mode = False
         st.sidebar.info("Movimentação não encontrada, saindo do modo de edição.")
-        st.rerun() 
+        st.rerun() # Rerun para limpar a sidebar
 
 # --- Formulário de Nova Movimentação na barra lateral ---
 st.sidebar.header("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
@@ -389,35 +306,9 @@ elif data_input < limite_passado:
 
 cliente = st.sidebar.text_input("Nome do Cliente (ou Descrição)", value=default_cliente)
 forma_pagamento = st.sidebar.selectbox("Forma de Pagamento", 
-                                        FORMAS_PAGAMENTO, 
-                                        index=FORMAS_PAGAMENTO.index(default_forma) if default_forma in FORMAS_PAGAMENTO else 0)
+                                        ["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"], 
+                                        index=["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"].index(default_forma) if default_forma in ["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"] else 0)
 tipo = st.sidebar.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1)
-
-# --- NOVO: CAMPO DE STATUS E DATA DE PAGAMENTO ---
-st.sidebar.markdown("#### 🔄 Status da Transação")
-status_selecionado = st.sidebar.radio("Status", ["Realizada", "Pendente"], index=0 if default_status == "Realizada" else 1)
-
-data_pagamento_final = None # Inicializa como None
-if status_selecionado == "Pendente":
-    # Se for pendente, o campo "Data Pagamento" é opcional (Data Prevista)
-    data_pagamento_prevista = st.sidebar.date_input(
-        "Data Prevista de Pagamento (Opcional)", 
-        value=default_data_pagamento if default_data_pagamento is not None else None, 
-        key="input_data_prevista"
-    )
-    data_pagamento_final = data_pagamento_prevista
-    st.sidebar.info("⚠️ Transações Pendentes NÃO afetam o Saldo Atual.")
-elif status_selecionado == "Realizada":
-    # Se for realizada, a Data Pagamento deve ser a Data da transação (data_input)
-    # Apenas se a data salva na edição não for mais recente ou igual à data da transação (após a transição de status)
-    if edit_mode and default_status == "Pendente" and default_data_pagamento is not None and default_data_pagamento > data_input:
-        # Se estava Pendente e tinha uma data futura, mantemos a data futura se for a mais recente
-        data_pagamento_final = default_data_pagamento 
-    else:
-        # Caso contrário (nova, ou já era Realizada, ou data anterior/igual) usa a Data da transação
-        data_pagamento_final = data_input 
-    
-# Fim NOVO
 
 # VARIÁVEIS DE CÁLCULO
 valor_calculado = 0.0
@@ -428,9 +319,10 @@ categoria_selecionada = ""
 if tipo == "Entrada":
     st.sidebar.markdown("#### 🛍️ Detalhes dos Produtos (Entrada)")
     
+    # Display e cálculo dos produtos atuais
     if st.session_state.lista_produtos:
         df_produtos = pd.DataFrame(st.session_state.lista_produtos)
-        # Garante que os tipos são numéricos para o cálculo
+        # Garante que as colunas sejam numéricas para o cálculo
         df_produtos['Quantidade'] = pd.to_numeric(df_produtos['Quantidade'], errors='coerce').fillna(0)
         df_produtos['Preço Unitário'] = pd.to_numeric(df_produtos['Preço Unitário'], errors='coerce').fillna(0.0)
         df_produtos['Custo Unitário'] = pd.to_numeric(df_produtos['Custo Unitário'], errors='coerce').fillna(0.0)
@@ -456,7 +348,8 @@ if tipo == "Entrada":
         st.sidebar.success(f"Soma Total da Venda: R$ {valor_calculado:,.2f}")
         st.sidebar.info(f"Lucro Bruto Calculado: R$ {lucro_total:,.2f}")
         
-        # Converte para JSON string para salvar
+        # Serializa para JSON para armazenamento
+        # Garante que apenas colunas essenciais para o JSON final sejam mantidas
         produtos_para_json = df_produtos[['Produto', 'Quantidade', 'Preço Unitário', 'Custo Unitário']].to_dict('records')
         produtos_vendidos_json = json.dumps(produtos_para_json)
 
@@ -465,17 +358,19 @@ if tipo == "Entrada":
 
     st.sidebar.markdown("---")
     
+    # Campo de Adicionar Produto em um expander
     with st.sidebar.expander("➕ Adicionar Novo Produto"):
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             nome_produto = st.text_input("Nome do Produto", key="input_nome_prod_edit")
         with col_p2:
-            quantidade_input = st.number_input("Qtd", min_value=0.01, value=1.0, step=1.0, key="input_qtd_prod_edit")
+            quantidade_input = st.number_input("Qtd", min_value=1.0, value=1.0, step=1.0, key="input_qtd_prod_edit")
         
         col_p3, col_p4 = st.columns(2)
         with col_p3:
             preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", key="input_preco_prod_edit")
         with col_p4:
+            # Novo campo Custo Unitário (opcional)
             custo_unitario_input = st.number_input("Custo Unitário (R$)", min_value=0.00, value=0.00, format="%.2f", key="input_custo_prod_edit")
         
         if st.button("Adicionar Produto à Lista (Entrada)", use_container_width=True):
@@ -484,43 +379,45 @@ if tipo == "Entrada":
                     "Produto": nome_produto,
                     "Quantidade": quantidade_input,
                     "Preço Unitário": preco_unitario_input,
-                    "Custo Unitário": custo_unitario_input 
+                    "Custo Unitário": custo_unitario_input # Adiciona o custo
                 })
                 st.rerun()
             else:
                 st.warning("Preencha o nome, quantidade e preço unitário corretamente.")
     
+    # Botão para limpar a lista de produtos
     if st.session_state.lista_produtos:
         if st.sidebar.button("Limpar Lista de Produtos (Entrada)", type="secondary"):
             st.session_state.lista_produtos = []
             st.rerun()
             
+    # Valor total da movimentação
     valor_input_manual = st.sidebar.number_input(
         "Valor Total (R$)", 
         value=valor_calculado if valor_calculado > 0.0 else default_valor,
         min_value=0.01, 
         format="%.2f",
-        # Desabilita se houver produtos, exceto se for 0.01 e a lista estiver vazia (modo de adição inicial)
         disabled=(valor_calculado > 0.0), 
         key="input_valor_entrada"
     )
     
     valor_final_movimentacao = valor_calculado if valor_calculado > 0.0 else valor_input_manual
-    categoria_selecionada = "" 
+    categoria_selecionada = "" # Entrada não tem categoria de saída
 
 else: # Tipo é Saída
-    # Limpa lista de produtos se mudou de tipo
+    # Limpa a lista de produtos se não estiver em edição ou se o tipo mudou para Saída
     if not edit_mode or tipo != default_tipo:
         st.session_state.lista_produtos = [] 
         
+    # Lógica para carregar valor customizado se estiver em edição
     custom_desc_default = ""
     default_select_index = 0
     
-    # Lógica para pré-selecionar categoria em edição
     if default_categoria in CATEGORIAS_SAIDA:
         default_select_index = CATEGORIAS_SAIDA.index(default_categoria)
-    elif default_categoria.startswith("Outro: ") and "Outro/Diversos" in CATEGORIAS_SAIDA:
+    elif default_categoria.startswith("Outro: "):
         default_select_index = CATEGORIAS_SAIDA.index("Outro/Diversos")
+        # Extrai a parte personalizada da string
         custom_desc_default = default_categoria.replace("Outro: ", "")
     
     st.sidebar.markdown("#### ⚙️ Centro de Custo (Saída)")
@@ -528,17 +425,20 @@ else: # Tipo é Saída
                                                  CATEGORIAS_SAIDA, 
                                                  index=default_select_index)
         
+    # --- Lógica para input personalizado se "Outro/Diversos" for selecionado ---
     if categoria_selecionada == "Outro/Diversos":
         descricao_personalizada = st.sidebar.text_input("Especifique o Gasto (Obrigatório)", 
-                                                         value=custom_desc_default, 
-                                                         placeholder="Ex: Aluguel de Novo Escritório",
-                                                         key="input_custom_category")
+                                                        value=custom_desc_default, 
+                                                        placeholder="Ex: Doação de Caridade, Compra de Novo Equipamento",
+                                                        key="input_custom_category")
         if descricao_personalizada:
             categoria_selecionada = f"Outro: {descricao_personalizada}"
         else:
-            # Mantém "Outro/Diversos" se a especificação estiver vazia
+            # Se o usuário selecionar "Outro/Diversos" mas não digitar nada, mantém a categoria padrão
             pass 
+    # --- FIM NOVO ---
         
+    # Para Saída, usa-se o valor manual normalmente
     valor_input_manual = st.sidebar.number_input(
         "Valor (R$)", 
         value=default_valor, 
@@ -547,7 +447,7 @@ else: # Tipo é Saída
         key="input_valor_saida"
     )
     valor_final_movimentacao = valor_input_manual
-    produtos_vendidos_json = "" 
+    produtos_vendidos_json = "" # Nulo para Saída
 
 # --- Botões de Submissão Único ---
 if edit_mode:
@@ -568,16 +468,11 @@ if cancelar:
 
 # --- Lógica principal (Adicionar/Editar) ---
 if enviar:
-    if not cliente and tipo == "Saída":
-        st.sidebar.warning("Por favor, preencha a descrição/cliente para Saída.")
-    elif valor_final_movimentacao <= 0:
-        st.sidebar.warning("O valor deve ser maior que R$ 0,00.")
-    elif tipo == "Saída" and categoria_selecionada == "Outro/Diversos":
-        st.sidebar.warning("Por favor, especifique o 'Outro/Diversos' para Saída.")
+    if not cliente or valor_final_movimentacao <= 0:
+        st.sidebar.warning("Por favor, preencha a descrição/cliente e o valor corretamente.")
     elif tipo == "Entrada" and valor_final_movimentacao == 0.01 and not st.session_state.lista_produtos and not edit_mode:
-        st.sidebar.warning("Se o Tipo for 'Entrada', insira um Valor real (> 0.01) ou adicione produtos.")
+        st.sidebar.warning("Se o Tipo for 'Entrada', insira um Valor real ou adicione produtos.")
     else:
-        # O valor é armazenado como positivo para Entrada e NEGATIVO para Saída (para cálculo de saldo)
         valor_armazenado = valor_final_movimentacao if tipo == "Entrada" else -valor_final_movimentacao
         
         if tipo == "Entrada" and not cliente:
@@ -593,16 +488,13 @@ if enviar:
             "Forma de Pagamento": forma_pagamento,
             "Tipo": tipo,
             "Produtos Vendidos": produtos_vendidos_json,
-            "Categoria": categoria_selecionada,
-            "Status": status_selecionado, # Novo
-            "Data Pagamento": data_pagamento_final # Novo
+            "Categoria": categoria_selecionada # Adiciona Categoria
         }
         
         if edit_mode:
             original_idx_to_edit = st.session_state.edit_id
             if original_idx_to_edit in st.session_state.df.index:
-                # Converte para string antes de atribuir ao dataframe (que é dtype=str)
-                nova_linha_str = {k: str(v) for k, v in nova_linha_data.items() if pd.notna(v)}
+                nova_linha_str = {k: str(v) for k, v in nova_linha_data.items()}
                 st.session_state.df.loc[original_idx_to_edit] = pd.Series(nova_linha_str)
                 commit_msg = COMMIT_MESSAGE_EDIT
             else:
@@ -610,9 +502,7 @@ if enviar:
                 st.session_state.edit_id = None
                 st.rerun()
         else:
-            # Adiciona nova linha (converte data_input para string antes de concat para manter consistência)
-            nova_linha_str = {k: str(v) for k, v in nova_linha_data.items() if pd.notna(v)}
-            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_linha_str])], ignore_index=True)
+            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_linha_data])], ignore_index=True)
             commit_msg = COMMIT_MESSAGE
             
         
@@ -627,60 +517,66 @@ if enviar:
 # ========================================================
 tab_mov, tab_rel = st.tabs(["📋 Movimentações e Resumo", "📈 Relatórios e Filtros"])
 
+# Função para aplicar o destaque condicional na coluna Valor
+# A função agora espera que 'Cor_Valor' esteja no índice da linha (colunas)
+def highlight_value(row):
+    # Acessa a cor da linha a partir da coluna 'Cor_Valor'
+    # Esta linha é segura pois a coluna 'Cor_Valor' será passada no DataFrame de estilização
+    color = row['Cor_Valor']
+    
+    # Retorna o estilo (CSS color) para cada coluna
+    # Aplica a cor apenas na coluna 'Valor'
+    return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
 
 with tab_mov:
     
-    # --- FILTRAR PARA O MÊS ATUAL ---
+    # --- NOVO: FILTRAR PARA O MÊS ATUAL ---
     hoje = date.today()
     primeiro_dia_mes = hoje.replace(day=1)
 
+    # Determina o último dia do mês atual
     if hoje.month == 12:
         proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
     else:
         proximo_mes = hoje.replace(month=hoje.month + 1, day=1)
     ultimo_dia_mes = proximo_mes - timedelta(days=1)
 
-    # Filtra o DataFrame de exibição para incluir apenas o mês atual E que foram REALIZADAS
-    df_mes_atual_realizado = df_exibicao[
+    # Filtra o DataFrame de exibição para incluir apenas o mês atual
+    df_mes_atual = df_exibicao[
         (df_exibicao["Data"] >= primeiro_dia_mes) &
-        (df_exibicao["Data"] <= ultimo_dia_mes) &
-        (df_exibicao["Status"] == "Realizada")
+        (df_exibicao["Data"] <= ultimo_dia_mes)
     ]
     
     # Título Atualizado
     st.subheader(f"📊 Resumo Financeiro Geral - Mês de {primeiro_dia_mes.strftime('%m/%Y')}")
 
-    # Calcula Resumo com dados do Mês Atual REALIZADO
-    total_entradas, total_saidas, saldo = calcular_resumo(df_mes_atual_realizado)
+    # Calcula Resumo com dados do Mês Atual
+    total_entradas, total_saidas, saldo = calcular_resumo(df_mes_atual)
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Total de Entradas", f"R$ {total_entradas:,.2f}")
     col2.metric("Total de Saídas", f"R$ {total_saidas:,.2f}")
     delta_saldo = f"R$ {saldo:,.2f}"
-    col3.metric("💼 Saldo Final (Realizado)", f"R$ {saldo:,.2f}", delta=delta_saldo if saldo != 0 else None, delta_color="normal")
+    col3.metric("💼 Saldo Final", f"R$ {saldo:,.2f}", delta=delta_saldo if saldo != 0 else None, delta_color="normal")
 
     st.markdown("---")
     
-    # --- Resumo Agregado por Loja (MÊS ATUAL REALIZADO) ---
-    st.subheader(f"🏠 Resumo Rápido por Loja (Mês de {primeiro_dia_mes.strftime('%m/%Y')} - Realizado)")
+    # --- Resumo Agregado por Loja (MÊS ATUAL) ---
+    st.subheader(f"🏠 Resumo Rápido por Loja (Mês de {primeiro_dia_mes.strftime('%m/%Y')})")
     
-    df_resumo_loja = df_mes_atual_realizado.groupby('Loja')['Valor'].agg(['sum', lambda x: x[x >= 0].sum(), lambda x: abs(x[x < 0].sum())]).reset_index()
+    # AGORA USANDO DF_MES_ATUAL
+    df_resumo_loja = df_mes_atual.groupby('Loja')['Valor'].agg(['sum', lambda x: x[x >= 0].sum(), lambda x: abs(x[x < 0].sum())]).reset_index()
     df_resumo_loja.columns = ['Loja', 'Saldo', 'Entradas', 'Saídas']
     
-    if not df_resumo_loja.empty:
-        # Usa `min(4, len(df_resumo_loja.index))` para evitar erro se houver mais de 4 lojas
-        cols_loja = st.columns(min(4, len(df_resumo_loja.index))) 
-        
-        for i, row in df_resumo_loja.iterrows():
-            if i < len(cols_loja):
-                cols_loja[i].metric(
-                    label=f"{row['Loja']}",
-                    value=f"R$ {row['Saldo']:,.2f}",
-                    delta=f"E: R$ {row['Entradas']:,.2f} | S: R$ {row['Saídas']:,.2f}",
-                    delta_color="off" 
-                )
-    else:
-        st.info("Nenhuma movimentação REALIZADA registrada neste mês.")
+    cols_loja = st.columns(len(df_resumo_loja.index))
+    
+    for i, row in df_resumo_loja.iterrows():
+        cols_loja[i].metric(
+            label=f"{row['Loja']}",
+            value=f"R$ {row['Saldo']:,.2f}",
+            delta=f"E: R$ {row['Entradas']:,.2f} | S: R$ {row['Saídas']:,.2f}",
+            delta_color="off" # Desliga a cor do delta para usar como subtítulo informativo
+        )
     
     st.markdown("---")
     
@@ -691,15 +587,10 @@ with tab_mov:
     else:
         # --- FILTROS RÁPIDOS NA TABELA PRINCIPAL (UX Improvement) ---
         col_f1, col_f2, col_f3 = st.columns(3)
-        
-        # Define datas iniciais/finais com fallback
-        min_date = df_exibicao["Data"].min() if pd.notna(df_exibicao["Data"].min()) else hoje
-        max_date = df_exibicao["Data"].max() if pd.notna(df_exibicao["Data"].max()) else hoje
-        
         with col_f1:
-            filtro_data_inicio = st.date_input("De", value=min_date, key="quick_data_ini")
+            filtro_data_inicio = st.date_input("De", value=df_exibicao["Data"].min(), key="quick_data_ini")
         with col_f2:
-            filtro_data_fim = st.date_input("Até", value=max_date, key="quick_data_fim")
+            filtro_data_fim = st.date_input("Até", value=df_exibicao["Data"].max(), key="quick_data_fim")
         with col_f3:
             tipos_unicos = ["Todos"] + df_exibicao["Tipo"].unique().tolist()
             filtro_tipo = st.selectbox("Filtrar por Tipo", options=tipos_unicos, key="quick_tipo")
@@ -718,15 +609,19 @@ with tab_mov:
 
         # --- PREPARAÇÃO DA TABELA ---
         df_para_mostrar = df_filtrado_rapido.copy()
+        # Coluna de resumo com lucro
         df_para_mostrar['Produtos Resumo'] = df_para_mostrar['Produtos Vendidos'].apply(format_produtos_resumo)
         
-        # Adiciona Status na exibição da tabela principal
-        colunas_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Status', 'Data Pagamento', 'Produtos Resumo', 'Saldo Acumulado']
+        colunas_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Produtos Resumo']
         
         # --- Lógica Correta para Estilização Condicional ---
+        # 1. Cria o DataFrame que inclui a coluna auxiliar 'Cor_Valor'
         df_styling = df_para_mostrar[colunas_tabela + ['Cor_Valor']].copy()
 
+        # 2. Aplica o estilo
         styled_df = df_styling.style.apply(highlight_value, axis=1)
+
+        # 3. Esconde a coluna auxiliar 'Cor_Valor' antes de exibir
         styled_df = styled_df.hide(subset=['Cor_Valor'], axis=1)
 
 
@@ -739,13 +634,8 @@ with tab_mov:
                     "Valor (R$)",
                     format="R$ %.2f",
                 ),
-                "Saldo Acumulado": st.column_config.NumberColumn(
-                    "Saldo Acumulado (R$)",
-                    format="R$ %.2f",
-                ),
                 "Produtos Resumo": st.column_config.TextColumn("Detalhe dos Produtos"),
-                "Categoria": "Categoria (C. Custo)",
-                "Data Pagamento": st.column_config.DateColumn("Data Pagt. Previsto/Real", format="DD/MM/YYYY")
+                "Categoria": "Categoria (C. Custo)"
             },
             height=400,
             selection_mode='single-row', 
@@ -762,16 +652,12 @@ with tab_mov:
             if selected_index < len(df_para_mostrar):
                 row = df_para_mostrar.iloc[selected_index]
 
-                if row['Tipo'] == 'Entrada' and row['Produtos Vendidos'] and pd.notna(row['Produtos Vendidos']):
+                if row['Tipo'] == 'Entrada' and row['Produtos Vendidos']:
                     st.markdown("#### Detalhes dos Produtos Selecionados")
                     try:
                         produtos = json.loads(row['Produtos Vendidos'])
                         
                         df_detalhe = pd.DataFrame(produtos)
-                        
-                        # Garante que as colunas existem e são numéricas para o cálculo
-                        for col in ['Quantidade', 'Preço Unitário', 'Custo Unitário']:
-                            df_detalhe[col] = pd.to_numeric(df_detalhe[col], errors='coerce').fillna(0)
                         
                         df_detalhe['Total Venda'] = df_detalhe['Quantidade'] * df_detalhe['Preço Unitário']
                         df_detalhe['Total Custo'] = df_detalhe['Quantidade'] * df_detalhe['Custo Unitário']
@@ -799,92 +685,75 @@ with tab_mov:
         st.caption("Clique em uma linha para ver os detalhes dos produtos (se for Entrada).")
         st.markdown("---")
 
-        # =================================================================
-        # --- OPÇÕES DE EDIÇÃO E EXCLUSÃO UNIFICADAS ---
-        # =================================================================
-        st.markdown("### 📝 Operações de Movimentação (Editar/Excluir)")
+        # --- EXCLUSÃO ---
+        st.markdown("### 🗑️ Excluir Movimentações")
         
-        # Cria uma lista de opções baseada no df_exibicao para a combobox
-        opcoes_operacao = {
-            f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Loja']} | R$ {row['Valor']:,.2f} ({row['Tipo']})": row['original_index'] 
+        # Mapeamento do nome de exibição para o ÍNDICE ORIGINAL (original_index)
+        opcoes_exclusao = {
+            f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Loja']} | R$ {row['Valor']:,.2f}": row['original_index'] 
             for index, row in df_exibicao.iterrows()
         }
-        opcoes_keys = list(opcoes_operacao.keys())
         
-        if not opcoes_keys:
-            st.info("Nenhuma movimentação para editar ou excluir.")
-        else:
-            col_modo, col_selecao = st.columns([0.3, 0.7])
-            
-            with col_modo:
-                st.session_state.operacao_selecionada = st.radio(
-                    "Escolha a Operação:",
-                    options=["Editar", "Excluir"],
-                    index=0 if st.session_state.operacao_selecionada == "Editar" else 1, # Mantém a seleção se possível
-                    key="radio_operacao_select",
-                    horizontal=True,
-                    disabled=edit_mode
-                )
+        movimentacoes_a_excluir_str = st.multiselect(
+            "Selecione as movimentações que deseja excluir:",
+            options=list(opcoes_exclusao.keys()),
+            key="multi_excluir"
+        )
+        indices_a_excluir = [opcoes_exclusao[s] for s in movimentacoes_a_excluir_str]
 
-            with col_selecao:
-                movimentacao_selecionada_str = st.selectbox(
-                    f"Selecione a movimentação para {st.session_state.operacao_selecionada}:",
-                    options=opcoes_keys,
-                    index=0,
-                    key="select_operacao",
-                    disabled=edit_mode
-                )
-            
-            original_idx_selecionado = opcoes_operacao.get(movimentacao_selecionada_str)
-            
-            # --- Botões de Ação Contextual ---
-            if original_idx_selecionado is not None:
-                if st.session_state.operacao_selecionada == "Editar":
-                    if st.button("✏️ Levar para Edição na Sidebar", type="secondary", use_container_width=True, disabled=edit_mode):
-                        st.session_state.edit_id = original_idx_selecionado
-                        st.rerun()
+        if st.button("Excluir Selecionadas e Salvar no GitHub", type="primary"):
+            if indices_a_excluir:
+                st.session_state.df = st.session_state.df.drop(indices_a_excluir, errors='ignore')
                 
-                elif st.session_state.operacao_selecionada == "Excluir":
-                    st.markdown("##### Confirmação de Exclusão:")
-                    if st.button(f"🗑️ Excluir permanentemente: {movimentacao_selecionada_str}", type="primary", use_container_width=True):
-                        
-                        # O original_idx_selecionado é o índice real no st.session_state.df
-                        if original_idx_selecionado in st.session_state.df.index:
-                            st.session_state.df = st.session_state.df.drop(original_idx_selecionado, errors='ignore')
-                            
-                            if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
-                                st.cache_data.clear()
-                                st.rerun()
-                        else:
-                            st.error("Erro interno: Movimentação não encontrada para exclusão.")
+                if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
+                    st.cache_data.clear()
+                    st.rerun()
+            else:
+                st.warning("Selecione pelo menos uma movimentação para excluir.")
+
+        st.markdown("---")
         
+        # --- EDIÇÃO ---
+        st.markdown("### ✏️ Editar Movimentações")
+        col_edit_select, col_edit_btn = st.columns([0.7, 0.3])
+
+        opcoes_edicao = {
+            f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Loja']} | R$ {row['Valor']:,.2f}": row['original_index'] 
+            for index, row in df_exibicao.iterrows()
+        }
+        opcoes_keys = list(opcoes_edicao.keys())
+        
+        with col_edit_select:
+            movimentacao_a_editar_str = st.selectbox(
+                "Selecione a movimentação que deseja editar (ID e Resumo):",
+                options=opcoes_keys,
+                index=0,
+                key="select_editar",
+                disabled=edit_mode
+            )
+            
+        with col_edit_btn:
+            st.markdown("<br>", unsafe_allow_html=True) 
+            original_idx_to_edit_click = opcoes_edicao.get(movimentacao_a_editar_str)
+            
+            if st.button("Editar Selecionada", type="secondary", use_container_width=True, disabled=edit_mode):
+                if original_idx_to_edit_click is not None:
+                    st.session_state.edit_id = original_idx_to_edit_click
+                    st.rerun()
+                else:
+                    st.warning("Selecione uma movimentação válida para editar.")
+
 with tab_rel:
+    st.header("📈 Relatórios Financeiros")
     
-    st.header("📈 Relatórios e Filtros")
-    
-    # --- 1. DEFINIÇÃO DAS SUB-ABAS (DEVE VIR PRIMEIRO) ---
-    subtab_dashboard, subtab_filtro, subtab_produtos, subtab_dividas = st.tabs(
-        ["Dashboard Geral", "Filtro e Tabela", "Produtos e Lucro", "🧾 Dívidas Pendentes"]
-    )
-    
-    loja_filtro_relatorio = "Todas as Lojas"  # Inicializa fora da condicional
-    
-    # === CORREÇÃO CRÍTICA DO NAMERROR ===
-    # Garante que df_filtrado_loja é definida em AMBOS os caminhos
     if df_exibicao.empty:
         st.info("Não há dados suficientes para gerar relatórios e filtros.")
-        # Se df_exibicao estiver vazio, df_filtrado_loja deve ser um DF vazio com todas as colunas esperadas
-        df_filtrado_loja = pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
-        
     else:
-        # --- 4. FILTRO GLOBAL DE LOJA ---
+        
+        # FILTRO GLOBAL DE LOJA PARA RELATÓRIOS
         lojas_unicas_no_df = df_exibicao["Loja"].unique().tolist()
-        todas_lojas = ["Todas as Lojas"] + [
-            l for l in LOJAS_DISPONIVEIS if l in lojas_unicas_no_df
-        ] + [
-            l for l in lojas_unicas_no_df if l not in LOJAS_DISPONIVEIS and l != "Todas as Lojas"
-        ]
-        todas_lojas = list(dict.fromkeys(todas_lojas))  # Remove duplicatas
+        todas_lojas = ["Todas as Lojas"] + [l for l in LOJAS_DISPONIVEIS if l in lojas_unicas_no_df] + [l for l in lojas_unicas_no_df if l not in LOJAS_DISPONIVEIS and l != "Todas as Lojas"]
+        todas_lojas = list(dict.fromkeys(todas_lojas)) # Remove duplicatas
 
         loja_filtro_relatorio = st.selectbox(
             "Selecione a Loja para Filtrar Relatórios",
@@ -892,182 +761,72 @@ with tab_rel:
             key="loja_filtro_rel"
         )
 
+        # Aplicar filtro de loja
         if loja_filtro_relatorio != "Todas as Lojas":
-            df_filtrado_loja = df_exibicao[df_exibicao["Loja"] == loja_filtro_relatorio].copy()
+            df_filtrado_loja = df_exibicao[df_exibicao["Loja"] == loja_filtro_relatorio]
+            st.subheader(f"Dashboard da Loja: {loja_filtro_relatorio}")
         else:
-            df_filtrado_loja = df_exibicao.copy()
-            
-        st.subheader(f"Dashboard de Relatórios - {loja_filtro_relatorio}")
-
-    # ===================================
+            df_filtrado_loja = df_exibicao
+            st.subheader("Dashboard de Relatórios (Todas as Lojas)")
 
 
-    # As sub-abas agora acessam df_filtrado_loja, que está garantido como um DataFrame vazio (se necessário) ou filtrado.
+        # === SUBABAS DE RELATÓRIOS ===
+        subtab_dashboard, subtab_filtro, subtab_produtos = st.tabs(["Dashboard Geral", "Filtro e Tabela", "Produtos e Lucro"])
 
-    with subtab_dividas:
-        st.header("🧾 Gerenciamento de Dívidas Pendentes")
-        
-        # Continua usando df_exibicao que é o base
-        df_pendente = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
-        
-        if df_pendente.empty:
-            st.info("🎉 Não há Contas a Pagar ou Receber pendentes!")
-        else:
+        with subtab_dashboard:
             
-            # --- Separação Contas a Receber e Pagar ---
-            df_receber = df_pendente[df_pendente["Tipo"] == "Entrada"].reset_index(drop=True)
-            df_pagar = df_pendente[df_pendente["Tipo"] == "Saída"].reset_index(drop=True)
-            
-            st.markdown("---")
-            st.markdown("### 📥 Contas a Receber (Vendas Pendentes)")
-            
-            if df_receber.empty:
-                st.info("Nenhuma venda pendente para receber.")
+            if df_filtrado_loja.empty:
+                st.warning(f"Nenhuma movimentação encontrada na Loja '{loja_filtro_relatorio}'.")
             else:
-                st.dataframe(
-                    df_receber[['ID Visível', 'Data', 'Loja', 'Cliente', 'Valor', 'Data Pagamento', 'original_index']],
-                    use_container_width=True,
-                    selection_mode='multi-row',
-                    hide_index=True,
-                    column_config={
-                        "Data Pagamento": st.column_config.DateColumn("Data Prevista", format="DD/MM/YYYY"),
-                        "Valor": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f"),
-                        "original_index": "Índice Original (Debug)",
-                    },
-                    column_order=('ID Visível', 'Data', 'Loja', 'Cliente', 'Valor', 'Data Pagamento'),
-                    key="tabela_receber"
-                )
-                st.info(f"Total a Receber: R$ {df_receber['Valor'].sum():,.2f}")
                 
-            st.markdown("---")
-            st.markdown("### 📤 Contas a Pagar (Despesas Pendentes)")
-            
-            if df_pagar.empty:
-                st.info("Nenhuma despesa pendente para pagar.")
-            else:
-                st.dataframe(
-                    df_pagar[['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Data Pagamento', 'original_index']],
-                    use_container_width=True,
-                    selection_mode='multi-row',
-                    hide_index=True,
-                    column_config={
-                        "Data Pagamento": st.column_config.DateColumn("Data Prevista", format="DD/MM/YYYY"),
-                        # Valor já é negativo, exibimos o valor absoluto para a conta a pagar
-                        "Valor": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f"), 
-                        "original_index": "Índice Original (Debug)",
-                    },
-                    column_order=('ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Data Pagamento'),
-                    key="tabela_pagar"
-                )
-                st.info(f"Total a Pagar: R$ {abs(df_pagar['Valor'].sum()):,.2f}")
-
-            st.markdown("---")
-            st.markdown("### ✅ Concluir Pagamentos Pendentes")
-
-            selecao_receber = st.session_state.get('tabela_receber', {}).get('selection', {}).get('rows', [])
-            selecao_pagar = st.session_state.get('tabela_pagar', {}).get('selection', {}).get('rows', [])
-            
-            indices_selecionados = []
-            
-            # --- REFORÇO DA LÓGICA DE SELEÇÃO E ÍNDICE ---
-            # Pega o 'original_index' das linhas selecionadas no DF filtrado/resetado
-            if selecao_receber:
-                indices_selecionados.extend(df_receber.iloc[selecao_receber]['original_index'].tolist())
-            
-            if selecao_pagar:
-                indices_selecionados.extend(df_pagar.iloc[selecao_pagar]['original_index'].tolist())
-            # --- FIM REFORÇO ---
-
-            if indices_selecionados:
-                st.info(f"Total de {len(indices_selecionados)} transações selecionadas para conclusão.")
+                # --- Análise de Saldo Acumulado (Série Temporal) ---
+                st.markdown("### 📉 Saldo Acumulado (Tendência no Tempo)")
                 
-                with st.form("form_concluir_dividas"):
-                    st.markdown("##### Detalhes da Conclusão:")
-                    data_conclusao = st.date_input("Data de Pagamento Real", value=hoje)
-                    forma_conclusao = st.selectbox("Forma de Pagamento Real (PIX, Dinheiro, etc.)", options=FORMAS_PAGAMENTO)
-                    
-                    submeter_conclusao = st.form_submit_button("Concluir Pagamentos Selecionados e Salvar", type="primary")
-
-                if submeter_conclusao:
-                    df_temp_session = st.session_state.df.copy()
-                    
-                    for original_idx in indices_selecionados:
-                        # Atualiza a linha no DataFrame original usando o índice real (original_idx)
-                        if original_idx in df_temp_session.index:
-                            df_temp_session.loc[original_idx, 'Status'] = 'Realizada'
-                            df_temp_session.loc[original_idx, 'Data Pagamento'] = data_conclusao
-                            df_temp_session.loc[original_idx, 'Forma de Pagamento'] = forma_conclusao
-                            
-                    st.session_state.df = df_temp_session
-                    
-                    if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DEBT_REALIZED):
-                        st.cache_data.clear()
-                        st.rerun()
-            else:
-                st.warning("Selecione itens nas tabelas acima para concluir.")
-
-    with subtab_dashboard:
-        # Agora o acesso a df_filtrado_loja é seguro
-        if df_filtrado_loja.empty:
-            st.warning("Nenhuma movimentação encontrada para gerar o Dashboard.")
-        else:
-            
-            # --- Análise de Saldo Acumulado (Série Temporal) ---
-            st.markdown("### 📉 Saldo Acumulado (Tendência no Tempo)")
-            
-            # O Saldo Acumulado é calculado apenas para transações REALIZADAS no processamento_dataframe
-            df_acumulado = df_filtrado_loja.sort_values(by='Data_dt', ascending=True).copy()
-            df_acumulado = df_acumulado[df_acumulado['Status'] == 'Realizada']
-
-            if df_acumulado.empty:
-                st.info("Nenhuma transação Realizada para calcular o Saldo Acumulado.")
-            else:
+                # Prepara o DF para o gráfico de linha (Data ASC)
+                df_acumulado = df_filtrado_loja.sort_values(by='Data_dt', ascending=True).copy()
+                df_acumulado['Saldo Acumulado'] = df_acumulado['Valor'].cumsum()
+                
                 fig_line = px.line(
                     df_acumulado,
                     x='Data_dt',
                     y='Saldo Acumulado',
-                    title='Evolução do Saldo Realizado ao Longo do Tempo',
+                    title='Evolução do Saldo ao Longo do Tempo',
                     labels={'Data_dt': 'Data', 'Saldo Acumulado': 'Saldo Acumulado (R$)'},
                     line_shape='spline',
                     markers=True
                 )
                 fig_line.update_layout(xaxis_title="Data", yaxis_title="Saldo Acumulado (R$)")
                 st.plotly_chart(fig_line, use_container_width=True)
-            
-            st.markdown("---")
-
-            # --- Distribuição de Saídas por Categoria (Centro de Custo) ---
-            st.markdown("### 📊 Saídas por Categoria (Centro de Custo - Realizadas)")
-            
-            df_saidas = df_filtrado_loja[(df_filtrado_loja['Tipo'] == 'Saída') & (df_filtrado_loja['Status'] == 'Realizada')].copy()
-            
-            if df_saidas.empty:
-                st.info("Nenhuma saída Realizada registrada para análise de categorias.")
-            else:
-                df_saidas['Valor Absoluto'] = df_saidas['Valor'].abs()
-                df_categorias = df_saidas.groupby('Categoria')['Valor Absoluto'].sum().reset_index()
                 
-                fig_cat_pie = px.pie(
-                    df_categorias,
-                    values='Valor Absoluto',
-                    names='Categoria',
-                    title='Distribuição de Gastos por Categoria',
-                    hole=.3
-                )
-                st.plotly_chart(fig_cat_pie, use_container_width=True)
+                st.markdown("---")
 
-            st.markdown("---")
+                # --- Distribuição de Saídas por Categoria (Centro de Custo) ---
+                st.markdown("### 📊 Saídas por Categoria (Centro de Custo)")
+                
+                df_saidas = df_filtrado_loja[df_filtrado_loja['Tipo'] == 'Saída'].copy()
+                
+                if df_saidas.empty:
+                    st.info("Nenhuma saída registrada para análise de categorias.")
+                else:
+                    df_saidas['Valor Absoluto'] = df_saidas['Valor'].abs()
+                    df_categorias = df_saidas.groupby('Categoria')['Valor Absoluto'].sum().reset_index()
+                    
+                    fig_cat_pie = px.pie(
+                        df_categorias,
+                        values='Valor Absoluto',
+                        names='Categoria',
+                        title='Distribuição de Gastos por Categoria',
+                        hole=.3
+                    )
+                    st.plotly_chart(fig_cat_pie, use_container_width=True)
 
-            # --- Gráfico de Ganhos vs. Gastos (Existente, mas reajustado para Realizada) ---
-            st.markdown("### 📈 Ganhos (Entradas) vs. Gastos (Saídas) por Mês (Realizados)")
-            
-            df_ganhos_gastos = df_filtrado_loja[df_filtrado_loja['Status'] == 'Realizada'].copy()
-            
-            if df_ganhos_gastos.empty:
-                st.info("Nenhuma transação Realizada para a análise mensal.")
-            else:
-                df_ganhos_gastos['MesAno'] = df_ganhos_gastos['Data'].apply(lambda x: x.strftime('%Y-%m'))
-                df_grouped = df_ganhos_gastos.groupby(['MesAno', 'Tipo'])['Valor'].sum().abs().reset_index()
+                st.markdown("---")
+
+                # --- Gráfico de Ganhos vs. Gastos (Existente, mas reajustado) ---
+                st.markdown("### 📈 Ganhos (Entradas) vs. Gastos (Saídas) por Mês")
+                
+                df_filtrado_loja['MesAno'] = df_filtrado_loja['Data'].apply(lambda x: x.strftime('%Y-%m'))
+                df_grouped = df_filtrado_loja.groupby(['MesAno', 'Tipo'])['Valor'].sum().abs().reset_index()
                 df_grouped.columns = ['MesAno', 'Tipo', 'Total']
                 df_grouped = df_grouped.sort_values(by='MesAno')
 
@@ -1082,49 +841,43 @@ with tab_rel:
                     labels={'Total': 'Valor (R$)', 'MesAno': 'Mês/Ano'},
                     height=500
                 )
-                fig_bar.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
+                fig_bar.update_traces(texttemplate='R$ %{y:.2f}', textposition='outside')
                 st.plotly_chart(fig_bar, use_container_width=True)
+                
+        with subtab_produtos:
+            st.markdown("## 💰 Análise de Produtos e Lucratividade")
 
-    with subtab_produtos:
-        st.markdown("## 💰 Análise de Produtos e Lucratividade (Realizados)")
-
-        if df_filtrado_loja.empty:
-            st.warning("Nenhuma movimentação encontrada para gerar a Análise de Produtos.")
-        else:
-            df_entradas_produtos = df_filtrado_loja[(df_filtrado_loja['Tipo'] == 'Entrada') & (df_filtrado_loja['Status'] == 'Realizada')].copy()
+            df_entradas_produtos = df_filtrado_loja[df_filtrado_loja['Tipo'] == 'Entrada'].copy()
 
             if df_entradas_produtos.empty:
-                st.info("Nenhuma entrada com produtos REALIZADA registrada para análise.")
+                st.info("Nenhuma entrada com produtos registrada para análise.")
             else:
                 
+                # Agregação de Produtos
                 lista_produtos_agregada = []
                 for index, row in df_entradas_produtos.iterrows():
-                    if pd.notna(row['Produtos Vendidos']) and row['Produtos Vendidos']:
+                    if row['Produtos Vendidos']:
                         try:
                             produtos = json.loads(row['Produtos Vendidos'])
                             for p in produtos:
-                                # Garante que os valores são numéricos, usando 0 como fallback
-                                try:
-                                    qtd = float(p.get('Quantidade', 0))
-                                    preco_un = float(p.get('Preço Unitário', 0))
-                                    custo_un = float(p.get('Custo Unitário', 0))
-                                except ValueError:
-                                    continue
+                                # Garante que os valores sejam numéricos para agregação
+                                qtd = float(p.get('Quantidade', 0))
+                                preco_un = float(p.get('Preço Unitário', 0))
+                                custo_un = float(p.get('Custo Unitário', 0))
                                 
-                                if qtd > 0:
-                                    lista_produtos_agregada.append({
-                                        "Produto": p['Produto'],
-                                        "Quantidade": qtd,
-                                        "Total Venda": qtd * preco_un,
-                                        "Total Custo": qtd * custo_un,
-                                        "Lucro Bruto": (qtd * preco_un) - (qtd * custo_un),
-                                    })
+                                lista_produtos_agregada.append({
+                                    "Produto": p['Produto'],
+                                    "Quantidade": qtd,
+                                    "Total Venda": qtd * preco_un,
+                                    "Total Custo": qtd * custo_un,
+                                    "Lucro Bruto": (qtd * preco_un) - (qtd * custo_un),
+                                })
                         except:
                             pass
 
                 if lista_produtos_agregada:
                     df_produtos_agregados = pd.DataFrame(lista_produtos_agregada)
-                    df_produtos_agregados = df_produtos_agregados.groupby('Produto').sum(numeric_only=True).reset_index() # Usa numeric_only=True
+                    df_produtos_agregados = df_produtos_agregados.groupby('Produto').sum().reset_index()
 
                     # --- Top 10 Produtos por Valor Total de Venda ---
                     st.markdown("### 🏆 Top 10 Produtos (Valor de Venda)")
@@ -1163,24 +916,19 @@ with tab_rel:
                 else:
                     st.info("Nenhum produto com dados válidos encontrado para agregar.")
 
-    with subtab_filtro:
-        
-        if df_filtrado_loja.empty:
-            st.warning("Nenhuma movimentação encontrada para gerar a Tabela Filtrada.")
-        else:
+
+        with subtab_filtro:
             st.subheader("📅 Filtrar Movimentações por Período e Loja")
             
             df_base_filtro_tabela = df_filtrado_loja
 
             col_data_inicial, col_data_final = st.columns(2)
             
-            # Definir valores de data inicial e final seguros
-            data_minima = df_base_filtro_tabela["Data"].min() if not df_base_filtro_tabela.empty and pd.notna(df_base_filtro_tabela["Data"].min()) else hoje
-            data_maxima = df_base_filtro_tabela["Data"].max() if not df_base_filtro_tabela.empty and pd.notna(df_base_filtro_tabela["Data"].max()) else hoje
+            data_minima = df_base_filtro_tabela["Data"].min() if not df_base_filtro_tabela.empty and df_base_filtro_tabela["Data"].min() is not pd.NaT else datetime.now().date()
+            data_maxima = df_base_filtro_tabela["Data"].max() if not df_base_filtro_tabela.empty and df_base_filtro_tabela["Data"].max() is not pd.NaT else datetime.now().date()
             
-            # Ajusta se a data mínima for NaT
-            data_min_value = data_minima if pd.notna(data_minima) else hoje
-            data_max_value = data_maxima if pd.notna(data_maxima) else hoje
+            data_min_value = data_minima
+            data_max_value = data_maxima
             
             with col_data_inicial:
                 data_inicial = st.date_input("Data Inicial", value=data_min_value, key="filtro_data_ini")
@@ -1203,10 +951,8 @@ with tab_rel:
                     
                     df_filtrado_final['Produtos Resumo'] = df_filtrado_final['Produtos Vendidos'].apply(format_produtos_resumo)
                     
-                    colunas_filtro_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Status', 'Data Pagamento', 'Produtos Resumo', 'Saldo Acumulado']
-
                     # --- Lógica Correta para Estilização Condicional na Tabela Filtrada ---
-                    df_styling_filtro = df_filtrado_final[colunas_filtro_tabela + ['Cor_Valor']].copy()
+                    df_styling_filtro = df_filtrado_final[colunas_tabela + ['Cor_Valor']].copy()
                     styled_df_filtro = df_styling_filtro.style.apply(highlight_value, axis=1)
                     styled_df_filtro = styled_df_filtro.hide(subset=['Cor_Valor'], axis=1)
                     
@@ -1219,20 +965,15 @@ with tab_rel:
                                 "Valor (R$)",
                                 format="R$ %.2f",
                             ),
-                            "Saldo Acumulado": st.column_config.NumberColumn(
-                                "Saldo Acumulado (R$)",
-                                format="R$ %.2f",
-                            ),
                             "Produtos Resumo": st.column_config.TextColumn("Detalhe dos Produtos"),
-                            "Categoria": "Categoria (C. Custo)",
-                            "Data Pagamento": st.column_config.DateColumn("Data Pagt. Previsto/Real", format="DD/MM/YYYY")
+                            "Categoria": "Categoria (C. Custo)"
                         }
                     )
 
-                    # --- Resumo do Período Filtrado (Apenas Realizado) ---
+                    # --- Resumo do Período Filtrado ---
                     entradas_filtro, saidas_filtro, saldo_filtro = calcular_resumo(df_filtrado_final)
 
-                    st.markdown("#### 💰 Resumo do Período Filtrado (Apenas Realizado)")
+                    st.markdown("#### 💰 Resumo do Período Filtrado")
                     col1_f, col2_f, col3_f = st.columns(3)
                     col1_f.metric("Entradas", f"R$ {entradas_filtro:,.2f}")
                     col2_f.metric("Saídas", f"R$ {saidas_filtro:,.2f}")
