@@ -862,27 +862,21 @@ with tab_rel:
     
     st.header("📈 Relatórios e Filtros")
     
-    # --- 2. INICIALIZAÇÃO DE FALLBACK REFORÇADA (CORREÇÃO DO NAMERROR) ---
-    # Garante que df_filtrado_loja SEMPRE é um DataFrame válido para evitar NameError
-    try:
-        df_filtrado_loja = df_exibicao.copy()
-    except Exception:
-        # Fallback de segurança extrema, usando colunas completas
-        df_filtrado_loja = pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
-        
-    loja_filtro_relatorio = "Todas as Lojas"
-
-    # --- 1. DEFINIÇÃO DAS SUB-ABAS (DEVE VIR ANTES DO CONTEÚDO PARA SER PROCESSADO) ---
+    # --- 1. DEFINIÇÃO DAS SUB-ABAS (DEVE VIR PRIMEIRO) ---
     subtab_dashboard, subtab_filtro, subtab_produtos, subtab_dividas = st.tabs(["Dashboard Geral", "Filtro e Tabela", "Produtos e Lucro", "🧾 Dívidas Pendentes"])
     
-    # --- 3. LÓGICA DE FILTRO GLOBAL (SÓ EXIBE SE HOUVER DADOS) ---
-    if df_exibicao.empty or df_filtrado_loja.empty:
+    loja_filtro_relatorio = "Todas as Lojas" # Inicializa fora da condicional
+    
+    # === CORREÇÃO CRÍTICA DO NAMERROR ===
+    if df_exibicao.empty:
         st.info("Não há dados suficientes para gerar relatórios e filtros.")
+        # Se df_exibicao estiver vazio, df_filtrado_loja deve ser um DF vazio com todas as colunas esperadas
+        df_filtrado_loja = pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
         
     else:
         # --- 4. FILTRO GLOBAL DE LOJA ---
         
-        # Cria a lista de todas as lojas, incluindo as que estão no DF mas não na lista original
+        # Cria a lista de todas as lojas
         lojas_unicas_no_df = df_exibicao["Loja"].unique().tolist()
         todas_lojas = ["Todas as Lojas"] + [l for l in LOJAS_DISPONIVEIS if l in lojas_unicas_no_df] + [l for l in lojas_unicas_no_df if l not in LOJAS_DISPONIVEIS and l != "Todas as Lojas"]
         todas_lojas = list(dict.fromkeys(todas_lojas)) # Remove duplicatas
@@ -899,9 +893,10 @@ with tab_rel:
             df_filtrado_loja = df_exibicao.copy()
             
         st.subheader(f"Dashboard de Relatórios - {loja_filtro_relatorio}")
+    # ===================================
 
-    # As sub-abas são executadas e usam a variável df_filtrado_loja, que está agora garantida no escopo.
-    # O teste df_filtrado_loja.empty garante que a lógica de relatórios só ocorra com dados.
+
+    # As sub-abas agora acessam df_filtrado_loja, que está garantido como um DataFrame vazio (se necessário) ou filtrado.
 
     with subtab_dividas:
         st.header("🧾 Gerenciamento de Dívidas Pendentes")
