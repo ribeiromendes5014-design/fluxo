@@ -864,9 +864,9 @@ def gestao_produtos():
                     # Formatando o bloco de preços de forma mais limpa
                     preco_html = (
                         f'<div class="custom-price-block">'
-                        f'<small>Custo: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>'
-                        f'Valor: R$ {pv:,.2f}<br>'
-                        f'Cartao: R$ {pc_calc:,.2f}'
+                        f'<small>C: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>'
+                        f'**V:** R$ {pv:,.2f}<br>'
+                        f'**C:** R$ {pc_calc:,.2f}'
                         f'</div>'
                     )
                     c[4].markdown(preco_html, unsafe_allow_html=True)
@@ -1072,11 +1072,16 @@ def livro_caixa():
 
     # --- Inicialização e Constantes Locais ---
     # Acessa os produtos que podem ter sido alterados pela página 'Produtos'
-    produtos = inicializar_produtos()
+    # Esta é a linha que estava faltando a inicialização no session_state no fluxo de erro.
+    produtos = inicializar_produtos() 
 
     # === Inicialização do Session State ===
     if "df" not in st.session_state:
         st.session_state.df = carregar_livro_caixa()
+
+    # **GARANTIA DE ESTADO:** Garante que 'produtos' esteja no session_state para chamadas futuras.
+    if "produtos" not in st.session_state:
+         st.session_state.produtos = produtos
 
     if "lista_produtos" not in st.session_state:
         st.session_state.lista_produtos = []
@@ -1492,8 +1497,8 @@ def livro_caixa():
                                     if item.get("Produto_ID"):
                                         ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
                             
-                        # Salva ajuste de estoque
-                        if salvar_produtos_no_github(st.session_state.produtos, ARQ_PRODUTOS, "Ajuste de estoque por edição de venda"):
+                        # CORREÇÃO DA LINHA 1496: Remover ARQ_PRODUTOS
+                        if salvar_produtos_no_github(st.session_state.produtos, "Ajuste de estoque por edição de venda"):
                             inicializar_produtos.clear()
                             st.cache_data.clear() # Limpa o cache de dados para refletir mudanças no Livro Caixa
                             
@@ -1504,7 +1509,8 @@ def livro_caixa():
                             for item in produtos_vendidos_novos:
                                 if item.get("Produto_ID"): # Só debita se tiver ID de estoque
                                     ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                        if salvar_produtos_no_github(st.session_state.produtos, ARQ_PRODUTOS, "Débito de estoque por nova venda"):
+                        # CORREÇÃO DA LINHA 1526: Remover ARQ_PRODUTOS
+                        if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por nova venda"):
                             inicializar_produtos.clear()
                             st.cache_data.clear() # Limpa o cache de dados para refletir mudanças no Livro Caixa
 
@@ -1807,7 +1813,7 @@ def livro_caixa():
                                         produto_id = item.get("Produto_ID")
                                         if produto_id: 
                                             ajustar_estoque(produto_id, item["Quantidade"], "creditar")
-                                    if salvar_produtos_no_github(st.session_state.produtos, ARQ_PRODUTOS, "Crédito de estoque por exclusão de venda"):
+                                    if salvar_produtos_no_github(st.session_state.produtos, "Crédito de estoque por exclusão de venda"): # CORREÇÃO: Removido ARQ_PRODUTOS
                                         inicializar_produtos.clear()
                                         st.warning("Estoque creditado de volta.")
                                 except Exception as e:
@@ -1986,7 +1992,7 @@ def livro_caixa():
                                             produto_id = item.get("Produto_ID")
                                             if produto_id: 
                                                 ajustar_estoque(produto_id, item["Quantidade"], "debitar")
-                                        if salvar_produtos_no_github(st.session_state.produtos, ARQ_PRODUTOS, "Débito de estoque por liquidação de dívida"):
+                                        if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por liquidação de dívida"): # CORREÇÃO: Removido ARQ_PRODUTOS
                                             inicializar_produtos.clear()
                                         st.success("Estoque debitado por venda liquidada.")
                                     except Exception as e:
@@ -2246,4 +2252,3 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
-
