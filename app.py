@@ -635,7 +635,8 @@ def gestao_produtos():
                     del st.session_state.codigo_barras 
                     
                 # Força o salvamento e rerun
-                save_data_github_produtos(produtos, ARQ_PRODUTOS, "Novo produto cadastrado")
+                if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, "Novo produto cadastrado"):
+                    inicializar_produtos.clear() # Limpa o cache após criar
                 st.rerun()
 
     # ================================
@@ -725,9 +726,14 @@ def gestao_produtos():
                             produtos = produtos[produtos["PaiID"] != str(eid)]
 
                             st.session_state["produtos"] = produtos
-                            # AQUI: O salvamento está correto, mas depende do sucesso da função
-                            save_data_github_produtos(produtos, ARQ_PRODUTOS, "Atualizando produtos") 
-                            st.warning(f"Produto {pai['Nome']} e suas variações excluídas!")
+                            
+                            # Tenta salvar imediatamente e limpa o cache
+                            if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, f"Exclusão do produto pai {pai['Nome']}"):
+                                inicializar_produtos.clear() # Limpa o cache para forçar o recarregamento do novo CSV
+                                st.warning(f"Produto {pai['Nome']} e suas variações excluídas!")
+                            else:
+                                st.error("❌ Erro ao salvar a exclusão no GitHub. O produto pode reaparecer.")
+                            
                             st.rerun()
 
                     if not filhos_do_pai.empty:
@@ -766,9 +772,14 @@ def gestao_produtos():
                                     if col_btn_var.button("Confirmar exclusão", key=f"conf_del_filho_{index_var}_{eid_var}"):
                                         produtos = produtos[produtos["ID"] != str(eid_var)]
                                         st.session_state["produtos"] = produtos
-                                        # AQUI: O salvamento está correto, mas depende do sucesso da função
-                                        save_data_github_produtos(produtos, ARQ_PRODUTOS, "Atualizando produtos") 
-                                        st.warning(f"Variação {var['Nome']} excluída!")
+                                        
+                                        # Tenta salvar imediatamente e limpa o cache
+                                        if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, f"Exclusão da variação {var['Nome']}"):
+                                            inicializar_produtos.clear() # Limpa o cache para forçar o recarregamento do novo CSV
+                                            st.warning(f"Variação {var['Nome']} excluída!")
+                                        else:
+                                            st.error("❌ Erro ao salvar a exclusão no GitHub. O produto pode reaparecer.")
+
                                         st.rerun()
 
             # Editor inline (para pais e filhos)
@@ -826,7 +837,9 @@ def gestao_produtos():
                                 str(novo_cb).strip()
                             ]
                             st.session_state["produtos"] = produtos
-                            save_data_github_produtos(produtos, ARQ_PRODUTOS, "Atualizando produto")
+                            if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, "Atualizando produto"):
+                                inicializar_produtos.clear() # Limpa o cache após edição
+                                
                             del st.session_state["edit_prod"]
                             st.rerun()
                             
@@ -1178,7 +1191,8 @@ def livro_caixa():
                                         ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
                             
                         # Salva ajuste de estoque
-                        save_data_github_produtos(st.session_state.produtos, ARQ_PRODUTOS, "Ajuste de estoque por edição de venda")
+                        if salvar_produtos_no_github(st.session_state.produtos, ARQ_PRODUTOS, "Ajuste de estoque por edição de venda"):
+                            inicializar_produtos.clear()
 
                     # LÓGICA DE DÉBITO INICIAL (Nova Realizada)
                     elif not edit_mode and tipo == "Entrada" and status_selecionado_form == "Realizada" and st.session_state.lista_produtos:
@@ -1187,7 +1201,8 @@ def livro_caixa():
                             for item in produtos_vendidos_novos:
                                 if item.get("Produto_ID"): # Só debita se tiver ID de estoque
                                     ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                        save_data_github_produtos(st.session_state.produtos, ARQ_PRODUTOS, "Débito de estoque por nova venda")
+                        if salvar_produtos_no_github(st.session_state.produtos, ARQ_PRODUTOS, "Débito de estoque por nova venda"):
+                            inicializar_produtos.clear()
 
 
                     # MONTAGEM FINAL DA LINHA
@@ -1488,8 +1503,9 @@ def livro_caixa():
                                         produto_id = item.get("Produto_ID")
                                         if produto_id: 
                                             ajustar_estoque(produto_id, item["Quantidade"], "creditar")
-                                    save_data_github_produtos(st.session_state.produtos, ARQ_PRODUTOS, "Crédito de estoque por exclusão de venda")
-                                    st.warning("Estoque creditado de volta.")
+                                    if salvar_produtos_no_github(st.session_state.produtos, ARQ_PRODUTOS, "Crédito de estoque por exclusão de venda"):
+                                        inicializar_produtos.clear()
+                                        st.warning("Estoque creditado de volta.")
                                 except Exception as e:
                                     st.error(f"Erro ao creditar estoque: {e}")
                             
@@ -1630,7 +1646,8 @@ def livro_caixa():
                                             produto_id = item.get("Produto_ID")
                                             if produto_id: 
                                                 ajustar_estoque(produto_id, item["Quantidade"], "debitar")
-                                        save_data_github_produtos(st.session_state.produtos, ARQ_PRODUTOS, "Débito de estoque por liquidação de dívida")
+                                        if salvar_produtos_no_github(st.session_state.produtos, ARQ_PRODUTOS, "Débito de estoque por liquidação de dívida"):
+                                            inicializar_produtos.clear()
                                         st.success("Estoque debitado por venda liquidada.")
                                     except Exception as e:
                                         st.error(f"Erro ao debitar estoque: {e}")
