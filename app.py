@@ -1315,7 +1315,7 @@ def livro_caixa():
         contas_a_receber_vencidas = df_vencidas[df_vencidas["Tipo"] == "Entrada"]["Valor"].abs().sum()
         contas_a_pagar_vencidas = df_vencidas[df_vencidas["Tipo"] == "Saída"]["Valor"].abs().sum()
         
-        num_receber = df_vencidas[df_vendas["Tipo"] == "Entrada"].shape[0]
+        num_receber = df_vencidas[df_vencidas["Tipo"] == "Entrada"].shape[0]
         num_pagar = df_vencidas[df_vencidas["Tipo"] == "Saída"].shape[0] 
 
         if num_receber > 0 or num_pagar > 0:
