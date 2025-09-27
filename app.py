@@ -4,21 +4,21 @@ from datetime import datetime, timedelta, date
 import requests
 from requests.exceptions import ConnectionError, RequestException # Importa exceções de rede
 from io import StringIO
-import io, os 
+import io, os
 import json
 import hashlib
 import ast
 import plotly.express as px
-import base64 
+import base64
 
 # Importa a biblioteca PyGithub para gerenciamento de persistência
 try:
-    from github import Github 
+    from github import Github
 except ImportError:
     # Fallback para ambientes que não permitem o import de PyGithub, mas a persistência falhará.
     class Github:
         def __init__(self, token): pass
-        def get_repo(self, repo_name): return self 
+        def get_repo(self, repo_name): return self
         def update_file(self, path, msg, content, sha, branch): pass
         def create_file(self, path, msg, content, branch): pass
 
@@ -56,7 +56,8 @@ def ler_codigo_barras_api(image_bytes):
                     codigos.append(codigo)
 
         if 'streamlit' in globals():
-            st.write("Debug API ZXing:", codigos)
+            # st.write("Debug API ZXing:", codigos)
+            pass
 
         if not codigos and 'streamlit' in globals():
             st.warning("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
@@ -72,12 +73,11 @@ def ler_codigo_barras_api(image_bytes):
         if 'streamlit' in globals():
             st.error(f"❌ Erro de Requisição (Timeout/Outro): Falha ao completar a chamada à API ZXing. Detalhe: {e}")
         return []
-    
+        
     except Exception as e:
         if 'streamlit' in globals():
             st.error(f"❌ Erro inesperado: {e}")
         return []
-
 
 
 # ==================== CONFIGURAÇÕES DO APLICATIVO E CONSTANTES ====================
@@ -108,7 +108,7 @@ except KeyError:
     GITHUB_BRANCH = BRANCH
 
 # Caminhos dos arquivos
-URL_BASE_REPOS = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/" 
+URL_BASE_REPOS = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/"
 ARQ_PRODUTOS = "produtos_estoque.csv"
 URL_PRODUTOS = URL_BASE_REPOS + ARQ_PRODUTOS
 ARQ_LOCAL = "livro_caixa.csv"
@@ -676,8 +676,8 @@ def gestao_produtos():
                     
                     var_nome = var_c1.text_input(f"Nome da variação {i+1}", key=f"var_nome_{i}")
                     var_qtd = var_c2.number_input(f"Quantidade variação {i+1}", min_value=0, step=1, value=0, key=f"var_qtd_{i}")
-                    var_preco_custo = var_c3.text_input(f"Preço de custo variação {i+1}", value="0,00", key=f"var_pc_{i}")
-                    var_preco_vista = var_c4.text_input(f"Preço à vista variação {i+1}", value="0,00", key=f"var_pv_{i}")
+                    var_preco_custo = var_c3.text_input(f"Preço de Custo variação {i+1}", value="0,00", key=f"var_pc_{i}")
+                    var_preco_vista = var_c4.text_input(f"Preço à Vista variação {i+1}", value="0,00", key=f"var_pv_{i}")
                     
                     var_cb_c1, var_cb_c2, var_cb_c3 = st.columns([2, 1, 1])
 
@@ -891,7 +891,7 @@ def gestao_produtos():
                         if salvar_produtos_no_github(produtos, f"Exclusão do produto pai {nome_pai}"):
                             inicializar_produtos.clear() 
                         st.rerun()
-                            
+                        
 
                     if not filhos_do_pai.empty:
                         # --- Variações ---
@@ -1081,7 +1081,7 @@ def livro_caixa():
 
     # **GARANTIA DE ESTADO:** Garante que 'produtos' esteja no session_state para chamadas futuras.
     if "produtos" not in st.session_state:
-         st.session_state.produtos = produtos
+          st.session_state.produtos = produtos
 
     if "lista_produtos" not in st.session_state:
         st.session_state.lista_produtos = []
@@ -1358,14 +1358,14 @@ def livro_caixa():
             
             st.markdown("#### ⚙️ Centro de Custo (Saída)")
             categoria_selecionada = st.selectbox("Categoria de Gasto", 
-                                                CATEGORIAS_SAIDA, 
-                                                index=default_select_index,
-                                                key="input_categoria_saida")
+                                                 CATEGORIAS_SAIDA, 
+                                                 index=default_select_index,
+                                                 key="input_categoria_saida")
                 
             if categoria_selecionada == "Outro/Diversos":
                 descricao_personalizada = st.text_input("Especifique o Gasto", 
-                                                         value=custom_desc_default, 
-                                                         key="input_custom_category")
+                                                        value=custom_desc_default, 
+                                                        key="input_custom_category")
                 if descricao_personalizada:
                     categoria_selecionada = f"Outro: {descricao_personalizada}"
                 
@@ -1378,9 +1378,57 @@ def livro_caixa():
             )
             valor_final_movimentacao = valor_input_manual
 
+        # --- LÓGICA DE DATA DE PAGAMENTO (REFACTOR: FORA DO FORM PARA MELHOR UX) ---
+        data_pagamento_final = None # Valor final a ser enviado no submit
+
+        if status_selecionado == "Pendente":
+            st.markdown("##### 🗓️ Previsão de Pagamento")
+            
+            # Verifica se default_data_pagamento é uma data válida para pré-selecionar 'Com Data Prevista'
+            data_prevista_existe = pd.notna(default_data_pagamento) and (default_data_pagamento is not None)
+
+            data_status_opcoes = ["Com Data Prevista", "Sem Data Prevista"]
+            # A chave é diferente do form para que este componente sobreviva ao submit
+            data_status_key = "input_data_status_previsto_global" 
+            
+            # Tenta usar o valor anterior da sessão se houver
+            default_data_status_index = 0
+            if data_status_key in st.session_state:
+                 # Se estiver em modo edição, usa o default_data_status_previsto (do load_data)
+                if edit_mode:
+                    default_data_status_index = data_status_opcoes.index(default_data_status_previsto) if default_data_status_previsto in data_status_opcoes else 0
+                # Caso contrário, usa o último estado salvo (para nova movimentação)
+                else:
+                    default_data_status_index = data_status_opcoes.index(st.session_state[data_status_key]) if st.session_state[data_status_key] in data_status_opcoes else 0
+            else:
+                 default_data_status_index = data_status_opcoes.index(default_data_status_previsto) if default_data_status_previsto in data_status_opcoes else 0
+
+            data_status_selecionado_previsto = st.radio(
+                "Essa pendência tem data prevista?",
+                options=data_status_opcoes,
+                index=default_data_status_index,
+                key=data_status_key, 
+                horizontal=True
+            )
+
+            # Para que o date_input não resete a cada rerun, definimos a chave no session_state
+            if data_status_selecionado_previsto == "Com Data Prevista":
+                # Se for Pendente COM data, mostra o campo
+                prev_date_value = default_data_pagamento if data_prevista_existe else date.today() 
+                
+                data_prevista_pendente = st.date_input(
+                    "Selecione a Data Prevista", 
+                    value=prev_date_value, 
+                    key="input_data_pagamento_prevista_global"
+                )
+                data_pagamento_final = data_prevista_pendente
+            else:
+                # Se for Pendente SEM data, data_pagamento_final permanece None
+                data_pagamento_final = None
+
         # --- FIM DOS INPUTS FORA DO FORM ---
 
-        # --- INÍCIO DO FORM PRINCIPAL DE SUBMISSÃO ---
+        # --- INÍCIO DO FORM PRINCIPAL DE SUBMISSÃO (Onde a Data de Transação é coletada) ---
         with st.form("form_movimentacao_sidebar", clear_on_submit=not edit_mode):
             
             # Inputs restantes que precisam ser resetados na submissão
@@ -1388,54 +1436,21 @@ def livro_caixa():
                                             LOJAS_DISPONIVEIS, 
                                             index=LOJAS_DISPONIVEIS.index(default_loja) if default_loja in LOJAS_DISPONIVEIS else 0,
                                             key="input_loja_form")
-            data_input = st.date_input("Data", value=default_data, key="input_data_form")
+            data_input = st.date_input("Data da Transação (Lançamento)", value=default_data, key="input_data_form")
             cliente = st.text_input("Nome do Cliente (ou Descrição)", value=default_cliente, key="input_cliente_form")
             forma_pagamento = st.selectbox("Forma de Pagamento", 
                                             FORMAS_PAGAMENTO, 
                                             index=FORMAS_PAGAMENTO.index(default_forma) if default_forma in FORMAS_PAGAMENTO else 0,
                                             key="input_forma_pagamento_form")
             
-            # data_pagamento_final será definido com base no status global (fora do form)
-            data_pagamento_final = None 
             
-            if status_selecionado == "Pendente":
-                # Lógica para permitir 'Sem Data Prevista'
-                # Verifica se default_data_pagamento é uma data válida para pré-selecionar 'Com Data Prevista'
-                data_prevista_existe = pd.notna(default_data_pagamento) and (default_data_pagamento is not None)
-
-                data_status_opcoes = ["Com Data Prevista", "Sem Data Prevista"]
-                default_data_status_index = 0 if data_prevista_existe else 1
-                
-                # Para garantir que o estado do rádio seja persistido APÓS o submit, usamos session state.
-                # Como o rádio não está no form, ele é renderizado imediatamente, permitindo a mudança de campos.
-                data_status_selecionado_previsto = st.radio(
-                    "Data de Pagamento Prevista:",
-                    options=data_status_opcoes,
-                    index=default_data_status_index,
-                    key="input_data_status_previsto_form", # Usando um key diferente para ser resetado apenas pelo form
-                    horizontal=True
-                )
-                
-                if data_status_selecionado_previsto == "Com Data Prevista":
-                    # Se for Pendente COM data, mostra o campo
-                    prev_date_value = default_data_pagamento if data_prevista_existe else data_input
-                    
-                    data_prevista_pendente = st.date_input(
-                        "Selecione a Data Prevista", 
-                        value=prev_date_value, 
-                        key="input_data_pagamento_prevista_form"
-                    )
-                    data_pagamento_final = data_prevista_pendente
-                else:
-                    # Se for Pendente SEM data, data_pagamento_final permanece None
-                    data_pagamento_final = None
-
-            else:
-                # Se for Realizada, a Data Pagamento é a Data da Transação
+            if status_selecionado == "Realizada":
+                 # Se for Realizada, a Data Pagamento É a Data da Transação
                 data_pagamento_final = data_input
-            # --- FIM LÓGICA DE DATA DE PAGAMENTO ---
-
-
+            elif status_selecionado == "Pendente" and data_pagamento_final is None:
+                # Se for Pendente SEM Data Prevista, garantimos que a forma de pagamento é 'Pendente' para o registro
+                forma_pagamento = "Pendente" 
+            
             # Valor final (apenas exibição, o valor real vem de fora do form)
             st.caption(f"Valor Final da Movimentação: R$ {valor_final_movimentacao:,.2f}")
 
@@ -1497,26 +1512,23 @@ def livro_caixa():
                                     if item.get("Produto_ID"):
                                         ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
                             
-                        # CORREÇÃO DA LINHA 1496: Remover ARQ_PRODUTOS
-                        if salvar_produtos_no_github(st.session_state.produtos, "Ajuste de estoque por edição de venda"):
-                            inicializar_produtos.clear()
-                            st.cache_data.clear() # Limpa o cache de dados para refletir mudanças no Livro Caixa
-                            
-                    # LÓGICA DE DÉBITO INICIAL (Nova Realizada)
-                    elif not edit_mode and tipo == "Entrada" and status_selecionado == "Realizada" and st.session_state.lista_produtos:
-                        if produtos_vendidos_json:
-                            produtos_vendidos_novos = json.loads(produtos_vendidos_json)
-                            for item in produtos_vendidos_novos:
-                                if item.get("Produto_ID"): # Só debita se tiver ID de estoque
-                                    ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                        # CORREÇÃO DA LINHA 1526: Remover ARQ_PRODUTOS
-                        if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por nova venda"):
-                            inicializar_produtos.clear()
-                            st.cache_data.clear() # Limpa o cache de dados para refletir mudanças no Livro Caixa
+                            if salvar_produtos_no_github(st.session_state.produtos, "Ajuste de estoque por edição de venda"):
+                                inicializar_produtos.clear()
+                                st.cache_data.clear() # Limpa o cache de dados para refletir mudanças no Livro Caixa
+                                
+                        # LÓGICA DE DÉBITO INICIAL (Nova Realizada)
+                        elif not edit_mode and tipo == "Entrada" and status_selecionado == "Realizada" and st.session_state.lista_produtos:
+                            if produtos_vendidos_json:
+                                produtos_vendidos_novos = json.loads(produtos_vendidos_json)
+                                for item in produtos_vendidos_novos:
+                                    if item.get("Produto_ID"): # Só debita se tiver ID de estoque
+                                        ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                            if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por nova venda"):
+                                inicializar_produtos.clear()
+                                st.cache_data.clear() # Limpa o cache de dados para refletir mudanças no Livro Caixa
 
 
                     # MONTAGEM FINAL DA LINHA
-                    # data_pagamento_final já está definido no bloco condicional acima
                     
                     nova_linha_data = {
                         "Data": data_input,
@@ -1994,7 +2006,7 @@ def livro_caixa():
                                                 ajustar_estoque(produto_id, item["Quantidade"], "debitar")
                                         if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por liquidação de dívida"): # CORREÇÃO: Removido ARQ_PRODUTOS
                                             inicializar_produtos.clear()
-                                        st.success("Estoque debitado por venda liquidada.")
+                                            st.success("Estoque debitado por venda liquidada.")
                                     except Exception as e:
                                         st.error(f"Erro ao debitar estoque: {e}")
 
