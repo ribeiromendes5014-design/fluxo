@@ -647,7 +647,7 @@ def gestao_produtos():
                     del st.session_state.codigo_barras 
                     
                 # Força o salvamento e rerun
-                if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, "Novo produto cadastrado"):
+                if salvar_produtos_no_github(produtos, "Novo produto cadastrado"):
                     inicializar_produtos.clear() # Limpa o cache após criar
                 st.rerun()
 
@@ -1936,6 +1936,7 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
+
 
 
 
