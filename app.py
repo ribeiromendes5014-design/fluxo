@@ -728,9 +728,10 @@ def gestao_produtos():
                             st.session_state["produtos"] = produtos
                             
                             # Tenta salvar imediatamente e limpa o cache
-                            if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, f"Exclusão do produto pai {pai['Nome']}"):
+                            nome_pai = str(pai.get('Nome', 'Produto Desconhecido'))
+                            if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, f"Exclusão do produto pai {nome_pai}"):
                                 inicializar_produtos.clear() # Limpa o cache para forçar o recarregamento do novo CSV
-                                st.warning(f"Produto {pai['Nome']} e suas variações excluídas!")
+                                st.warning(f"Produto {nome_pai} e suas variações excluídas!")
                             else:
                                 st.error("❌ Erro ao salvar a exclusão no GitHub. O produto pode reaparecer.")
                             
@@ -774,9 +775,10 @@ def gestao_produtos():
                                         st.session_state["produtos"] = produtos
                                         
                                         # Tenta salvar imediatamente e limpa o cache
-                                        if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, f"Exclusão da variação {var['Nome']}"):
+                                        nome_var = str(var.get('Nome', 'Variação Desconhecida'))
+                                        if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, f"Exclusão da variação {nome_var}"):
                                             inicializar_produtos.clear() # Limpa o cache para forçar o recarregamento do novo CSV
-                                            st.warning(f"Variação {var['Nome']} excluída!")
+                                            st.warning(f"Variação {nome_var} excluída!")
                                         else:
                                             st.error("❌ Erro ao salvar a exclusão no GitHub. O produto pode reaparecer.")
 
