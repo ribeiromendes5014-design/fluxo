@@ -661,6 +661,41 @@ with tab_mov:
 
     st.markdown("---")
     
+    # --- LÓGICA DE ALERTA DE DÍVIDAS PENDENTES (Lembretes) ---
+    hoje_date = date.today()
+    
+    # 1. Filtrar transações pendentes com data de pagamento válida
+    df_pendente_alerta = df_exibicao[
+        (df_exibicao["Status"] == "Pendente") & 
+        (pd.notna(df_exibicao["Data Pagamento"]))
+    ].copy()
+
+    # 2. Filtrar apenas as vencidas (Data Pagamento <= hoje)
+    df_vencidas = df_pendente_alerta[
+        df_pendente_alerta["Data Pagamento"] <= hoje_date
+    ]
+
+    # 3. Calcular contagens e somas
+    contas_a_receber_vencidas = df_vencidas[df_vencidas["Tipo"] == "Entrada"]["Valor"].abs().sum()
+    contas_a_pagar_vencidas = df_vencidas[df_vencidas["Tipo"] == "Saída"]["Valor"].abs().sum()
+    
+    num_receber = df_vencidas[df_vencidas["Tipo"] == "Entrada"].shape[0]
+    num_pagar = df_vencidas[df_vencidas["Tipo"] == "Saída"].shape[0]
+
+    if num_receber > 0 or num_pagar > 0:
+        alert_message = "### ⚠️ DÍVIDAS PENDENTES VENCIDAS (ou Vencendo Hoje)!"
+        
+        if num_receber > 0:
+            alert_message += f"\n\n💸 **{num_receber} Contas a Receber** (Total: R$ {contas_a_receber_vencidas:,.2f})"
+        if num_pagar > 0:
+            alert_message += f"\n\n💰 **{num_pagar} Contas a Pagar** (Total: R$ {contas_a_pagar_vencidas:,.2f})"
+        
+        st.error(alert_message)
+        st.caption("Acesse a aba **Relatórios e Filtros > Dívidas Pendentes** para concluir essas transações.")
+        st.markdown("---") # Separador após o alerta
+    # --- FIM LÓGICA DE ALERTA DE DÍVIDAS PENDENTES ---
+
+    
     # --- Resumo Agregado por Loja (MÊS ATUAL REALIZADO) ---
     st.subheader(f"🏠 Resumo Rápido por Loja (Mês de {primeiro_dia_mes.strftime('%m/%Y')} - Realizado)")
     
