@@ -609,7 +609,7 @@ def gestao_produtos():
                     }
                     produtos = pd.concat([produtos, pd.DataFrame([novo_pai])], ignore_index=True)
 
-                    for var in variações:<
+                    for var in variações:
                         if var["Nome"] == "":
                             continue 
                         novo_filho = {
@@ -1011,7 +1011,7 @@ def livro_caixa():
                     
                     elif produto_selecionado != "":
                         # --- ENTRADA DE ESTOQUE ---
-                        produto_id_selecionado = extrair_id_do_nome(produto_selecionado) # CORRIGIDO: extrair_id_id_do_nome para extrair_id_do_nome
+                        produto_id_selecionado = extrair_id_do_nome(produto_selecionado) 
                         produto_row_completa = produtos_para_venda[produtos_para_venda["ID"] == produto_id_selecionado]
                         
                         if not produto_row_completa.empty:
@@ -1285,7 +1285,7 @@ def livro_caixa():
         contas_a_pagar_vencidas = df_vencidas[df_vencidas["Tipo"] == "Saída"]["Valor"].abs().sum()
         
         num_receber = df_vencidas[df_vencidas["Tipo"] == "Entrada"].shape[0]
-        num_pagar = df_vencidas[df_vendas["Tipo"] == "Saída"].shape[0] # CORRIGIDO: df_vendas -> df_vencidas
+        num_pagar = df_vencidas[df_vencidas["Tipo"] == "Saída"].shape[0] 
 
         if num_receber > 0 or num_pagar > 0:
             alert_message = "### ⚠️ DÍVIDAS PENDENTES VENCIDAS (ou Vencendo Hoje)!"
