@@ -490,7 +490,82 @@ def save_data_github_produtos(df, path, commit_message):
             return True
     return False
 
+# --- Callback para Cadastro de Novo Produto ---
+def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variacoes):
+    """Lógica de persistência para o novo produto."""
+    
+    if not nome.strip():
+        st.warning("⚠️ O nome do produto é obrigatório.")
+        return 
+        
+    novo_id = prox_id(produtos, "ID")
+    
+    if tipo_produto == "Produto simples":
+        novo = {
+            "ID": novo_id,
+            "Nome": nome.strip(),
+            "Marca": marca.strip(),
+            "Categoria": categoria.strip(),
+            "Quantidade": int(qtd),
+            "PrecoCusto": to_float(preco_custo),
+            "PrecoVista": to_float(preco_vista),
+            "PrecoCartao": round(to_float(preco_vista) / FATOR_CARTAO, 2) if to_float(preco_vista) > 0 else 0.0,
+            "Validade": str(validade),
+            "FotoURL": foto_url.strip(),
+            "CodigoBarras": codigo_barras.strip(),
+            "PaiID": None 
+        }
+        produtos = pd.concat([produtos, pd.DataFrame([novo])], ignore_index=True)
+    else:
+        # Produto Pai
+        novo_pai = {
+            "ID": novo_id,
+            "Nome": nome.strip(),
+            "Marca": marca.strip(),
+            "Categoria": categoria.strip(),
+            "Quantidade": 0, 
+            "PrecoCusto": 0.0,
+            "PrecoVista": 0.0,
+            "PrecoCartao": 0.0,
+            "Validade": str(validade),
+            "FotoURL": foto_url.strip(),
+            "CodigoBarras": codigo_barras.strip(),
+            "PaiID": None
+        }
+        produtos = pd.concat([produtos, pd.DataFrame([novo_pai])], ignore_index=True)
 
+        # Variações (Filhos)
+        for var in variacoes:
+            if var["Nome"] == "":
+                continue 
+            novo_filho = {
+                "ID": prox_id(produtos, "ID"),
+                "Nome": var["Nome"],
+                "Marca": marca.strip(),
+                "Categoria": categoria.strip(),
+                "Quantidade": var["Quantidade"],
+                "PrecoCusto": var["PrecoCusto"],
+                "PrecoVista": var["PrecoVista"],
+                "PrecoCartao": var["PrecoCartao"],
+                "Validade": str(validade),
+                "FotoURL": foto_url.strip(),
+                "CodigoBarras": var["CodigoBarras"],
+                "PaiID": novo_id 
+            }
+            produtos = pd.concat([produtos, pd.DataFrame([novo_filho])], ignore_index=True)
+
+    st.session_state["produtos"] = produtos # Atualiza a sessão
+    
+    # Limpa estados para resetar o formulário
+    if 'cb_grade_lidos' in st.session_state:
+        del st.session_state.cb_grade_lidos 
+    if 'codigo_barras' in st.session_state:
+        del st.session_state.codigo_barras 
+        
+    # Força o salvamento e rerun
+    if salvar_produtos_no_github(produtos, "Novo produto cadastrado"):
+        inicializar_produtos.clear() # Limpa o cache após criar
+        
 # ==============================================================================
 # FUNÇÃO DA PÁGINA: GESTÃO DE PRODUTOS (ESTOQUE)
 # ==============================================================================
@@ -535,6 +610,11 @@ def gestao_produtos():
                 categoria = st.text_input("Categoria", key="cad_categoria")
 
             with c2:
+                # Inicializa valores de produto simples para passar ao callback
+                qtd = 0
+                preco_custo = "0,00"
+                preco_vista = "0,00"
+                
                 if tipo_produto == "Produto simples":
                     qtd = st.number_input("Quantidade", min_value=0, step=1, value=0, key="cad_qtd")
                     preco_custo = st.text_input("Preço de Custo", value="0,00", key="cad_preco_custo")
@@ -644,76 +724,17 @@ def gestao_produtos():
                         "PrecoCartao": round(to_float(var_preco_vista) / FATOR_CARTAO, 2) if to_float(var_preco_vista) > 0 else 0.0,
                         "CodigoBarras": var_codigo_barras.strip() 
                     })
-
-            if st.button("💾 Salvar Produto", use_container_width=True, key="cad_salvar"):
-                if not nome.strip():
-                    st.warning("⚠️ O nome do produto é obrigatório.")
-                    
-                novo_id = prox_id(produtos, "ID")
-                
-                if tipo_produto == "Produto simples":
-                    novo = {
-                        "ID": novo_id,
-                        "Nome": nome.strip(),
-                        "Marca": marca.strip(),
-                        "Categoria": categoria.strip(),
-                        "Quantidade": int(qtd),
-                        "PrecoCusto": to_float(preco_custo),
-                        "PrecoVista": to_float(preco_vista),
-                        "PrecoCartao": round(to_float(preco_vista) / FATOR_CARTAO, 2) if to_float(preco_vista) > 0 else 0.0,
-                        "Validade": str(validade),
-                        "FotoURL": foto_url.strip(),
-                        "CodigoBarras": codigo_barras.strip(),
-                        "PaiID": None 
-                    }
-                    produtos = pd.concat([produtos, pd.DataFrame([novo])], ignore_index=True)
-                else:
-                    novo_pai = {
-                        "ID": novo_id,
-                        "Nome": nome.strip(),
-                        "Marca": marca.strip(),
-                        "Categoria": categoria.strip(),
-                        "Quantidade": 0, 
-                        "PrecoCusto": 0.0,
-                        "PrecoVista": 0.0,
-                        "PrecoCartao": 0.0,
-                        "Validade": str(validade),
-                        "FotoURL": foto_url.strip(),
-                        "CodigoBarras": codigo_barras.strip(),
-                        "PaiID": None
-                    }
-                    produtos = pd.concat([produtos, pd.DataFrame([novo_pai])], ignore_index=True)
-
-                    for var in variações:
-                        if var["Nome"] == "":
-                            continue 
-                        novo_filho = {
-                            "ID": prox_id(produtos, "ID"),
-                            "Nome": var["Nome"],
-                            "Marca": marca.strip(),
-                            "Categoria": categoria.strip(),
-                            "Quantidade": var["Quantidade"],
-                            "PrecoCusto": var["PrecoCusto"],
-                            "PrecoVista": var["PrecoVista"],
-                            "PrecoCartao": var["PrecoCartao"],
-                            "Validade": str(validade),
-                            "FotoURL": foto_url.strip(),
-                            "CodigoBarras": var["CodigoBarras"],
-                            "PaiID": novo_id 
-                        }
-                        produtos = pd.concat([produtos, pd.DataFrame([novo_filho])], ignore_index=True)
-
-                st.session_state["produtos"] = produtos # Atualiza a sessão
-                # Limpa os estados para resetar o formulário
-                if 'cb_grade_lidos' in st.session_state:
-                    del st.session_state.cb_grade_lidos 
-                if 'codigo_barras' in st.session_state:
-                    del st.session_state.codigo_barras 
-                    
-                # Força o salvamento e rerun
-                if salvar_produtos_no_github(produtos, "Novo produto cadastrado"):
-                    inicializar_produtos.clear() # Limpa o cache após criar
+            
+            # --- BOTÃO SALVAR PRODUTO (CHAMANDO CALLBACK) ---
+            if st.button(
+                "💾 Salvar Produto", 
+                use_container_width=True, 
+                key="cad_salvar",
+                on_click=callback_salvar_novo_produto,
+                args=(produtos.copy(), tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações)
+            ):
                 st.rerun()
+
 
     # ================================
     # SUBABA: LISTA & BUSCA
@@ -842,9 +863,9 @@ def gestao_produtos():
                     # Formatando o bloco de preços de forma mais limpa
                     preco_html = (
                         f'<div class="custom-price-block">'
-                        f'<small>Custo: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>'
-                        f'Valor: R$ {pv:,.2f}<br>'
-                        f'Cartao: R$ {pc_calc:,.2f}'
+                        f'<small>C: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>'
+                        f'**V:** R$ {pv:,.2f}<br>'
+                        f'**C:** R$ {pc_calc:,.2f}'
                         f'</div>'
                     )
                     c[4].markdown(preco_html, unsafe_allow_html=True)
@@ -989,6 +1010,7 @@ def gestao_produtos():
                                 str(novo_cb).strip()
                             ]
                             st.session_state["produtos"] = produtos
+                            # CORREÇÃO: Chama salvar_produtos_no_github diretamente (com 2 args)
                             if salvar_produtos_no_github(produtos, "Atualizando produto"):
                                 inicializar_produtos.clear() # Limpa o cache após edição
                                 
@@ -2220,4 +2242,3 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
-
