@@ -985,7 +985,7 @@ def gestao_produtos():
                                 str(novo_cb).strip()
                             ]
                             st.session_state["produtos"] = produtos
-                            if salvar_produtos_no_github(produtos, ARQ_PRODUTOS, "Atualizando produto"):
+                            if salvar_produtos_no_github(produtos, "Atualizando produto"):
                                 inicializar_produtos.clear() # Limpa o cache após edição
                                 
                             del st.session_state["edit_prod"]
@@ -2215,5 +2215,6 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
+
 
 
