@@ -945,6 +945,43 @@ def gestao_produtos():
 # FUNÇÃO DA PÁGINA: LIVRO CAIXA COMPLETO (BASEADO EM ff.py)
 # ==============================================================================
 
+# --- Funções de Callback para Adição de Produtos ---
+def callback_adicionar_manual(nome, qtd, preco, custo):
+    """Adiciona item manual e limpa o session state."""
+    if nome and qtd > 0:
+        st.session_state.lista_produtos.append({
+            "Produto_ID": "", 
+            "Produto": nome,
+            "Quantidade": qtd,
+            "Preço Unitário": preco,
+            "Custo Unitário": custo 
+        })
+        # Limpa os campos de input manual no session state
+        st.session_state.input_nome_prod_manual = ""
+        st.session_state.input_qtd_prod_manual = 1.0
+        st.session_state.input_preco_prod_manual = 0.01
+        st.session_state.input_custo_prod_manual = 0.00
+        # Limpa o seletor para que o usuário possa selecionar o próximo item
+        st.session_state.input_produto_selecionado = "" 
+        
+def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_disp):
+    """Adiciona item de estoque e limpa o seletor."""
+    if qtd > 0 and qtd <= estoque_disp:
+        st.session_state.lista_produtos.append({
+            "Produto_ID": prod_id, # Chave para débito de estoque
+            "Produto": prod_nome,
+            "Quantidade": qtd,
+            "Preço Unitário": preco,
+            "Custo Unitário": custo 
+        })
+        # Limpa o seletor
+        st.session_state.input_produto_selecionado = ""
+    else:
+        # Nota: O warning pode não ser exibido corretamente devido ao re-run
+        st.warning("A quantidade excede o estoque ou é inválida.")
+
+# --- Função Principal ---
+
 def livro_caixa():
     #st.set_page_config(layout="wide", page_title="Livro Caixa", page_icon="📘") # REMOVIDO: Apenas uma chamada é permitida
     st.title("📘 Livro Caixa - Gerenciamento de Movimentações")
@@ -1155,31 +1192,16 @@ def livro_caixa():
                             format="%.2f", 
                             key="input_custo_prod_manual"
                         )
-
-                        def callback_adicionar_manual(nome, qtd, preco, custo):
-                            if nome and qtd > 0:
-                                st.session_state.lista_produtos.append({
-                                    "Produto_ID": "", 
-                                    "Produto": nome,
-                                    "Quantidade": qtd,
-                                    "Preço Unitário": preco,
-                                    "Custo Unitário": custo 
-                                })
-                                # Limpa os campos após a adição bem-sucedida
-                                st.session_state.input_nome_prod_manual = ""
-                                st.session_state.input_qtd_prod_manual = 1.0
-                                st.session_state.input_preco_prod_manual = 0.01
-                                st.session_state.input_custo_prod_manual = 0.00
-                                st.session_state.input_produto_selecionado = "" # Limpa o seletor
-
-                        if st.button("Adicionar Item Manual", key="adicionar_item_manual_button", use_container_width=True):
-                             callback_adicionar_manual(
-                                 nome_produto_manual, 
-                                 quantidade_manual, 
-                                 preco_unitario_manual, 
-                                 custo_unitario_manual
-                             )
-                             st.rerun() # Força a atualização da lista de produtos e do seletor
+                        
+                        # Correção: O callback agora é chamado no 'on_click'
+                        if st.button(
+                            "Adicionar Item Manual", 
+                            key="adicionar_item_manual_button", 
+                            use_container_width=True,
+                            on_click=callback_adicionar_manual,
+                            args=(nome_produto_manual, quantidade_manual, preco_unitario_manual, custo_unitario_manual)
+                        ):
+                             st.rerun() 
                         # --- FIM ENTRADA MANUAL ---
 
                     
@@ -1204,27 +1226,14 @@ def livro_caixa():
                             
                             st.caption(f"Custo Unitário: R$ {custo_unit:,.2f}")
 
-                            def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo):
-                                if qtd > 0 and qtd <= estoque_disp:
-                                    st.session_state.lista_produtos.append({
-                                        "Produto_ID": prod_id, # Chave para débito de estoque
-                                        "Produto": prod_nome,
-                                        "Quantidade": qtd,
-                                        "Preço Unitário": preco,
-                                        "Custo Unitário": custo 
-                                    })
-                                    st.session_state.input_produto_selecionado = "" # Limpa o seletor
-                                else:
-                                    st.warning("A quantidade excede o estoque ou é inválida.")
-
-                            if st.button("Adicionar Item à Venda", key="adicionar_item_button", use_container_width=True):
-                                callback_adicionar_estoque(
-                                    produto_id_selecionado, 
-                                    nome_produto, 
-                                    quantidade_input, 
-                                    preco_unitario_input, 
-                                    custo_unit
-                                )
+                            # Correção: O callback agora é chamado no 'on_click'
+                            if st.button(
+                                "Adicionar Item à Venda", 
+                                key="adicionar_item_button", 
+                                use_container_width=True,
+                                on_click=callback_adicionar_estoque,
+                                args=(produto_id_selecionado, nome_produto, quantidade_input, preco_unitario_input, custo_unit, estoque_disp)
+                            ):
                                 st.rerun()
                         # --- FIM ENTRADA DE ESTOQUE ---
                         
