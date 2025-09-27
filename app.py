@@ -10,6 +10,23 @@ import hashlib
 import ast
 import plotly.express as px
 import base64 
+import streamlit as st
+import pandas as pd
+import os
+from datetime import date, datetime, timedelta
+from PIL import Image, ImageEnhance, UnidentifiedImageError
+from io import BytesIO
+import requests  
+from github import Github
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, Image as RLImage
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+import pytz
+import requests
+from requests.exceptions import ConnectionError, RequestException
 
 # =====================================
 # Funções auxiliares (CORRIGIDO: Troca API ZXing por WebQR - JSON)
@@ -2004,3 +2021,4 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
+
