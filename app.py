@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, date
 import requests
+from requests.exceptions import ConnectionError, RequestException # Importa exceções de rede
 from io import StringIO
 import io, os 
 import json
@@ -9,6 +10,66 @@ import hashlib
 import ast
 import plotly.express as px
 import base64 
+
+# =====================================
+# Funções auxiliares (CORRIGIDO: API ZXing com tratamento de erros de conexão)
+# =====================================
+
+def ler_codigo_barras_api(image_bytes):
+    """
+    Decodifica códigos de barras de uma imagem usando a API pública ZXing.
+    Inclui tratamento de erros de conexão e parse de HTML.
+    """
+    # Endpoint original que você disse que funcionava
+    URL_DECODER_ZXING = "https://zxing.org/w/decode"
+    
+    try:
+        # Define o arquivo com o mimetype que a API ZXing espera
+        files = {"f": ("barcode.png", image_bytes, "image/png")}
+        
+        # Faz a requisição com um timeout de 30 segundos
+        response = requests.post(URL_DECODER_ZXING, files=files, timeout=30) 
+
+        if response.status_code != 200:
+            st.error(f"❌ Erro na API ZXing. Status HTTP: {response.status_code}")
+            return []
+
+        # Parse de HTML para extrair o código (lógica original)
+        text = response.text
+        codigos = []
+        if "<pre>" in text:
+            partes = text.split("<pre>")
+            for p in partes[1:]:
+                codigo = p.split("</pre>")[0].strip()
+                if codigo and not codigo.startswith("Erro na decodificação"):
+                    codigos.append(codigo)
+
+        # Se estiver em ambiente Streamlit, exibe o debug
+        if 'streamlit' in globals():
+             st.write("Debug API ZXing:", codigos)
+        
+        if not codigos and 'streamlit' in globals():
+             st.warning("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
+             
+        return codigos
+
+    except ConnectionError as ce:
+        # CAPTURA O ERRO 'Connection refused'
+        if 'streamlit' in globals():
+            st.error(f"❌ Erro de Conexão (Rede Bloqueada): O servidor {URL_DECODER_ZXING} recusou a conexão. O problema é na rede do seu host.")
+        return []
+        
+    except RequestException as e:
+        # CAPTURA OUTROS ERROS (Timeout, etc.)
+        if 'streamlit' in globals():
+            st.error(f"❌ Erro de Requisição (Timeout/Outro): Falha ao completar a chamada à API. Detalhe: {e}")
+        return []
+        
+    except Exception as e:
+        if 'streamlit' in globals():
+            st.error(f"❌ Erro inesperado: {e}")
+        return []
+
 # Importa a biblioteca PyGithub para gerenciamento de persistência
 try:
     from github import Github 
@@ -89,9 +150,7 @@ def to_float(valor_str):
     except:
         return 0.0
 
-def ler_codigo_barras_api(imagem_bytes):
-    """Função mock para ler código de barras de uma imagem."""
-    return ["1234567890123"] 
+# REMOVIDA A FUNÇÃO ler_codigo_barras_api MOCK AQUI, POIS FOI COLOCADA NO INÍCIO
 
 def prox_id(df, coluna_id="ID"):
     """Função auxiliar para criar um novo ID sequencial."""
@@ -501,11 +560,13 @@ def gestao_produtos():
                 # --- Escanear com câmera (Produto Simples/Pai) ---
                 foto_codigo = st.camera_input("📷 Escanear código de barras / QR Code", key="cad_cam")
                 if foto_codigo is not None:
-                    imagem_bytes = foto_codigo.getvalue()
+                    # Usa o getbuffer() no Streamlit para obter os bytes da imagem
+                    imagem_bytes = foto_codigo.getbuffer() 
                     codigos_lidos = ler_codigo_barras_api(imagem_bytes)
                     if codigos_lidos:
                         st.session_state["codigo_barras"] = codigos_lidos[0]
-                        st.success(f"Código lido: {st.session_state['codigo_barras']}")
+                        st.success(f"Código lido: **{st.session_state['codigo_barras']}**")
+                        # Força o Streamlit a atualizar para preencher o campo
                         st.rerun() 
                     else:
                         st.error("❌ Não foi possível ler nenhum código.")
@@ -513,11 +574,13 @@ def gestao_produtos():
                 # --- Upload de imagem do código de barras (Produto Simples/Pai) ---
                 foto_codigo_upload = st.file_uploader("📤 Upload de imagem do código de barras", type=["png", "jpg", "jpeg"], key="cad_cb_upload")
                 if foto_codigo_upload is not None:
-                    imagem_bytes = foto_codigo_upload.getvalue()
+                    # Usa o getvalue() para obter os bytes da imagem de upload
+                    imagem_bytes = foto_codigo_upload.getvalue() 
                     codigos_lidos = ler_codigo_barras_api(imagem_bytes)
                     if codigos_lidos:
                         st.session_state["codigo_barras"] = codigos_lidos[0]
-                        st.success(f"Código lido via upload: {st.session_state['codigo_barras']}")
+                        st.success(f"Código lido via upload: **{st.session_state['codigo_barras']}**")
+                        # Força o Streamlit a atualizar para preencher o campo
                         st.rerun() 
                     else:
                         st.error("❌ Não foi possível ler nenhum código da imagem enviada.")
@@ -562,13 +625,16 @@ def gestao_produtos():
                             key=f"var_cb_cam_{i}"
                         )
                     
+                    # Checa qual input de imagem foi usado (Upload ou Câmera)
                     foto_lida = var_foto_upload or var_foto_cam
                     if foto_lida:
-                        imagem_bytes = foto_lida.getvalue() 
+                        # Usa getvalue() para upload e getbuffer() para camera input
+                        imagem_bytes = foto_lida.getvalue() if var_foto_upload else foto_lida.getbuffer()
                         codigos_lidos = ler_codigo_barras_api(imagem_bytes)
                         if codigos_lidos:
+                            # Armazena o código lido no estado de sessão da grade
                             st.session_state.cb_grade_lidos[f"var_cb_{i}"] = codigos_lidos[0]
-                            st.success(f"CB Variação {i+1} lido: {codigos_lidos[0]}")
+                            st.success(f"CB Variação {i+1} lido: **{codigos_lidos[0]}**")
                             st.rerun() 
                         else:
                             st.error("❌ Não foi possível ler nenhum código.")
@@ -837,10 +903,11 @@ def gestao_produtos():
 
                         foto_codigo_edit = st.camera_input("📷 Atualizar código de barras", key=f"edit_cam_{eid}")
                         if foto_codigo_edit is not None:
+                            # Usa getbuffer() para camera input
                             codigo_lido = ler_codigo_barras_api(foto_codigo_edit.getbuffer()) 
                             if codigo_lido:
                                 novo_cb = codigo_lido[0]
-                                st.success(f"Código lido: {novo_cb}")
+                                st.success(f"Código lido: **{novo_cb}**")
 
                     col_save, col_cancel = st.columns([1, 1])
                     with col_save:
@@ -1936,7 +2003,3 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
-
-
-
-
