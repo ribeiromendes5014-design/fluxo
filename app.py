@@ -1229,15 +1229,35 @@ def livro_caixa():
             data_pagamento_final = None # Inicializa a variável
             
             if status_selecionado_form == "Pendente":
-                # Se for Pendente, mostra o campo opcional para Data Prevista
-                prev_date_value = default_data_pagamento if default_data_pagamento else data_input
-                
-                data_prevista_pendente = st.date_input(
-                    "Data de Pagamento Prevista (Opcional)", 
-                    value=prev_date_value, 
-                    key="input_data_pagamento_prevista"
+                # Lógica para permitir 'Sem Data Prevista'
+                data_prevista_existe = pd.notna(default_data_pagamento) and (default_data_pagamento is not None)
+
+                data_status_opcoes = ["Com Data Prevista", "Sem Data Prevista"]
+                # Se for edição e já tiver data salva, assume 'Com Data Prevista' como default.
+                default_data_status_index = 0 if data_prevista_existe else 1
+
+                data_status_selecionado = st.radio(
+                    "Data de Pagamento Prevista:",
+                    options=data_status_opcoes,
+                    index=default_data_status_index,
+                    key="input_data_status_previsto",
+                    horizontal=True
                 )
-                data_pagamento_final = data_prevista_pendente
+                
+                if data_status_selecionado == "Com Data Prevista":
+                    # Se for Pendente COM data, mostra o campo
+                    prev_date_value = default_data_pagamento if data_prevista_existe else data_input
+                    
+                    data_prevista_pendente = st.date_input(
+                        "Selecione a Data Prevista", 
+                        value=prev_date_value, 
+                        key="input_data_pagamento_prevista"
+                    )
+                    data_pagamento_final = data_prevista_pendente
+                else:
+                    # Se for Pendente SEM data, data_pagamento_final permanece None (para ser salvo como string vazia/NaN)
+                    data_pagamento_final = None
+
             else:
                 # Se for Realizada, a Data Pagamento é a Data da Transação
                 data_pagamento_final = data_input
