@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta, date
 import requests
 from io import StringIO
-import io, os # Necessário para funções de persistência do ff.py
+import io, os 
 import json
 import hashlib
 import ast
@@ -118,6 +118,7 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
     """Carrega um arquivo CSV diretamente do GitHub (URL raw)."""
     try:
         df = pd.read_csv(url, dtype=str)
+        # Garante que, se o arquivo for lido, mas estiver quase vazio (apenas cabeçalhos), retorne None
         if df.empty or len(df.columns) < 2:
             return None
         return df
@@ -331,7 +332,8 @@ def inicializar_produtos():
     # Verifica se o DataFrame de produtos já está na sessão
     if "produtos" not in st.session_state:
         # Tenta carregar do GitHub
-        df_carregado = load_csv_github(URL_PRODUTOS)
+        url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}"
+        df_carregado = load_csv_github(url_raw)
         
         if df_carregado is None or df_carregado.empty:
             df_base = pd.DataFrame(columns=COLUNAS_PRODUTOS)
@@ -388,11 +390,16 @@ def salvar_produtos_no_github(dataframe, commit_message):
     
     df_temp = dataframe.copy()
     
-    for col in df_temp.select_dtypes(include=['datetime64[ns]']).columns:
-        df_temp[col] = df_temp[col].dt.strftime('%Y-%m-%d').fillna('')
+    # 1. Garante que o DataFrame não está vazio ANTES de tentar o to_csv
+    if df_temp.empty:
+        # Se for salvar um DF vazio, garante que as colunas sejam salvas
+        csv_string = pd.DataFrame(columns=dataframe.columns).to_csv(index=False)
+    else:
+        for col in df_temp.select_dtypes(include=['datetime64[ns]']).columns:
+            df_temp[col] = df_temp[col].dt.strftime('%Y-%m-%d').fillna('')
+        csv_string = df_temp.to_csv(index=False)
         
-    conteudo = df_temp.to_csv(index=False)
-    conteudo_b64 = base64.b64encode(conteudo.encode()).decode()
+    conteudo_b64 = base64.b64encode(csv_string.encode()).decode()
     headers = {"Authorization": f"token {token}"}
     
     r = get(url, headers=headers)
@@ -434,8 +441,7 @@ def gestao_produtos():
     # Título da Página
     st.header("📦 Gestão de Produtos e Estoque")
 
-    # Lógica de Salvamento Automático
-    # A chamada aqui garante que alterações em outras partes (Livro Caixa) sejam salvas
+    # Lógica de Salvamento Automático para sincronizar alterações feitas pelo Livro Caixa
     save_data_github_produtos(produtos, ARQ_PRODUTOS, COMMIT_MESSAGE_PROD)
 
 
@@ -873,6 +879,7 @@ def livro_caixa():
     st.title("📘 Livro Caixa - Gerenciamento de Movimentações")
 
     # --- Inicialização e Constantes Locais ---
+    # Acessa os produtos que podem ter sido alterados pela página 'Produtos'
     produtos = inicializar_produtos()
 
     # === Inicialização do Session State ===
@@ -1209,7 +1216,8 @@ def livro_caixa():
                         # Salva ajuste de estoque
                         if salvar_produtos_no_github(st.session_state.produtos, ARQ_PRODUTOS, "Ajuste de estoque por edição de venda"):
                             inicializar_produtos.clear()
-
+                            st.cache_data.clear() # Limpa o cache de dados para refletir mudanças no Livro Caixa
+                            
                     # LÓGICA DE DÉBITO INICIAL (Nova Realizada)
                     elif not edit_mode and tipo == "Entrada" and status_selecionado_form == "Realizada" and st.session_state.lista_produtos:
                         if produtos_vendidos_json:
@@ -1219,6 +1227,7 @@ def livro_caixa():
                                     ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
                         if salvar_produtos_no_github(st.session_state.produtos, ARQ_PRODUTOS, "Débito de estoque por nova venda"):
                             inicializar_produtos.clear()
+                            st.cache_data.clear() # Limpa o cache de dados para refletir mudanças no Livro Caixa
 
 
                     # MONTAGEM FINAL DA LINHA
@@ -1705,7 +1714,7 @@ def livro_caixa():
                 
                 st.markdown("---")
 
-                # --- Distribuição de Saídas por Categoria (Centro de Custo - Realizadas) ---
+                # --- Distribuição de Saídas por Categoria (Centro de Custo) ---
                 st.markdown("### 📊 Saídas por Categoria (Centro de Custo - Realizadas)")
                 
                 df_saidas = df_filtrado_loja[(df_filtrado_loja['Tipo'] == 'Saída') & (df_filtrado_loja['Status'] == 'Realizada')].copy()
