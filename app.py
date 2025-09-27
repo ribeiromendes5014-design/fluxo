@@ -1242,7 +1242,7 @@ def livro_caixa():
         contas_a_pagar_vencidas = df_vencidas[df_vencidas["Tipo"] == "Saída"]["Valor"].abs().sum()
         
         num_receber = df_vencidas[df_vencidas["Tipo"] == "Entrada"].shape[0]
-        num_pagar = df_vencidas[df_vendas["Tipo"] == "Saída"].shape[0]
+        num_pagar = df_vencidas[df_vencidas["Tipo"] == "Saída"].shape[0] # CORRIGIDO: df_vendas -> df_vencidas
 
         if num_receber > 0 or num_pagar > 0:
             alert_message = "### ⚠️ DÍVIDAS PENDENTES VENCIDAS (ou Vencendo Hoje)!"
