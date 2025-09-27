@@ -758,23 +758,24 @@ def gestao_produtos():
             produtos_pai = produtos_filtrados[produtos_filtrados["PaiID"].isnull()]
             produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull()]
             
-            # --- Cabeçalho da Tabela (Melhor UX) ---
+            # --- CSS Customizado para o Layout da Lista ---
             st.markdown("""
                 <style>
-                .custom-header {
+                .custom-header, .custom-row {
                     display: grid;
-                    grid-template-columns: 80px 2.5fr 1fr 1fr 1.5fr 0.5fr 0.5fr;
+                    /* Layout: Img | Produto/Marca | Estoque | Validade | Preços | Ações */
+                    grid-template-columns: 80px 3fr 1fr 1fr 1.5fr 0.5fr 0.5fr;
+                    align-items: center;
+                    gap: 5px;
+                }
+                .custom-header {
                     font-weight: bold;
                     padding: 8px 0;
                     border-bottom: 1px solid #ccc;
                     margin-bottom: 5px;
                 }
-                .custom-row {
-                    display: grid;
-                    grid-template-columns: 80px 2.5fr 1fr 1fr 1.5fr 0.5fr 0.5fr;
-                    padding: 5px 0;
-                    align-items: center;
-                    gap: 5px;
+                .custom-price-block {
+                    line-height: 1.2;
                 }
                 .stButton > button {
                     height: 32px;
@@ -784,6 +785,9 @@ def gestao_produtos():
                     border-radius: 5px;
                     border: 1px solid #ddd;
                     background-color: #f0f2f6;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
                 }
                 .stButton > button:hover {
                     background-color: #e0e0e0;
@@ -795,29 +799,29 @@ def gestao_produtos():
                     <div>Estoque</div>
                     <div>Validade</div>
                     <div>Preços (Custo/Vista/Cartão)</div>
-                    <div>Edição</div>
-                    <div>Excluir</div>
+                    <div style="grid-column: span 2;">Ações</div>
                 </div>
             """, unsafe_allow_html=True)
 
 
             for index, pai in produtos_pai.iterrows():
+                # --- CONTAINER DO PRODUTO PAI ---
                 with st.container(border=True):
-                    # Usaremos 7 colunas, mas a organização visual será feita com markdown/HTML para melhor controle.
-                    c = st.columns([1, 2.5, 1, 1, 1.5, 0.5, 0.5]) 
+                    # Usamos st.columns para criar o grid dentro do container
+                    c = st.columns([1, 3, 1, 1, 1.5, 0.5, 0.5]) 
                     
                     # --- 1. Imagem ---
                     if str(pai["FotoURL"]).strip():
                         try:
                             c[0].image(pai["FotoURL"], width=60)
                         except Exception:
-                            c[0].write("Sem imagem")
+                            c[0].write("—")
                     else:
                         c[0].write("—")
 
                     # --- 2. Nome/Marca/Categoria ---
                     cb = f' • CB: {pai["CodigoBarras"]}' if str(pai.get("CodigoBarras", "")).strip() else ""
-                    c[1].markdown(f"**{pai['Nome']}**\n<small>Marca: {pai['Marca']} | Cat: {pai['Categoria']}</small>", unsafe_allow_html=True)
+                    c[1].markdown(f"**{pai['Nome']}**<br><small>Marca: {pai['Marca']} | Cat: {pai['Categoria']}</small>", unsafe_allow_html=True)
                     
                     # --- 3. Estoque ---
                     estoque_total = pai['Quantidade']
@@ -835,12 +839,15 @@ def gestao_produtos():
                     pc = to_float(pai['PrecoCartao'])
                     pc_calc = round(pv / FATOR_CARTAO, 2)
                     
-                    c[4].markdown(
-                        f"<small>C: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>"
-                        f"**V:** R$ {pv:,.2f}<br>"
-                        f"**C:** R$ {pc_calc:,.2f}",
-                        unsafe_allow_html=True
+                    # Formatando o bloco de preços de forma mais limpa
+                    preco_html = (
+                        f'<div class="custom-price-block">'
+                        f'<small>C: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>'
+                        f'**V:** R$ {pv:,.2f}<br>'
+                        f'**C:** R$ {pc_calc:,.2f}'
+                        f'</div>'
                     )
+                    c[4].markdown(preco_html, unsafe_allow_html=True)
                     
                     # --- 6 & 7. Ações Minimalistas (Editar & Excluir) ---
                     try:
@@ -853,7 +860,7 @@ def gestao_produtos():
                         st.rerun()
 
                     if c[6].button("🗑️", key=f"del_pai_{index}_{eid}", help="Excluir produto"):
-                        # Lógica de exclusão direta (mais simples para UX)
+                        # Lógica de exclusão direta 
                         produtos = produtos[produtos["ID"] != str(eid)]
                         produtos = produtos[produtos["PaiID"] != str(eid)]
                         st.session_state["produtos"] = produtos
@@ -865,10 +872,12 @@ def gestao_produtos():
                             
 
                     if not filhos_do_pai.empty:
+                        # --- Variações ---
                         with st.expander(f"Variações de {pai['Nome']} ({len(filhos_do_pai)} variações)"):
                             for index_var, var in filhos_do_pai.iterrows():
-                                c_var = st.columns([1, 2.5, 1, 1, 1.5, 0.5, 0.5]) 
+                                c_var = st.columns([1, 3, 1, 1, 1.5, 0.5, 0.5]) 
                                 
+                                # 1. Imagem (Variação)
                                 if str(var["FotoURL"]).strip():
                                     try:
                                         c_var[0].image(var["FotoURL"], width=60)
@@ -877,35 +886,42 @@ def gestao_produtos():
                                 else:
                                     c_var[0].write("—")
 
+                                # 2. Nome/Marca/Categoria (Variação)
                                 cb_var = f' • CB: {var["CodigoBarras"]}' if str(var.get("CodigoBarras", "")).strip() else ""
-                                c_var[1].markdown(f"**{var['Nome']}**\n<small>Marca: {var['Marca']} | Cat: {var['Categoria']}</small>", unsafe_allow_html=True)
+                                c_var[1].markdown(f"**{var['Nome']}**<br><small>Marca: {var['Marca']} | Cat: {var['Categoria']}</small>", unsafe_allow_html=True)
                                 
+                                # 3. Estoque (Variação)
                                 c_var[2].write(f"{var['Quantidade']}")
+                                
+                                # 4. Validade (Variação)
                                 c_var[3].write(f"{var['Validade']}")
 
-                                # Detalhes de preço da Variação
+                                # 5. Detalhes de Preço (Variação)
                                 pv_var = to_float(var['PrecoVista'])
                                 pc_var = to_float(var['PrecoCartao'])
                                 pc_var_calc = round(pv_var / FATOR_CARTAO, 2)
                                 
-                                c_var[4].markdown(
-                                    f"<small>C: R$ {to_float(var['PrecoCusto']):,.2f}</small><br>"
-                                    f"**V:** R$ {pv_var:,.2f}<br>"
-                                    f"**C:** R$ {pc_var_calc:,.2f}",
-                                    unsafe_allow_html=True
+                                preco_var_html = (
+                                    f'<div class="custom-price-block">'
+                                    f'<small>C: R$ {to_float(var['PrecoCusto']):,.2f}</small><br>'
+                                    f'**V:** R$ {pv_var:,.2f}<br>'
+                                    f'**C:** R$ {pc_var_calc:,.2f}'
+                                    f'</div>'
                                 )
+                                c_var[4].markdown(preco_var_html, unsafe_allow_html=True)
                                 
                                 try:
                                     eid_var = int(var["ID"])
                                 except Exception:
                                     eid_var = index_var
                                 
+                                # 6 & 7. Ações Minimalistas (Variação)
                                 if c_var[5].button("✏️", key=f"edit_filho_{index_var}_{eid_var}", help="Editar variação"):
                                     st.session_state["edit_prod"] = eid_var
                                     st.rerun()
 
                                 if c_var[6].button("🗑️", key=f"del_filho_{index_var}_{eid_var}", help="Excluir variação"):
-                                    produtos = produtos[produtos["ID"] != str(eid_var)]
+                                    products = produtos[produtos["ID"] != str(eid_var)]
                                     st.session_state["produtos"] = produtos
                                     
                                     nome_var = str(var.get('Nome', 'Variação Desconhecida'))
