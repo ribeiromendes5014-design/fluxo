@@ -509,11 +509,11 @@ def gestao_produtos():
 
 
     # ================================
-    # SUBABAS
-    # ================================
-    tab_cadastro, tab_lista = st.tabs(["📝 Cadastro de Produtos", "📑 Lista & Busca"])
+# SUBABAS
+# ================================
+tab_cadastro, tab_lista = st.tabs(["📝 Cadastro de Produtos", "📑 Lista & Busca"])
 
-    # ================================
+# ================================
 # SUBABA: CADASTRO
 # ================================
 with tab_cadastro:
@@ -578,6 +578,7 @@ with tab_cadastro:
                     st.rerun() 
                 else:
                     st.error("❌ Não foi possível ler nenhum código da imagem enviada.")
+
 
 
             # --- Cadastro da grade (variações) ---
@@ -1998,6 +1999,7 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
+
 
 
 
