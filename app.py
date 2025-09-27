@@ -28,58 +28,56 @@ except ImportError:
 
 def ler_codigo_barras_api(image_bytes):
     """
-    Decodifica códigos de barras (1D e QR) usando a API pública WebQR (JSON).
+    Decodifica códigos de barras (1D e QR) usando a API pública ZXing.
+    Mais robusta que WebQR porque suporta EAN/UPC/Code128 além de QR Codes.
     """
-    # API alternativa: WebQR (mais estável que ZXing e retorna JSON)
-    URL_DECODER_WEBQR = "https://api.qrserver.com/v1/read-qr-code/"
+    URL_DECODER_ZXING = "https://zxing.org/w/decode"
     
     try:
-        # A API WebQR espera o arquivo no campo 'file' ou 'f'
-        files = {"file": ("barcode.png", image_bytes, "image/png")} 
+        # ⚠️ IMPORTANTE: ZXing espera o arquivo no campo 'f', não 'file'
+        files = {"f": ("barcode.png", image_bytes, "image/png")}
         
-        # Faz a requisição com um timeout de 30 segundos
-        response = requests.post(URL_DECODER_WEBQR, files=files, timeout=30) 
+        response = requests.post(URL_DECODER_ZXING, files=files, timeout=30)
 
         if response.status_code != 200:
             if 'streamlit' in globals():
-                st.error(f"❌ Erro na API WebQR. Status HTTP: {response.status_code}")
+                st.error(f"❌ Erro na API ZXing. Status HTTP: {response.status_code}")
             return []
 
-        # A resposta é JSON.
-        data = response.json()
+        text = response.text
         codigos = []
-        
-        # Navega na estrutura JSON da resposta
-        if data and isinstance(data, list) and data[0].get('symbol'):
-            for symbol in data[0]['symbol']:
-                # O campo 'data' contém o número do código de barras
-                if symbol['data'] is not None:
-                    codigos.append(symbol['data'].strip())
-        
+
+        # Parse simples do HTML retornado
+        if "<pre>" in text:
+            partes = text.split("<pre>")
+            for p in partes[1:]:
+                codigo = p.split("</pre>")[0].strip()
+                if codigo and not codigo.startswith("Erro na decodificação"):
+                    codigos.append(codigo)
+
         if 'streamlit' in globals():
-             st.write("Debug API WebQR:", codigos)
-        
+            st.write("Debug API ZXing:", codigos)
+
         if not codigos and 'streamlit' in globals():
-             st.warning("⚠️ API WebQR não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
-             
+            st.warning("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
+
         return codigos
 
     except ConnectionError as ce:
-        # CAPTURA O ERRO 'Connection refused'
         if 'streamlit' in globals():
-            st.error(f"❌ Erro de Conexão (Rede): Falha ao conectar ao servidor WebQR. Detalhe: {ce}")
+            st.error(f"❌ Erro de Conexão: O servidor ZXing recusou a conexão. Detalhe: {ce}")
         return []
         
     except RequestException as e:
-        # CAPTURA OUTROS ERROS (Timeout, etc.)
         if 'streamlit' in globals():
-            st.error(f"❌ Erro de Requisição (Timeout/Outro): Falha ao completar a chamada à API. Detalhe: {e}")
+            st.error(f"❌ Erro de Requisição (Timeout/Outro): Falha ao completar a chamada à API ZXing. Detalhe: {e}")
         return []
-        
+    
     except Exception as e:
         if 'streamlit' in globals():
             st.error(f"❌ Erro inesperado: {e}")
         return []
+
 
 
 # ==================== CONFIGURAÇÕES DO APLICATIVO E CONSTANTES ====================
@@ -2001,3 +1999,4 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
+
