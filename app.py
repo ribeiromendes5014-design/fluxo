@@ -1006,6 +1006,7 @@ def livro_caixa():
     default_categoria = CATEGORIAS_SAIDA[0]
     default_status = "Realizada" 
     default_data_pagamento = None 
+    default_data_status_previsto = "Com Data Prevista"
 
     # Se estiver em modo de edição, carrega os dados
     if edit_mode:
@@ -1027,6 +1028,10 @@ def livro_caixa():
             default_status = movimentacao_para_editar['Status'] 
             # Se for Pendente, mantém a data de pagamento prevista. Se Realizada, usa a data da transação ou a que está salva.
             default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None) 
+            
+            # Define o status do rádio de data prevista para edição
+            if default_status == "Pendente":
+                default_data_status_previsto = "Com Data Prevista" if pd.notna(default_data_pagamento) else "Sem Data Prevista"
             
             # Carrega os produtos na lista de sessão (se for entrada)
             if default_tipo == "Entrada" and default_produtos_json:
@@ -1059,8 +1064,17 @@ def livro_caixa():
         st.header("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
         
         # --- INPUTS FORA DO FORM (Para controle de RERUN e Estado) ---
+        # 1. TIPO (Entrada/Saída)
         tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1, key="input_tipo")
         
+        # 2. STATUS (Realizada/Pendente) - MOVIDO PARA FORA DO FORM PARA RENDERIZAÇÃO CONDICIONAL
+        status_selecionado = st.radio(
+            "Status", 
+            ["Realizada", "Pendente"], 
+            index=0 if default_status == "Realizada" else 1, 
+            key="input_status_global"
+        )
+
         valor_calculado = 0.0
         produtos_vendidos_json = ""
         categoria_selecionada = ""
@@ -1104,6 +1118,7 @@ def livro_caixa():
 
                         if st.button("Adicionar Item Manual", key="adicionar_item_manual_button", use_container_width=True):
                              if nome_produto_manual and quantidade_manual > 0:
+                                # **CORREÇÃO:** Adiciona o item à lista e *depois* força o rerun
                                 st.session_state.lista_produtos.append({
                                     "Produto_ID": "", # Vazio para item manual (sem controle de estoque)
                                     "Produto": nome_produto_manual,
@@ -1140,6 +1155,7 @@ def livro_caixa():
                             
                             if st.button("Adicionar Item à Venda", key="adicionar_item_button", use_container_width=True):
                                 if quantidade_input > 0 and quantidade_input <= estoque_disp:
+                                    # **CORREÇÃO:** Adiciona o item à lista e *depois* força o rerun
                                     st.session_state.lista_produtos.append({
                                         "Produto_ID": produto_id_selecionado, # Chave para débito de estoque
                                         "Produto": nome_produto,
@@ -1221,26 +1237,24 @@ def livro_caixa():
                                             index=FORMAS_PAGAMENTO.index(default_forma) if default_forma in FORMAS_PAGAMENTO else 0,
                                             key="input_forma_pagamento_form")
             
-            # Campos de Status (Repetição de estado forçada para resetar com o form)
-            status_selecionado_form = st.radio("Status", ["Realizada", "Pendente"], index=0 if default_status == "Realizada" else 1, key="input_status_form")
+            # data_pagamento_final será definido com base no status global (fora do form)
+            data_pagamento_final = None 
             
-            
-            # --- CORREÇÃO DO UNBOUNDLOCALERROR E LÓGICA DE DATA DE PAGAMENTO ---
-            data_pagamento_final = None # Inicializa a variável
-            
-            if status_selecionado_form == "Pendente":
+            if status_selecionado == "Pendente":
                 # Lógica para permitir 'Sem Data Prevista'
+                # Verifica se default_data_pagamento é uma data válida para pré-selecionar 'Com Data Prevista'
                 data_prevista_existe = pd.notna(default_data_pagamento) and (default_data_pagamento is not None)
 
                 data_status_opcoes = ["Com Data Prevista", "Sem Data Prevista"]
-                # Se for edição e já tiver data salva, assume 'Com Data Prevista' como default.
                 default_data_status_index = 0 if data_prevista_existe else 1
-
+                
+                # Para garantir que o estado do rádio seja persistido APÓS o submit, usamos session state.
+                # Como o rádio não está no form, ele é renderizado imediatamente, permitindo a mudança de campos.
                 data_status_selecionado = st.radio(
                     "Data de Pagamento Prevista:",
                     options=data_status_opcoes,
                     index=default_data_status_index,
-                    key="input_data_status_previsto",
+                    key="input_data_status_previsto_form", # Usando um key diferente para ser resetado apenas pelo form
                     horizontal=True
                 )
                 
@@ -1251,17 +1265,17 @@ def livro_caixa():
                     data_prevista_pendente = st.date_input(
                         "Selecione a Data Prevista", 
                         value=prev_date_value, 
-                        key="input_data_pagamento_prevista"
+                        key="input_data_pagamento_prevista_form"
                     )
                     data_pagamento_final = data_prevista_pendente
                 else:
-                    # Se for Pendente SEM data, data_pagamento_final permanece None (para ser salvo como string vazia/NaN)
+                    # Se for Pendente SEM data, data_pagamento_final permanece None
                     data_pagamento_final = None
 
             else:
                 # Se for Realizada, a Data Pagamento é a Data da Transação
                 data_pagamento_final = data_input
-            # --- FIM CORREÇÃO ---
+            # --- FIM LÓGICA DE DATA DE PAGAMENTO ---
 
 
             # Valor final (apenas exibição, o valor real vem de fora do form)
@@ -1300,7 +1314,7 @@ def livro_caixa():
                         original_row = df_dividas.loc[st.session_state.edit_id]
                         
                         # Se status antigo Realizada -> novo Pendente
-                        if original_row["Status"] == "Realizada" and status_selecionado_form == "Pendente" and original_row["Tipo"] == "Entrada":
+                        if original_row["Status"] == "Realizada" and status_selecionado == "Pendente" and original_row["Tipo"] == "Entrada":
                             try:
                                 produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
                                 for item in produtos_vendidos_antigos:
@@ -1309,7 +1323,7 @@ def livro_caixa():
                             except: pass
                             
                         # Se status continua Realizada, ajusta a diferença
-                        elif original_row["Status"] == "Realizada" and status_selecionado_form == "Realizada" and original_row["Tipo"] == "Entrada":
+                        elif original_row["Status"] == "Realizada" and status_selecionado == "Realizada" and original_row["Tipo"] == "Entrada":
                             # Credita o estoque antigo (se existia)
                             try:
                                 produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
@@ -1331,7 +1345,7 @@ def livro_caixa():
                             st.cache_data.clear() # Limpa o cache de dados para refletir mudanças no Livro Caixa
                             
                     # LÓGICA DE DÉBITO INICIAL (Nova Realizada)
-                    elif not edit_mode and tipo == "Entrada" and status_selecionado_form == "Realizada" and st.session_state.lista_produtos:
+                    elif not edit_mode and tipo == "Entrada" and status_selecionado == "Realizada" and st.session_state.lista_produtos:
                         if produtos_vendidos_json:
                             produtos_vendidos_novos = json.loads(produtos_vendidos_json)
                             for item in produtos_vendidos_novos:
@@ -1354,7 +1368,7 @@ def livro_caixa():
                         "Tipo": tipo,
                         "Produtos Vendidos": produtos_vendidos_json,
                         "Categoria": categoria_selecionada,
-                        "Status": status_selecionado_form, 
+                        "Status": status_selecionado, # Usa o status que está fora do form
                         "Data Pagamento": data_pagamento_final
                     }
                     
