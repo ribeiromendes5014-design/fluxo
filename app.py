@@ -727,11 +727,12 @@ def gestao_produtos():
             
             # --- BOTÃO SALVAR PRODUTO (CHAMANDO CALLBACK) ---
             if st.button(
-                "💾 Salvar Produto", 
+                "💾 Salvar", # Rótulo curto
                 use_container_width=True, 
                 key="cad_salvar",
                 on_click=callback_salvar_novo_produto,
-                args=(produtos.copy(), tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações)
+                args=(produtos.copy(), tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações),
+                help="Salvar Novo Produto Completo" # Rótulo completo
             ):
                 st.rerun()
 
@@ -985,11 +986,12 @@ def gestao_produtos():
                                 st.success(f"Código lido: **{novo_cb}**")
 
                     # ALINHAMENTO DOS BOTÕES DE AÇÃO: Usar colunas vazias para empurrar os botões para a direita
-                    col_empty_left, col_save, col_cancel = st.columns([4, 1, 1])
+                    # CORREÇÃO: Colunas menores para os botões para forçar o texto a caber
+                    col_empty_left, col_save, col_cancel = st.columns([3, 1.5, 1.5]) 
                     
                     with col_save:
                         # Botão "Salvar" 
-                        if st.button("💾 Salvar", key=f"save_{eid}", use_container_width=True):
+                        if st.button("💾 Salvar", key=f"save_{eid}", type="primary", use_container_width=True, help="Salvar Alterações"):
                             
                             novo_preco_cartao = round(to_float(novo_preco_vista) / FATOR_CARTAO, 2) if to_float(novo_preco_vista) > 0 else 0.0
 
@@ -1019,7 +1021,7 @@ def gestao_produtos():
                             
                     with col_cancel:
                         # Botão "Cancelar"
-                        if st.button("❌ Cancelar", key=f"cancel_{eid}", use_container_width=True):
+                        if st.button("❌ Cancelar", key=f"cancel_{eid}", use_container_width=True, help="Cancelar Edição"):
                             del st.session_state["edit_prod"]
                             st.rerun()
 
@@ -1277,11 +1279,12 @@ def livro_caixa():
                         
                         # Correção: O callback agora é chamado no 'on_click'
                         if st.button(
-                            "Adicionar Item Manual", 
+                            "Adicionar Manual", # Rótulo curto
                             key="adicionar_item_manual_button", 
                             use_container_width=True,
                             on_click=callback_adicionar_manual,
-                            args=(nome_produto_manual, quantidade_manual, preco_unitario_manual, custo_unitario_manual)
+                            args=(nome_produto_manual, quantidade_manual, preco_unitario_manual, custo_unitario_manual),
+                            help="Adicionar Item Manual à Lista de Venda" # Rótulo completo
                         ):
                              st.rerun() 
                         # --- FIM ENTRADA MANUAL ---
@@ -1310,17 +1313,18 @@ def livro_caixa():
 
                             # Correção: O callback agora é chamado no 'on_click'
                             if st.button(
-                                "Adicionar Item à Venda", 
+                                "Adicionar Item", # Rótulo curto
                                 key="adicionar_item_button", 
                                 use_container_width=True,
                                 on_click=callback_adicionar_estoque,
-                                args=(produto_id_selecionado, nome_produto, quantidade_input, preco_unitario_input, custo_unit, estoque_disp)
+                                args=(produto_id_selecionado, nome_produto, quantidade_input, preco_unitario_input, custo_unit, estoque_disp),
+                                help="Adicionar Item do Estoque à Lista de Venda" # Rótulo completo
                             ):
                                 st.rerun()
                         # --- FIM ENTRADA DE ESTOQUE ---
                         
                     
-                    if st.button("Limpar Lista de Produtos", key="limpar_lista_button", type="secondary", use_container_width=True):
+                    if st.button("Limpar Lista", key="limpar_lista_button", type="secondary", use_container_width=True, help="Limpa todos os produtos da lista de venda"):
                         st.session_state.lista_produtos = []
                         st.rerun()
             
@@ -1435,11 +1439,11 @@ def livro_caixa():
             if edit_mode:
                 col_save, col_cancel = st.columns(2)
                 with col_save:
-                    enviar = st.form_submit_button("💾 Salvar Edição", type="primary", use_container_width=True)
+                    enviar = st.form_submit_button("💾 Salvar", type="primary", use_container_width=True, help="Salvar Edição")
                 with col_cancel:
-                    cancelar = st.form_submit_button("❌ Cancelar Edição", type="secondary", use_container_width=True)
+                    cancelar = st.form_submit_button("❌ Cancelar", type="secondary", use_container_width=True, help="Cancelar Edição")
             else:
-                enviar = st.form_submit_button("Adicionar Movimentação e Salvar", type="primary", use_container_width=True)
+                enviar = st.form_submit_button("Adicionar e Salvar", type="primary", use_container_width=True, help="Adicionar Nova Movimentação e Salvar")
                 cancelar = False 
 
             # --- Lógica principal (Adicionar/Editar) - Executada no Submit ---
@@ -1961,7 +1965,7 @@ def livro_caixa():
                         data_conclusao = st.date_input("Data de Pagamento Real", value=hoje)
                         forma_conclusao = st.selectbox("Forma de Pagamento Real (PIX, Dinheiro, etc.)", options=FORMAS_PAGAMENTO)
                         
-                        submeter_conclusao = st.form_submit_button("Concluir Pagamentos Selecionados e Salvar", type="primary")
+                        submeter_conclusao = st.form_submit_button("Concluir e Salvar", type="primary", help="Concluir Pagamentos Selecionados e Salvar")
 
                     if submeter_conclusao:
                         df_temp_session = st.session_state.df.copy()
