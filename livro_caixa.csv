@@ -46,3 +46,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-09-27,Doce&bella,Simony,25.9,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Gloss com chaveiro bobbi rara"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 25.9, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-09-27
 2025-09-28,Doce&bella,Lais,55.0,PIX,Entrada,,,Realizada,2025-09-28
 2025-09-28,Doce&bella,Adri,35.0,PIX,Entrada,,,Realizada,2025-09-28
+2025-09-28,Doce&bella,Compra de produtos ,-322.33,PIX,Saída,,Não Categorizado,Realizada,2025-09-28
