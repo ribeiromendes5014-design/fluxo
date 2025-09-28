@@ -44,3 +44,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-09-27,Doce&bella,Andriele,16.9,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Rimel"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 16.9, ""Custo Unit\u00e1rio"": 0.0}]",,Pendente,
 2025-09-27,Doce&bella,Tininha,70.0,PIX,Entrada,,,Pendente,2025-10-01
 2025-09-27,Doce&bella,Simony,25.9,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Gloss com chaveiro bobbi rara"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 25.9, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-09-27
+2025-09-28,Doce&bella,Terezinha,20.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Coretivo"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 10.0, ""Custo Unit\u00e1rio"": 0.0}, {""Produto_ID"": """", ""Produto"": ""Oleo de cabelo"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 10.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-09-28
