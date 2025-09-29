@@ -486,6 +486,7 @@ def callback_adicionar_manual(nome, qtd, preco, custo):
         
 def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_disp):
     
+    # É importante carregar as promoções aqui, pois é onde o desconto é aplicado
     promocoes = norm_promocoes(carregar_promocoes())
     hoje = date.today()
     
@@ -854,6 +855,7 @@ def gestao_promocoes():
     )
 
     if not vendas_flat.empty:
+        # Garante que a coluna de data seja convertida para date/datetime antes de agrupar
         vendas_flat["Data"] = pd.to_datetime(vendas_flat["Data"], errors="coerce").dt.date
         ultima_venda = vendas_flat.groupby("IDProduto")["Data"].max().reset_index()
         ultima_venda.columns = ["IDProduto", "UltimaVenda"]
@@ -861,13 +863,17 @@ def gestao_promocoes():
         ultima_venda = pd.DataFrame(columns=["IDProduto", "UltimaVenda"])
 
     produtos_parados = produtos.merge(ultima_venda, left_on="ID", right_on="IDProduto", how="left")
+    
+    # CORREÇÃO: Converte explicitamente UltimaVenda para tipo date (ou NaT) e depois para date
     produtos_parados["UltimaVenda"] = pd.to_datetime(produtos_parados["UltimaVenda"], errors='coerce').dt.date
 
     limite = date.today() - timedelta(days=int(dias_sem_venda))
     
     # Filtra produtos com estoque e que a última venda foi antes do limite (ou nunca vendeu)
+    # Garante que a comparação seja feita apenas com objetos date ou pd.NaT.
     produtos_parados_sugeridos = produtos_parados[
         (produtos_parados["Quantidade"] > 0) &
+        # Verifica se é nulo (nunca vendeu) OU se a data é anterior ao limite
         (produtos_parados["UltimaVenda"].isna() | (produtos_parados["UltimaVenda"] < limite))
     ].copy()
 
@@ -918,6 +924,7 @@ def gestao_promocoes():
 
     produtos_validade_sugeridos = produtos[
         (produtos["Quantidade"] > 0) &
+        # A coluna "Validade" já está como date graças à inicializar_produtos()
         (produtos["Validade"].apply(lambda x: x is not None and x <= limite_validade))
     ].copy()
     
