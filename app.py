@@ -2362,4 +2362,274 @@ def livro_caixa():
                                     "Produto": "Produto",
                                     "Quantidade": st.column_config.NumberColumn("Qtd"),
                                     "Preço Unitário": st.column_config.NumberColumn("Preço Un.", format="R$ %.2f"),
-                                    "Custo Unitário": st.column_config.Number
+                                    # FIX APPLIED HERE: Complete the dictionary and close the call
+                                    "Custo Unitário": st.column_config.NumberColumn("Custo Un.", format="R$ %.2f"),
+                                    "Total Venda": st.column_config.NumberColumn("Total Venda", format="R$ %.2f"),
+                                    "Total Custo": st.column_config.NumberColumn("Total Custo", format="R$ %.2f"),
+                                    "Lucro Bruto": st.column_config.NumberColumn("Lucro Bruto", format="R$ %.2f", help="Venda - Custo")
+                                },
+                                column_order=("Produto", "Quantidade", "Preço Unitário", "Custo Unitário", "Total Venda", "Total Custo", "Lucro Bruto")
+                            ) 
+                        
+                        except Exception as e:
+                            st.error(f"Erro ao processar detalhes dos produtos: {e}")
+
+                    st.markdown("---")
+                    
+                    # --- Opções de Ação (Editar e Excluir) ---
+                    col_op_1, col_op_2 = st.columns(2)
+                    
+                    # Excluir
+                    if col_op_1.button(f"🗑️ Excluir Movimentação ID {row['ID Visível']}", key=f"del_{row['ID Visível']}", use_container_width=True, type="primary"):
+                        if row['Status'] == 'Realizada' and row['Tipo'] == 'Entrada':
+                            # Reverte o débito de estoque (credita)
+                            try:
+                                produtos_vendidos_antigos = ast.literal_eval(row['Produtos Vendidos'])
+                                for item in produtos_vendidos_antigos:
+                                    if item.get("Produto_ID"): 
+                                        ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
+                                if salvar_produtos_no_github(st.session_state.produtos, "Reversão de estoque por exclusão de venda"):
+                                    inicializar_produtos.clear()
+                            except: pass
+
+                        # Exclui a linha do DF original usando o original_index
+                        st.session_state.df = st.session_state.df.drop(row['original_index'], errors='ignore')
+
+                        if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
+                            st.cache_data.clear()
+                            st.rerun()
+
+                    # Editar
+                    if col_op_2.button(f"✏️ Editar Movimentação ID {row['ID Visível']}", key=f"edit_{row['ID Visível']}", use_container_width=True):
+                        # Define o original_index para carregar a edição na sidebar
+                        st.session_state.edit_id = row['original_index']
+                        st.session_state.lista_produtos = [] # Limpa a lista de produtos temporária
+                        st.rerun()
+                # FIM DO IF SELECTION STATE
+                
+            else:
+                st.info("Selecione uma linha na tabela acima para ver detalhes e opções de edição/exclusão.")
+
+
+    with tab_rel:
+        
+        st.subheader("📈 Relatórios Anuais e Mensais")
+
+        # Análise anual
+        df_anual = df_exibicao[df_exibicao['Status'] == 'Realizada'].copy()
+        df_anual['Ano'] = pd.to_datetime(df_anual['Data'], errors='coerce').dt.year.fillna(0).astype(int)
+        df_anual = df_anual[df_anual['Ano'] > 0] # Remove anos inválidos
+
+        if not df_anual.empty:
+            df_resumo_anual = df_anual.groupby('Ano')['Valor'].agg(['sum', lambda x: x[x >= 0].sum(), lambda x: abs(x[x < 0].sum())]).reset_index()
+            df_resumo_anual.columns = ['Ano', 'Saldo', 'Entradas', 'Saídas']
+            df_resumo_anual.sort_values(by='Ano', ascending=False, inplace=True)
+
+            st.markdown("##### Resumo Anual (Realizado)")
+            st.dataframe(
+                df_resumo_anual,
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    "Saldo": st.column_config.NumberColumn("Saldo (R$)", format="R$ %.2f"),
+                    "Entradas": st.column_config.NumberColumn("Entradas (R$)", format="R$ %.2f"),
+                    "Saídas": st.column_config.NumberColumn("Saídas (R$)", format="R$ %.2f"),
+                }
+            )
+
+            # Gráfico de Barras Anual
+            fig_anual = px.bar(
+                df_resumo_anual, 
+                x='Ano', 
+                y=['Entradas', 'Saídas'], 
+                title="Entradas vs. Saídas por Ano",
+                labels={'value': 'Valor (R$)', 'variable': 'Tipo'},
+                barmode='group'
+            )
+            st.plotly_chart(fig_anual, use_container_width=True)
+            
+        else:
+            st.info("Dados insuficientes para gerar relatório anual.")
+
+        st.markdown("---")
+        
+        # --- LÓGICA DE DÍVIDAS PENDENTES (A PAGAR / A RECEBER) ---
+        st.subheader("🚩 Dívidas Pendentes (A Pagar e A Receber)")
+        
+        df_pendentes = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
+        
+        if df_pendentes.empty:
+            st.info("Parabéns! Não há dívidas pendentes registradas.")
+        else:
+            
+            # Formata a coluna "Data Pagamento" para exibição e ordenação (garantindo que seja date)
+            df_pendentes["Data Pagamento"] = pd.to_datetime(df_pendentes["Data Pagamento"], errors='coerce').dt.date
+            
+            # Ordena por Data Pagamento (Data Prevista)
+            df_pendentes_ordenado = df_pendentes.sort_values(
+                by=["Data Pagamento", "Tipo", "Data"], 
+                ascending=[True, True, True]
+            ).reset_index(drop=True)
+            
+            # Calcula Vencimento
+            df_pendentes_ordenado['Dias Até/Atraso'] = df_pendentes_ordenado['Data Pagamento'].apply(
+                lambda x: (x - hoje_date).days if pd.notna(x) else float('inf') 
+            )
+            
+            # Resumo de Valores
+            total_receber = df_pendentes_ordenado[df_pendentes_ordenado["Tipo"] == "Entrada"]["Valor"].abs().sum()
+            total_pagar = df_pendentes_ordenado[df_pendentes_ordenado["Tipo"] == "Saída"]["Valor"].abs().sum()
+            
+            col_res_1, col_res_2 = st.columns(2)
+            col_res_1.metric("Total a Receber", f"R$ {total_receber:,.2f}")
+            col_res_2.metric("Total a Pagar", f"R$ {total_pagar:,.2f}")
+            
+            st.markdown("---")
+            
+            # Estilização da tabela de pendentes
+            def highlight_pendentes(row):
+                """Destaque para vencidas e próximas do vencimento."""
+                dias = row['Dias Até/Atraso']
+                if dias < 0:
+                    # Vencida (Vermelho)
+                    return ['background-color: #fcece9' if col in ['Status', 'Data Pagamento'] else '' for col in row.index]
+                elif dias <= 7:
+                    # Próxima (Amarelo)
+                    return ['background-color: #fffac9' if col in ['Status', 'Data Pagamento'] else '' for col in row.index]
+                # Não vencida (Transparente)
+                return ['' for col in row.index]
+
+            # Campos para seleção de conclusão de dívida
+            with st.form("form_concluir_divida"):
+                st.markdown("##### ✅ Concluir Dívida Pendente")
+                
+                # Prepara as opções para o selectbox
+                opcoes_pendentes = {
+                    f"ID {row['ID Visível']} | {row['Tipo']} | R$ {row['Valor'] if row['Tipo'] == 'Entrada' else abs(row['Valor']):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
+                    for index, row in df_pendentes_ordenado.iterrows()
+                }
+                opcoes_keys = [""] + list(opcoes_pendentes.keys())
+                
+                divida_selecionada_str = st.selectbox(
+                    "Selecione a Dívida para Concluir:",
+                    options=opcoes_keys,
+                    key="select_divida_concluir"
+                )
+                
+                original_idx_concluir = opcoes_pendentes.get(divida_selecionada_str)
+
+                # Opções de conclusão
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    data_conclusao = st.date_input("Data Real da Conclusão", value=hoje_date, key="data_conclusao_divida")
+                with col_c2:
+                    # Permite selecionar a forma de pagamento (se for a Pagar)
+                    forma_pagt_concluir = st.selectbox("Forma de Pagamento (Realizada)", 
+                                                        FORMAS_PAGAMENTO, 
+                                                        key="forma_pagt_concluir")
+
+                concluir = st.form_submit_button("✅ Concluir Selecionada", use_container_width=True, type="primary")
+
+                if concluir and original_idx_concluir is not None:
+                    
+                    # Encontra a linha no DF original da sessão
+                    idx_original = df_pendentes.loc[df_pendentes['original_index'] == original_idx_concluir].index[0]
+                    
+                    row_data = st.session_state.df.loc[idx_original].copy()
+                    
+                    # 1. Atualiza Status e Datas
+                    st.session_state.df.loc[idx_original, 'Status'] = 'Realizada'
+                    st.session_state.df.loc[idx_original, 'Data'] = data_conclusao # Transação passa para a data real de conclusão
+                    st.session_state.df.loc[idx_original, 'Data Pagamento'] = data_conclusao # Data de pagamento
+                    
+                    # 2. Atualiza Forma de Pagamento (Se for Saída, só para garantir que o 'Pendente' seja substituído)
+                    st.session_state.df.loc[idx_original, 'Forma de Pagamento'] = forma_pagt_concluir
+                    
+                    # 3. Lógica de estoque (Se for Entrada - A Receber)
+                    if row_data["Tipo"] == "Entrada" and row_data["Produtos Vendidos"]:
+                        # Debita o estoque agora que a venda foi realizada
+                        try:
+                            produtos_vendidos = ast.literal_eval(row_data['Produtos Vendidos'])
+                            for item in produtos_vendidos:
+                                if item.get("Produto_ID"): 
+                                    ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                                    
+                            if salvar_produtos_no_github(st.session_state.produtos, f"Débito de estoque por conclusão de venda {row_data['Cliente']}"):
+                                inicializar_produtos.clear()
+
+                        except:
+                            st.warning("⚠️ Venda concluída, mas falha no débito do estoque (JSON inválido).")
+                    
+                    # Salva e recarrega
+                    if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DEBT_REALIZED):
+                        st.cache_data.clear()
+                        st.rerun()
+                elif concluir:
+                    st.warning("Selecione uma dívida válida para concluir.")
+
+            st.markdown("---")
+
+            # Exibe a Tabela de Pendentes
+            st.markdown("##### Tabela Detalhada de Dívidas Pendentes")
+            
+            df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
+            
+            # Adiciona a coluna de Atraso formatada
+            df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(
+                lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
+            )
+            
+            # Oculta colunas auxiliares (Cor_Valor e Dias Até/Atraso)
+            df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
+
+            st.dataframe(
+                df_styling_pendentes,
+                use_container_width=True,
+                column_config={
+                    "Valor": st.column_config.NumberColumn(
+                        "Valor (R$)",
+                        format="R$ %.2f",
+                    ),
+                    "Data": st.column_config.DateColumn("Data Lançamento"),
+                    "Data Pagamento": st.column_config.DateColumn("Data Vencimento/Prevista", format="DD/MM/YYYY"),
+                    "Status Vencimento": st.column_config.TextColumn("Vencimento"),
+                    "Cliente": st.column_config.TextColumn("Descrição"),
+                    "RecorrenciaID": st.column_config.TextColumn("ID Recorrência", help="Identificador único para parcelas recorrentes")
+                },
+                column_order=['ID Visível', 'Status Vencimento', 'Tipo', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Data Pagamento', 'Data', 'RecorrenciaID'],
+                hide_index=True,
+                selection_mode='single-row',
+                key='pendentes_table_styled'
+            )
+
+# ==============================================================================
+# ESTRUTURA PRINCIPAL DO APLICATIVO
+# ==============================================================================
+# Define qual página será exibida
+PAGINAS = {
+    "Livro Caixa": livro_caixa,
+    "Gestão de Produtos (Estoque)": gestao_produtos,
+    "Histórico de Compras (Insumos)": historico_compras
+}
+
+if "pagina_atual" not in st.session_state:
+    st.session_state.pagina_atual = "Livro Caixa"
+
+# --- SIDEBAR: Seleção de Página ---
+with st.sidebar:
+    st.image("https://placehold.co/150x50/3498db/ffffff?text=Logo")
+    st.markdown("### Navegação")
+    # Usa um seletor para mudar a página (o radio button causa um re-run imediato)
+    pagina_selecionada = st.radio(
+        "Selecione a página:", 
+        options=list(PAGINAS.keys()),
+        index=list(PAGINAS.keys()).index(st.session_state.pagina_atual),
+        key="main_page_selector"
+    )
+    st.session_state.pagina_atual = pagina_selecionada
+    
+    st.markdown("---")
+    # O formulário de Movimentação aparece APENAS na página Livro Caixa e é definido dentro da função `livro_caixa()`
+
+# --- EXECUÇÃO DA PÁGINA SELECIONADA ---
+PAGINAS[st.session_state.pagina_atual]()
