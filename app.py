@@ -25,9 +25,9 @@ st.set_page_config(
 )
 
 # Caminho para o logo carregado. 
-# CORREÇÃO: Utiliza URL pública fornecida pelo usuário para maior estabilidade.
+# CORREÇÃO: Utiliza o link direto da imagem no ImgBB para carregamento correto.
 LOGO_DOCEBELLA_FILENAME = "logo_docebella.jpg"
-LOGO_DOCEBELLA_URL = "https://ibb.co/cdqJ92W/logo-docebella.png"
+LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo-docebella.png"
 
 
 # Adiciona CSS para simular a navegação no topo e o tema pink/magenta
@@ -2852,6 +2852,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
 
 
 
