@@ -25,14 +25,10 @@ st.set_page_config(
 )
 
 # Caminho para o logo carregado. 
-# Usamos o nome do arquivo. Em muitos ambientes Streamlit, o arquivo fica acessível
-# diretamente através do seu nome original, especialmente se foi carregado como um asset.
-# O ID de fetch ("uploaded:...") não é reconhecido pelo st.image.
+# CORREÇÃO: Voltamos para uma URL de placeholder para evitar o MediaFileStorageError
+# em ambientes que não montam o asset de forma padrão.
 LOGO_DOCEBELLA_FILENAME = "logo_docebella.jpg"
-# A URL é ajustada para ser o nome do arquivo que foi feito upload.
-# Em um Streamlit normal, usaríamos o nome do arquivo se estivesse na mesma pasta.
-# Em ambientes Canvas, usar apenas o nome da variável pode funcionar se o asset for montado:
-LOGO_DOCEBELLA_URL = LOGO_DOCEBELLA_FILENAME 
+LOGO_DOCEBELLA_URL = "https://placehold.co/150x50/F0F8FF/E91E63?text=Doce%26Bella"
 
 
 # Adiciona CSS para simular a navegação no topo e o tema pink/magenta
@@ -680,7 +676,7 @@ def homepage():
                 try:
                     st.image(foto_url, use_column_width=True)
                 except:
-                     st.image(f"https://placehold.co/400x400/FFC1E3/E91E63?text=Erro+Foto", use_column_width=True)
+                     st.image(f"https://placehold.co/400x400/FFC1E3/E91E63?text=Erro+Foto", use_container_width=True)
                      
                 
                 preco_vista = to_float(row.get('PrecoVista', 0))
@@ -2290,7 +2286,7 @@ def render_header():
     col_logo, col_nav = st.columns([1, 4])
     
     with col_logo:
-        # AQUI É A LINHA CORRIGIDA: usa a variável LOGO_DOCEBELLA_URL que agora é só o nome do arquivo.
+        # AQUI É A LINHA CORRIGIDA: usa o placeholder que é uma URL válida.
         st.image(LOGO_DOCEBELLA_URL, width=150)
         
     with col_nav:
