@@ -835,45 +835,46 @@ def homepage():
     st.markdown("---")
 
     # ==================================================
-# 5. SEÇÃO NOSSAS NOVIDADES (Carrossel Automático)
-# ==================================================
-st.markdown(f'<h2>Nossas Novidades</h2>', unsafe_allow_html=True)
+    # 5. SEÇÃO NOSSAS NOVIDADES (Carrossel Automático)
+    # ==================================================
+    st.markdown(f'<h2>Nossas Novidades</h2>', unsafe_allow_html=True)
 
-# Seleciona os últimos 10 produtos cadastrados com estoque > 0
-produtos_novos = produtos_df[produtos_df['Quantidade'] > 0].sort_values(by='ID', ascending=False).head(10)
+    # Seleciona os últimos 10 produtos cadastrados com estoque > 0
+    produtos_novos = produtos_df[produtos_df['Quantidade'] > 0].sort_values(by='ID', ascending=False).head(10)
 
-if produtos_novos.empty:
-    st.info("Não há produtos cadastrados no estoque para exibir como novidades.")
-else:
-    html_cards_novidades = []
-    for _, row in produtos_novos.iterrows():
-        foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/400x400/FFC1E3/E91E63?text={row['Nome'].replace(' ', '+')}"
-        preco_vista = to_float(row.get('PrecoVista', 0))
-        preco_formatado = f"R$ {preco_vista:,.2f}" if preco_vista > 0 else "Preço não disponível"
-        nome = row.get("Nome", "")
-        marca = row.get("Marca", "")
-        qtd = int(row.get("Quantidade", 0))
+    if produtos_novos.empty:
+        st.info("Não há produtos cadastrados no estoque para exibir como novidades.")
+    else:
+        html_cards_novidades = []
+        for _, row in produtos_novos.iterrows():
+            foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/400x400/FFC1E3/E91E63?text={row['Nome'].replace(' ', '+')}"
+            preco_vista = to_float(row.get('PrecoVista', 0))
+            preco_formatado = f"R$ {preco_vista:,.2f}" if preco_vista > 0 else "Preço não disponível"
+            nome = row.get("Nome", "")
+            marca = row.get("Marca", "")
+            qtd = int(row.get("Quantidade", 0))
 
-        card_html = f"""
-        <div class="product-card">
-            <p style="font-weight: bold; color: #E91E63; margin-bottom: 10px; font-size: 0.9em;">✨ Doce&Bella - Novidade</p>
-            <img src="{foto_url}" alt="{nome}">
-            <p style="font-weight: bold; margin-top: 10px; height: 30px; white-space: normal;">{nome} ({marca})</p>
-            <p style="font-size: 0.9em;">✨ Estoque: {qtd}</p>
-            <p style="font-weight: bold; color: #E91E63; margin-top: 5px;">💸 {preco_formatado}</p>
-            <button onclick="window.alert('Compra simulada: {nome}')" class="buy-button">COMPRAR</button>
-        </div>
-        """
-        html_cards_novidades.append(card_html)
-
-    # Renderiza o carrossel
-    st.markdown(f"""
-        <div class="carousel-outer-container">
-            <div class="product-wrapper">
-                {''.join(html_cards_novidades)}
+            card_html = f"""
+            <div class="product-card">
+                <p style="font-weight: bold; color: #E91E63; margin-bottom: 10px; font-size: 0.9em;">✨ Doce&Bella - Novidade</p>
+                <img src="{foto_url}" alt="{nome}">
+                <p style="font-weight: bold; margin-top: 10px; height: 30px; white-space: normal;">{nome} ({marca})</p>
+                <p style="font-size: 0.9em;">✨ Estoque: {qtd}</p>
+                <p style="font-weight: bold; color: #E91E63; margin-top: 5px;">💸 {preco_formatado}</p>
+                <button onclick="window.alert('Compra simulada: {nome}')" class="buy-button">COMPRAR</button>
             </div>
-        </div>
-    """, unsafe_allow_html=True)
+            """
+            html_cards_novidades.append(card_html)
+
+        # Renderiza o carrossel
+        st.markdown(f"""
+            <div class="carousel-outer-container">
+                <div class="product-wrapper">
+                    {''.join(html_cards_novidades)}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
 
 
 
@@ -2822,6 +2823,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
 
 
 
