@@ -1259,11 +1259,10 @@ def historico_compras():
                 default_produto = compra_data['Produto']
                 default_qtd = int(compra_data['Quantidade'])
                 
-                # CORREÇÃO: Para edição, o valor_total_input deve ser o VALOR UNITÁRIO (Valor Total / Quantidade),
-                # se estamos assumindo que o usuário vai inserir o valor unitário e o sistema calcula o total.
-                # Se o usuário edita a QUANTIDADE, o valor unitário fica estável.
-                valor_total_compra = compra_data['Valor Total']
-                valor_unitario_existente = valor_total_compra / default_qtd if default_qtd > 0 else valor_total_compra
+                # Para edição, calculamos o valor unitário para carregar o input:
+                valor_total_compra = float(compra_data['Valor Total'])
+                default_qtd_float = float(default_qtd)
+                valor_unitario_existente = valor_total_compra / default_qtd_float if default_qtd_float > 0 else valor_total_compra
                 default_valor = float(valor_unitario_existente)
                 
                 default_cor = compra_data['Cor']
@@ -1417,8 +1416,10 @@ def historico_compras():
             
             df_para_mostrar = df_filtrado.copy()
             
-            # Inclui a Foto como uma coluna de link para melhor visualização na tabela.
-            df_para_mostrar['Foto'] = df_para_mostrar['FotoURL'].apply(lambda x: '📷' if x.strip() else '')
+            # CORREÇÃO: Trata NaN ou valores não string na coluna FotoURL antes de chamar .strip()
+            # Isso corrige o AttributeError
+            df_para_mostrar['Foto'] = df_para_mostrar['FotoURL'].fillna('').astype(str).apply(lambda x: '📷' if x.strip() else '')
+
 
             # Prepara a lista de colunas para exibição e estilos
             df_display_cols = ['ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'Foto', 'Cor', 'original_index']
@@ -1451,6 +1452,7 @@ def historico_compras():
             selection_state = st.session_state.get('compras_table_styled')
             selected_row_index = None # Índice do DF filtrado
             
+            # Garante que as operações só apareçam se houver uma linha selecionada.
             if selection_state and selection_state.get('selection', {}).get('rows'):
                 selected_row_index = selection_state['selection']['rows'][0]
                 
@@ -1466,6 +1468,7 @@ def historico_compras():
 
                 # Botão de Edição
                 if col_edit.button(f"✏️ Editar: {item_selecionado_str}", type="secondary", use_container_width=True):
+                    # Se o botão de edição for clicado, define o estado para edição e força o rerun
                     st.session_state.edit_compra_idx = original_idx_selecionado
                     st.rerun()
 
@@ -1478,6 +1481,7 @@ def historico_compras():
                         st.cache_data.clear()
                         st.rerun()
             else:
+                # Mensagem de instrução se nenhuma linha estiver selecionada
                 st.info("Selecione uma linha na tabela acima para editar ou excluir.")
 
 
