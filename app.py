@@ -2854,3 +2854,4 @@ PAGINAS[st.session_state.pagina_atual]()
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
 
+
