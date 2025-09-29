@@ -605,6 +605,7 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             st.session_state.cad_preco_vista = "0,00"
             st.session_state.cad_validade = date.today()
             st.session_state.cad_foto_url = ""
+            st.session_state.cad_cb = ""
             if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
             return True
         return False
@@ -874,7 +875,7 @@ def homepage():
             </div>
         ''', unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)  # Fe
+    st.markdown('</div>', unsafe_allow_html=True)  # Fecha offer-section
     st.markdown("---")
 
     # ==================================================
@@ -1089,50 +1090,6 @@ def gestao_promocoes():
     dias_validade_limite = st.number_input(
         "Considerar perto da validade (dias restantes)",
         min_value=1, max_value=365, value=60, key="promo_dias_validade_restante"
-    )
-    
-    limite_validade = date.today() + timedelta(days=int(dias_validade_limite))
-
-    # CRÍTICO: Produtos Validade é uma cópia. Garante que a coluna Validade seja um objeto datetime para a comparação.
-    produtos_validade_sugeridos = produtos.copy()
-    
-    # Converte Validade de volta para datetime/Timestamp para comparação segura (se já não estiver assim)
-    produtos_validade_sugeridos['Validade_dt'] = pd.to_datetime(produtos_validade_sugeridos['Validade'], errors='coerce')
-    limite_validade_dt = datetime.combine(limite_validade, datetime.min.time()) # Timestamp do limite
-    
-    
-    produtos_validade_sugeridos = produtos_validade_sugeridos[
-        (produtos_validade_sugeridos["Quantidade"] > 0) &
-        # Compara a Série de Timestamps (Validade_dt) com o Timestamp do limite_validade_dt
-        (produtos_validade_sugeridos["Validade_dt"].notna()) &
-        (produtos_validade_sugeridos["Validade_dt"] <= limite_validade_dt)
-    ].copy()
-    
-    if produtos_validade_sugeridos.empty:
-        st.info("Nenhum produto com estoque e próximo da validade encontrado.")
-    else:
-        # CORREÇÃO AQUI: Garante que a coluna Validade seja um objeto date (como foi inicializada)
-        # e que a subtração só ocorra se não for nulo, usando um tratamento try/except mais robusto.
-        def calcular_dias_restantes(x):
-            if pd.notna(x) and isinstance(x, date):
-                return (x - date.today()).days
-            return float('inf')
-
-        produtos_validade_sugeridos['Dias Restantes'] = produtos_validade_sugeridos['Validade'].apply(calcular_dias_restantes)
-        
-        st.dataframe(
-            produtos_validade_sugeridos[["ID", "Nome", "Quantidade", "Validade", "Dias Restantes"]].sort_values("Dias Restantes"), 
-            use_container_width=True, hide_index=True
-        )
-
-    st.markdown("---")
-    
-    # 2. Sugestão de Produtos Perto da Validade
-    st.markdown("#### ⏳ Produtos Próximos da Validade")
-    
-    dias_validade_limite = st.number_input(
-        "Considerar perto da validade (dias restantes)",
-        min_value=1, max_value=365, value=60, key="promo_dias_validade_restante_2"
     )
     
     limite_validade = date.today() + timedelta(days=int(dias_validade_limite))
@@ -2493,60 +2450,45 @@ def livro_caixa():
                     
                     if edit_mode:
                         original_row = df_dividas.loc[st.session_state.edit_id]
-                        
-                        # Lógica de ajuste de estoque (Reverter se for de Realizada para Pendente ou se o produto/quantidade mudou)
-                        if original_row["Tipo"] == "Entrada" and original_row["Produtos Vendidos"]:
-                            # 1. Credita o estoque antigo (se a transação original era Realizada)
-                            if original_row["Status"] == "Realizada":
-                                try:
-                                    produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
-                                    for item in produtos_vendidos_antigos:
-                                        if item.get("Produto_ID"): 
-                                            # Credita a quantidade vendida anteriormente
-                                            ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
-                                except: 
-                                    st.warning("⚠️ Falha ao creditar estoque antigo (JSON inválido).")
-                        
-                            # 2. Debita o novo estoque (se a transação editada é Realizada e tem novos produtos)
-                            if status_selecionado == "Realizada" and produtos_vendidos_json:
-                                try:
-                                    produtos_vendidos_novos = json.loads(produtos_vendidos_json)
-                                    for item in produtos_vendidos_novos:
-                                        if item.get("Produto_ID"): 
-                                            # Debita a nova quantidade vendida
-                                            ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                                except:
-                                    st.warning("⚠️ Falha ao debitar novo estoque (JSON inválido).")
-
-                        # Salva o estoque APÓS os ajustes de edição (Creditar/Debitar)
-                        if (original_row["Tipo"] == "Entrada" or tipo == "Entrada") and salvar_produtos_no_github(st.session_state.produtos, "Ajuste de estoque por edição de venda"):
-                            inicializar_produtos.clear()
-                            st.cache_data.clear()
+                        if original_row["Status"] == "Realizada" and status_selecionado == "Pendente" and original_row["Tipo"] == "Entrada":
+                            try:
+                                produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
+                                for item in produtos_vendidos_antigos:
+                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
+                            except: pass
                             
-                        # Atualiza a linha no DataFrame do Livro Caixa
-                        st.session_state.df.loc[st.session_state.edit_id] = pd.Series({
-                            "Data": data_input,
-                            "Loja": loja_selecionada, 
-                            "Cliente": cliente,
-                            "Valor": valor_armazenado, 
-                            "Forma de Pagamento": forma_pagamento,
-                            "Tipo": tipo,
-                            "Produtos Vendidos": produtos_vendidos_json,
-                            "Categoria": categoria_selecionada,
-                            "Status": status_selecionado, 
-                            "Data Pagamento": data_pagamento_final,
-                            "RecorrenciaID": original_row["RecorrenciaID"] 
-                        })
-                        commit_msg = COMMIT_MESSAGE_EDIT
-                        
-                    elif is_recorrente and not edit_mode:
-                        # Lógica de Recorrência (Não mexe com estoque)
+                        elif original_row["Status"] == "Realizada" and status_selecionado == "Realizada" and original_row["Tipo"] == "Entrada":
+                            try:
+                                produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
+                                for item in produtos_vendidos_antigos:
+                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
+                            except: pass
+                            
+                            if produtos_vendidos_json:
+                                produtos_vendidos_novos = json.loads(produtos_vendidos_json)
+                                for item in produtos_vendidos_novos:
+                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                            
+                            if salvar_produtos_no_github(st.session_state.produtos, "Ajuste de estoque por edição de venda"):
+                                inicializar_produtos.clear()
+                                st.cache_data.clear()
+                                
+                        elif not edit_mode and tipo == "Entrada" and status_selecionado == "Realizada" and st.session_state.lista_produtos:
+                            if produtos_vendidos_json:
+                                produtos_vendidos_novos = json.loads(produtos_vendidos_json)
+                                for item in produtos_vendidos_novos:
+                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                            if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por nova venda"):
+                                inicializar_produtos.clear()
+                                st.cache_data.clear()
+
+                    novas_movimentacoes = []
+                    if is_recorrente and not edit_mode:
                         num_parcelas_int = int(num_parcelas)
                         valor_parcela_float = float(valor_parcela)
                         recorrencia_seed = f"{nome_despesa_recorrente}{data_primeira_parcela}{num_parcelas_int}{valor_parcela_float}{categoria_selecionada}{loja_selecionada}"
                         recorrencia_id = hashlib.md5(recorrencia_seed.encode('utf-8')).hexdigest()[:10]
                         
-                        novas_movimentacoes = []
                         for i in range(1, num_parcelas_int + 1):
                             data_vencimento_parcela = add_months(data_primeira_parcela, i - 1)
                             nova_linha_parcela = {
@@ -2568,7 +2510,6 @@ def livro_caixa():
                         commit_msg = f"Cadastro de Dívida Recorrente ({num_parcelas_int} parcelas)"
                         
                     else:
-                        # Lógica de NOVA MOVIMENTAÇÃO (Não Recorrente)
                         nova_linha_data = {
                             "Data": data_input,
                             "Loja": loja_selecionada, 
@@ -2583,25 +2524,13 @@ def livro_caixa():
                             "RecorrenciaID": ""
                         }
                         
-                        # CORREÇÃO CRÍTICA: DEBITAR ESTOQUE EM NOVA VENDA REALIZADA
-                        if tipo == "Entrada" and status_selecionado == "Realizada" and st.session_state.lista_produtos:
-                            if produtos_vendidos_json:
-                                try:
-                                    produtos_vendidos_novos = json.loads(produtos_vendidos_json)
-                                    for item in produtos_vendidos_novos:
-                                        if item.get("Produto_ID"): 
-                                            ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                                    # Salva o estoque
-                                    if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por nova venda"):
-                                        inicializar_produtos.clear()
-                                        st.cache_data.clear()
-                                except Exception as e:
-                                    st.error(f"Erro ao debitar estoque: {e}")
-                            
-                        st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
-                        commit_msg = COMMIT_MESSAGE
+                        if edit_mode:
+                            st.session_state.df.loc[st.session_state.edit_id] = pd.Series(nova_linha_data)
+                            commit_msg = COMMIT_MESSAGE_EDIT
+                        else:
+                            st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
+                            commit_msg = COMMIT_MESSAGE
                     
-                    # Salva o Livro Caixa
                     salvar_dados_no_github(st.session_state.df, commit_msg)
                     st.session_state.edit_id = None
                     st.session_state.lista_produtos = [] 
@@ -2683,51 +2612,324 @@ def livro_caixa():
             
             for i, row in df_resumo_loja.iterrows():
                 if i < len(cols_loja):
-                    # CORREÇÃO DA LINHA 2687: Fechando corretamente a chamada da função .metric()
                     cols_loja[i].metric(
-                        label=row['Loja'],
+                        label=f"{row['Loja']}",
                         value=f"R$ {row['Saldo']:,.2f}",
-                        delta=f"E: R$ {row['Entradas']:,.2f} / S: R$ {row['Saídas']:,.2f}"
+                        delta=f"E: R$ {row['Entradas']:,.2f} | S: R$ {row['Saídas']:,.2f}",
+                        delta_color="off" 
                     )
-                    # FIM DA CORREÇÃO DA LINHA 2687
+        else:
+            st.info("Nenhuma movimentação REALIZADA registrada neste mês.")
+        
+        st.markdown("---")
+        
+        st.subheader("📋 Tabela de Movimentações")
+        
+        if df_exibicao.empty:
+            st.info("Nenhuma movimentação registrada ainda.")
+        else:
+            col_f1, col_f2, col_f3 = st.columns(3)
+            
+            min_date = df_exibicao["Data"].min() if pd.notna(df_exibicao["Data"].min()) else hoje
+            max_date = df_exibicao["Data"].max() if pd.notna(df_exibicao["Data"].max()) else hoje
+            
+            with col_f1:
+                filtro_data_inicio = st.date_input("De", value=min_date, key="quick_data_ini")
+            with col_f2:
+                filtro_data_fim = st.date_input("Até", value=max_date, key="quick_data_fim")
+            with col_f3:
+                tipos_unicos = ["Todos"] + df_exibicao["Tipo"].unique().tolist()
+                filtro_tipo = st.selectbox("Filtrar por Tipo", options=tipos_unicos, key="quick_tipo")
+
+            df_filtrado_rapido = df_exibicao.copy()
+            
+            df_filtrado_rapido = df_filtrado_rapido[
+                (df_filtrado_rapido["Data"] >= filtro_data_inicio) &
+                (df_filtrado_rapido["Data"] <= filtro_data_fim)
+            ]
+
+            if filtro_tipo != "Todos":
+                df_filtrado_rapido = df_filtrado_rapido[df_filtrado_rapido["Tipo"] == filtro_tipo]
+
+            df_para_mostrar = df_filtrado_rapido.copy()
+            df_para_mostrar['Produtos Resumo'] = df_para_mostrar['Produtos Vendidos'].apply(format_produtos_resumo)
+            
+            colunas_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Status', 'Data Pagamento', 'Produtos Resumo', 'Saldo Acumulado']
+            
+            df_styling = df_para_mostrar[colunas_tabela + ['Cor_Valor']].copy()
+            styled_df = df_styling.style.apply(highlight_value, axis=1)
+            styled_df = styled_df.hide(subset=['Cor_Valor'], axis=1)
+
+            st.dataframe(
+                styled_df,
+                use_container_width=True,
+                column_config={
+                    "Valor": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f"),
+                    "Saldo Acumulado": st.column_config.NumberColumn("Saldo Acumulado (R$)", format="R$ %.2f"),
+                    "Produtos Resumo": st.column_config.TextColumn("Detalhe dos Produtos"),
+                    "Categoria": "Categoria (C. Custo)",
+                    "Data Pagamento": st.column_config.DateColumn("Data Pagt. Previsto/Real", format="DD/MM/YYYY")
+                },
+                height=400,
+                selection_mode='disabled',
+                key='movimentacoes_table_styled_display_only'
+            )
 
 
-def main():
-    # Estrutura de navegação principal (usando st.sidebar)
-    st.markdown(f'''
-        <div class="header-container">
-            <img src="{LOGO_DOCEBELLA_URL}" alt="Doce&Bella Logo" style="height: 50px; margin-left: 20px; border-radius: 5px;">
-            <div class="nav-button-group">
-                <!-- Links de navegação serão simulados por estados de sessão -->
-                <button onclick='window.parent.postMessage({{"page": "home"}}, "*")' style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">HOME</button>
-                <button onclick='window.parent.postMessage({{"page": "livro_caixa"}}, "*")' style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">LIVRO CAIXA</button>
-                <button onclick='window.parent.postMessage({{"page": "produtos"}}, "*")' style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">ESTOQUE/PRODUTOS</button>
-                <button onclick='window.parent.postMessage({{"page": "compras"}}, "*")' style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">HISTÓRICO COMPRAS</button>
-                <button onclick='window.parent.postMessage({{"page": "promocoes"}}, "*")' style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">PROMOÇÕES</button>
-            </div>
-        </div>
-    ''', unsafe_allow_html=True)
+            st.markdown("---")
+            st.markdown("### Operações de Edição e Exclusão")
+            
+            if df_para_mostrar.empty:
+                st.info("Nenhuma movimentação disponível para edição/exclusão com os filtros aplicados.")
+            else:
+                opcoes_movimentacao_operacao = {
+                    f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Cliente']} | R$ {abs(row['Valor']):,.2f}": row['original_index']
+                    for index, row in df_para_mostrar.iterrows()
+                }
+                opcoes_keys = ["Selecione uma movimentação..."] + list(opcoes_movimentacao_operacao.keys())
+
+                movimentacao_selecionada_str = st.selectbox(
+                    "Selecione o item para Editar ou Excluir:",
+                    options=opcoes_keys,
+                    index=0,
+                    key="select_movimentacao_operacao_lc"
+                )
+
+                original_idx_selecionado = opcoes_movimentacao_operacao.get(movimentacao_selecionada_str)
+                item_selecionado_str = movimentacao_selecionada_str
+
+                if original_idx_selecionado is not None and movimentacao_selecionada_str != "Selecione uma movimentação...":
+                    row = df_exibicao[df_exibicao['original_index'] == original_idx_selecionado].iloc[0]
+
+                    if row['Tipo'] == 'Entrada' and row['Produtos Vendidos'] and pd.notna(row['Produtos Vendidos']):
+                        st.markdown("#### Detalhes dos Produtos Selecionados")
+                        try:
+                            try:
+                                produtos = json.loads(row['Produtos Vendidos'])
+                            except json.JSONDecodeError:
+                                produtos = ast.literal_eval(row['Produtos Vendidos'])
+
+                            df_detalhe = pd.DataFrame(produtos)
+                            for col in ['Quantidade', 'Preço Unitário', 'Custo Unitário']:
+                                df_detalhe[col] = pd.to_numeric(df_detalhe[col], errors='coerce').fillna(0)
+
+                            df_detalhe['Total Venda'] = df_detalhe['Quantidade'] * df_detalhe['Preço Unitário']
+                            df_detalhe['Total Custo'] = df_detalhe['Quantidade'] * df_detalhe['Custo Unitário']
+                            df_detalhe['Lucro Bruto'] = df_detalhe['Total Venda'] - df_detalhe['Total Custo']
+
+                            st.dataframe(
+                                df_detalhe,
+                                hide_index=True,
+                                use_container_width=True,
+                                column_config={
+                                    "Produto": "Produto",
+                                    "Quantidade": st.column_config.NumberColumn("Qtd"),
+                                    "Preço Unitário": st.column_config.NumberColumn("Preço Un.", format="R$ %.2f"),
+                                    "Custo Unitário": st.column_config.NumberColumn("Custo Un.", format="R$ %.2f"),
+                                    "Total Venda": st.column_config.NumberColumn("Total Venda", format="R$ %.2f"),
+                                    "Total Custo": st.column_config.NumberColumn("Total Custo", format="R$ %.2f"),
+                                    "Lucro Bruto": st.column_config.NumberColumn("Lucro Bruto", format="R$ %.2f", help="Venda - Custo")
+                                },
+                                column_order=("Produto", "Quantidade", "Preço Unitário", "Custo Unitário", "Total Venda", "Total Custo", "Lucro Bruto")
+                            ) 
+                        
+                        except Exception as e:
+                            st.error(f"Erro ao processar detalhes dos produtos: {e}")
+
+                        st.markdown("---")
 
 
-    # Lógica de roteamento baseada no estado de sessão (simulando navegação)
-    query_params = st.query_params
-    if 'page' not in query_params:
-        query_params['page'] = 'home'
-    st.session_state.page = query_params['page']
+                    col_op_1, col_op_2 = st.columns(2)
+
+                    if col_op_1.button(f"✏️ Editar: {item_selecionado_str}", key=f"edit_mov_{original_idx_selecionado}", use_container_width=True, type="secondary"):
+                        st.session_state.edit_id = original_idx_selecionado
+                        st.session_state.lista_produtos = []
+                        st.rerun()
+
+                    if col_op_2.button(f"🗑️ Excluir: {item_selecionado_str}", key=f"del_mov_{original_idx_selecionado}", use_container_width=True, type="primary"):
+                        if row['Status'] == 'Realizada' and row['Tipo'] == 'Entrada':
+                            try:
+                                produtos_vendidos_antigos = ast.literal_eval(row['Produtos Vendidos'])
+                                for item in produtos_vendidos_antigos:
+                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
+                                if salvar_produtos_no_github(st.session_state.produtos, "Reversão de estoque por exclusão de venda"):
+                                    inicializar_produtos.clear()
+                            except: pass
+
+                        st.session_state.df = st.session_state.df.drop(row['original_index'], errors='ignore')
+
+                        if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
+                            st.cache_data.clear()
+                            st.rerun()
+                else:
+                    st.info("Selecione uma movimentação no menu acima para ver detalhes e opções de edição/exclusão.")
 
 
-    if st.session_state.page == "home":
-        homepage()
-    elif st.session_state.page == "livro_caixa":
-        livro_caixa()
-    elif st.session_state.page == "produtos":
-        gestao_produtos()
-    elif st.session_state.page == "compras":
-        historico_compras()
-    elif st.session_state.page == "promocoes":
-        gestao_promocoes()
-    else:
-        homepage()
+    with tab_rel:
+        st.subheader("📈 Relatórios Anuais e Mensais")
 
-if __name__ == "__main__":
-    main()
+        df_anual = df_exibicao[df_exibicao['Status'] == 'Realizada'].copy()
+        df_anual['Ano'] = pd.to_datetime(df_anual['Data'], errors='coerce').dt.year.fillna(0).astype(int)
+        df_anual = df_anual[df_anual['Ano'] > 0]
+
+        if not df_anual.empty:
+            df_resumo_anual = df_anual.groupby('Ano')['Valor'].agg(['sum', lambda x: x[x >= 0].sum(), lambda x: abs(x[x < 0].sum())]).reset_index()
+            df_resumo_anual.columns = ['Ano', 'Saldo', 'Entradas', 'Saídas']
+            df_resumo_anual.sort_values(by='Ano', ascending=False, inplace=True)
+
+            st.markdown("##### Resumo Anual (Realizado)")
+            st.dataframe(df_resumo_anual, hide_index=True, use_container_width=True)
+
+            fig_anual = px.bar(df_resumo_anual, x='Ano', y=['Entradas', 'Saídas'], title="Entradas vs. Saídas por Ano", labels={'value': 'Valor (R$)', 'variable': 'Tipo'}, barmode='group')
+            st.plotly_chart(fig_anual, use_container_width=True)
+            
+        else: st.info("Dados insuficientes para gerar relatório anual.")
+
+        st.markdown("---")
+        
+        st.subheader("🚩 Dívidas Pendentes (A Pagar e A Receber)")
+        
+        df_pendentes = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
+        
+        if df_pendentes.empty:
+            st.info("Parabéns! Não há dívidas pendentes registradas.")
+        else:
+            df_pendentes["Data Pagamento"] = pd.to_datetime(df_pendentes["Data Pagamento"], errors='coerce').dt.date
+            df_pendentes_ordenado = df_pendentes.sort_values(by=["Data Pagamento", "Tipo", "Data"], ascending=[True, True, True]).reset_index(drop=True)
+            df_pendentes_ordenado['Dias Até/Atraso'] = df_pendentes_ordenado['Data Pagamento'].apply(
+                lambda x: (x - hoje_date).days if pd.notna(x) else float('inf') 
+            )
+            
+            total_receber = df_pendentes_ordenado[df_pendentes_ordenado["Tipo"] == "Entrada"]["Valor"].abs().sum()
+            total_pagar = df_pendentes_ordenado[df_pendentes_ordenado["Tipo"] == "Saída"]["Valor"].abs().sum()
+            
+            col_res_1, col_res_2 = st.columns(2)
+            col_res_1.metric("Total a Receber", f"R$ {total_receber:,.2f}")
+            col_res_2.metric("Total a Pagar", f"R$ {total_pagar:,.2f}")
+            
+            st.markdown("---")
+            
+            def highlight_pendentes(row):
+                dias = row['Dias Até/Atraso']
+                if dias < 0: return ['background-color: #fcece9' if col in ['Status', 'Data Pagamento'] else '' for col in row.index]
+                elif dias <= 7: return ['background-color: #fffac9' if col in ['Status', 'Data Pagamento'] else '' for col in row.index]
+                return ['' for col in row.index]
+
+            with st.form("form_concluir_divida"):
+                st.markdown("##### ✅ Concluir Dívida Pendente")
+                
+                opcoes_pendentes = {
+                    f"ID {row['ID Visível']} | {row['Tipo']} | R$ {row['Valor'] if row['Tipo'] == 'Entrada' else abs(row['Valor']):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
+                    for index, row in df_pendentes_ordenado.iterrows()
+                }
+                opcoes_keys = [""] + list(opcoes_pendentes.keys())
+                
+                divida_selecionada_str = st.selectbox("Selecione a Dívida para Concluir:", options=opcoes_keys, key="select_divida_concluir")
+                
+                original_idx_concluir = opcoes_pendentes.get(divida_selecionada_str)
+
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    data_conclusao = st.date_input("Data Real da Conclusão", value=hoje_date, key="data_conclusao_divida")
+                with col_c2:
+                    forma_pagt_concluir = st.selectbox("Forma de Pagamento (Realizada)", FORMAS_PAGAMENTO, key="forma_pagt_concluir")
+
+                concluir = st.form_submit_button("✅ Concluir Selecionada", use_container_width=True, type="primary")
+
+                if concluir and original_idx_concluir is not None:
+                    idx_original = df_pendentes.loc[df_pendentes['original_index'] == original_idx_concluir].index[0]
+                    row_data = st.session_state.df.loc[idx_original].copy()
+                    
+                    st.session_state.df.loc[idx_original, 'Status'] = 'Realizada'
+                    st.session_state.df.loc[idx_original, 'Data'] = data_conclusao
+                    st.session_state.df.loc[idx_original, 'Data Pagamento'] = data_conclusao
+                    st.session_state.df.loc[idx_original, 'Forma de Pagamento'] = forma_pagt_concluir
+                    
+                    if row_data["Tipo"] == "Entrada" and row_data["Produtos Vendidos"]:
+                        try:
+                            produtos_vendidos = ast.literal_eval(row_data['Produtos Vendidos'])
+                            for item in produtos_vendidos:
+                                if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                            if salvar_produtos_no_github(st.session_state.produtos, f"Débito de estoque por conclusão de venda {row_data['Cliente']}"): inicializar_produtos.clear()
+                        except: st.warning("⚠️ Venda concluída, mas falha no débito do estoque (JSON inválido).")
+                    
+                    if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DEBT_REALIZED):
+                        st.cache_data.clear()
+                        st.rerun()
+                elif concluir: st.warning("Selecione uma dívida válida para concluir.")
+
+            st.markdown("---")
+
+            st.markdown("##### Tabela Detalhada de Dívidas Pendentes")
+            df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
+            df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(
+                lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
+            )
+            df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
+
+            st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+
+
+# ==============================================================================
+# ESTRUTURA PRINCIPAL E NAVEGAÇÃO SUPERIOR
+# ==============================================================================
+
+PAGINAS = {
+    "Home": homepage,
+    "Livro Caixa": livro_caixa,
+    "Produtos": gestao_produtos,
+    "Promoções": gestao_promocoes, # NOVA PÁGINA
+    "Histórico de Compra": historico_compras
+}
+
+if "pagina_atual" not in st.session_state:
+    st.session_state.pagina_atual = "Home"
+
+
+# --- Renderiza o Header e a Navegação no Topo ---
+
+def render_header():
+    """Renderiza o header customizado com a navegação em botões."""
+    
+    col_logo, col_nav = st.columns([1, 4])
+    
+    with col_logo:
+        # AQUI É A LINHA CORRIGIDA: usa o link direto para o logo.
+        # Se a imagem falhar, o CSS garante que a seção não quebre o layout.
+        st.image(LOGO_DOCEBELLA_URL, width=150)
+        
+    with col_nav:
+        cols_botoes = st.columns([1] * len(PAGINAS))
+        
+        # Cria a lista de páginas na ordem desejada
+        paginas_ordenadas = ["Home", "Livro Caixa", "Produtos", "Promoções", "Histórico de Compra"]
+        
+        for i, nome in enumerate(paginas_ordenadas):
+            if nome in PAGINAS:
+                is_active = st.session_state.pagina_atual == nome
+                
+                # Ajusta o estilo do botão para parecer um item de navegação
+                button_style = "color: white; font-weight: bold; border: none; background: none; cursor: pointer; padding: 10px 5px;"
+                if is_active:
+                    button_style += "border-bottom: 3px solid #FFCDD2; /* Linha de destaque rosa claro */"
+                
+                # Usando st.markdown e st.button em combinação para obter o efeito de botão customizado.
+                if cols_botoes[i].button(nome, key=f"nav_{nome}", use_container_width=True, help=f"Ir para {nome}"):
+                    st.session_state.pagina_atual = nome
+                    st.rerun()
+
+# O Streamlit nativamente não permite HTML/Markdown fora do corpo principal
+# Simulamos o Header customizado no topo da página
+with st.container():
+    st.markdown('<div class="header-container">', unsafe_allow_html=True)
+    render_header()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# --- RENDERIZAÇÃO DO CONTEÚDO DA PÁGINA ---
+PAGINAS[st.session_state.pagina_atual]()
+
+# --- Exibe/Oculta o Sidebar do Formulário ---
+# A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
+if st.session_state.pagina_atual != "Livro Caixa":
+    st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
