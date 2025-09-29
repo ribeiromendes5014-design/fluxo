@@ -24,9 +24,15 @@ st.set_page_config(
     page_icon="🌸"
 )
 
-# Caminho e URL simulada para o logo carregado (usa o asset do Immersive Canvas)
+# Caminho para o logo carregado. 
+# Usamos o nome do arquivo. Em muitos ambientes Streamlit, o arquivo fica acessível
+# diretamente através do seu nome original, especialmente se foi carregado como um asset.
+# O ID de fetch ("uploaded:...") não é reconhecido pelo st.image.
 LOGO_DOCEBELLA_FILENAME = "logo_docebella.jpg"
-LOGO_DOCEBELLA_URL = "uploaded:logo_docebella.jpg-f498b66c-a5e3-41f5-8eb6-4d34205c4a8e" 
+# A URL é ajustada para ser o nome do arquivo que foi feito upload.
+# Em um Streamlit normal, usaríamos o nome do arquivo se estivesse na mesma pasta.
+# Em ambientes Canvas, usar apenas o nome da variável pode funcionar se o asset for montado:
+LOGO_DOCEBELLA_URL = LOGO_DOCEBELLA_FILENAME 
 
 
 # Adiciona CSS para simular a navegação no topo e o tema pink/magenta
@@ -1033,7 +1039,7 @@ def gestao_produtos():
                                 
                                 c_var[2].write(f"{var['Quantidade']}")
                                 
-                                c_var[3].write(f"{var['Validade']}")
+                                c_var[3].write(f"{pai['Validade']}")
 
                                 pv_var = to_float(var['PrecoVista'])
                                 pc_var_calc = round(pv_var / FATOR_CARTAO, 2)
@@ -2284,7 +2290,7 @@ def render_header():
     col_logo, col_nav = st.columns([1, 4])
     
     with col_logo:
-        # Logo Doce&Bella (Usando a imagem carregada)
+        # AQUI É A LINHA CORRIGIDA: usa a variável LOGO_DOCEBELLA_URL que agora é só o nome do arquivo.
         st.image(LOGO_DOCEBELLA_URL, width=150)
         
     with col_nav:
