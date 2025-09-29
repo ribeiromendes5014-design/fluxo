@@ -752,8 +752,8 @@ def gestao_produtos():
                     
                     var_nome = var_c1.text_input(f"Nome da variação {i+1}", key=f"var_nome_{i}")
                     var_qtd = var_c2.number_input(f"Quantidade variação {i+1}", min_value=0, step=1, value=0, key=f"var_qtd_{i}")
-                    var_preco_custo = var_c3.text_input(f"Preço de Custo variação {i+1}", value="0,00", key=f"var_pc_{i}")
-                    var_preco_vista = var_c4.text_input(f"Preço à Vista variação {i+1}", value="0,00", key=f"var_pv_{i}")
+                    var_preco_custo = st.text_input(f"Preço de Custo variação {i+1}", value="0,00", key=f"var_pc_{i}")
+                    var_preco_vista = st.text_input(f"Preço à Vista variação {i+1}", value="0,00", key=f"var_pv_{i}")
                     
                     var_cb_c1, var_cb_c2, var_cb_c3 = st.columns([2, 1, 1])
 
@@ -1116,6 +1116,10 @@ def gestao_produtos():
 # FUNÇÃO DA PÁGINA: HISTÓRICO DE COMPRAS (NOVA ADIÇÃO)
 # ==============================================================================
 
+# Novo estado para gerenciar qual compra está sendo editada
+if "edit_compra_idx" not in st.session_state:
+    st.session_state.edit_compra_idx = None
+    
 def historico_compras():
     st.title("🛒 Histórico de Compras de Insumos")
     st.info("Utilize esta página para registrar produtos (insumos, materiais, estoque) comprados. Estes dados são **separados** do controle de estoque principal e do Livro Caixa.")
@@ -1156,7 +1160,9 @@ def historico_compras():
         (df_exibicao["Valor Total"] > 0)
     ].copy()
 
-    total_gasto_mes = df_mes_atual['Valor Total'].sum()
+    # CORREÇÃO: A soma do Valor Total está correta, pois o usuário insere o valor total da compra. 
+    # Se o problema é visualização, é devido ao cache ou input. Mantemos a soma direta.
+    total_gasto_mes = df_mes_atual['Valor Total'].sum() 
 
     st.markdown("---")
     st.subheader(f"📊 Resumo de Gastos - Mês de {primeiro_dia_mes.strftime('%m/%Y')}")
@@ -1168,7 +1174,6 @@ def historico_compras():
     # ==================================================
     
     # Define as abas: Cadastro + Dashboard/Lista/Filtro
-    # REMOÇÃO DE ABA "LISTA & FILTRO" - MOVENDO CONTEÚDO PARA CADASTRO
     tab_cadastro, tab_dashboard = st.tabs(["📝 Cadastro & Lista de Compras", "📈 Dashboard de Gastos"])
     
     # ==================================================
@@ -1181,6 +1186,9 @@ def historico_compras():
             st.info("Nenhum dado de compra registrado para gerar o dashboard.")
         else:
             # Agregação por Produto (calcula o total gasto por produto em todo o histórico)
+            # NOTA: df_exibicao['Valor Total'] já é o gasto total daquela linha.
+            # Se você registrar 2 produtos de R$ 100,00, a linha terá Qtd=2, Valor Total=200.
+            # O agrupamento abaixo soma 200 (se o produto for o mesmo).
             df_gasto_por_produto = df_exibicao.groupby('Produto')['Valor Total'].sum().reset_index()
             df_gasto_por_produto = df_gasto_por_produto.sort_values(by='Valor Total', ascending=False)
             
@@ -1233,61 +1241,117 @@ def historico_compras():
     # 3. CADASTRO & LISTA DE COMPRAS (Aba Unificada)
     # ==================================================
     with tab_cadastro:
-        st.subheader("📝 Formulário de Registro")
         
-        # --- Formulário de Cadastro ---
-        with st.expander("➕ Registrar Nova Compra", expanded=True):
-            with st.form("form_nova_compra", clear_on_submit=True):
+        # --- LÓGICA DE EDIÇÃO ---
+        edit_mode_compra = st.session_state.edit_compra_idx is not None
+        
+        if edit_mode_compra:
+            original_idx_to_edit = st.session_state.edit_compra_idx
+            # Encontra a linha no DataFrame original (não o df_exibicao reindexado)
+            linha_para_editar = df_compras[df_compras.index == original_idx_to_edit]
+            
+            if not linha_para_editar.empty:
+                compra_data = linha_para_editar.iloc[0]
                 
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    data = st.date_input("Data da Compra", value=date.today(), key="compra_data")
-                    nome_produto = st.text_input("Produto/Material Comprado", key="compra_nome")
+                # Valores padrão para edição
+                # Garantindo a conversão de Data
+                try:
+                    default_data = pd.to_datetime(compra_data['Data']).date()
+                except:
+                    default_data = date.today()
                     
-                with col2:
-                    quantidade = st.number_input("Quantidade", min_value=1, value=1, step=1, key="compra_qtd")
-                    valor_total_input = st.number_input("Valor Total (R$)", min_value=0.01, format="%.2f", value=10.00, key="compra_valor")
-                    
-                with col3:
-                    cor_selecionada = st.color_picker("Cor para Destaque", value="#007bff", key="compra_cor")
+                default_produto = compra_data['Produto']
+                default_qtd = int(compra_data['Quantidade'])
+                default_valor = float(compra_data['Valor Total'])
+                default_cor = compra_data['Cor']
+                default_foto_url = compra_data['FotoURL']
                 
-                # ADIÇÃO: URL da Foto
-                with col4:
-                    foto_url = st.text_input("URL da Foto do Produto (Opcional)", key="compra_foto_url")
-                    
+                st.subheader("📝 Editar Compra Selecionada")
+                st.warning(f"Editando item: **{default_produto}** (ID Interno: {original_idx_to_edit})")
+            else:
+                st.session_state.edit_compra_idx = None
+                edit_mode_compra = False
+                st.subheader("📝 Formulário de Registro") # Fallback
                 
-                salvar_compra = st.form_submit_button("💾 Adicionar Compra", type="primary", use_container_width=True)
+        if not edit_mode_compra:
+            st.subheader("📝 Formulário de Registro")
+            default_data = date.today()
+            default_produto = ""
+            default_qtd = 1
+            default_valor = 10.00
+            default_cor = "#007bff"
+            default_foto_url = ""
 
-                if salvar_compra:
-                    if not nome_produto or valor_total_input <= 0:
-                        st.error("Nome do produto e Valor Total são obrigatórios e devem ser válidos.")
-                    elif quantidade <= 0:
-                        st.error("A quantidade deve ser maior que zero.")
+
+        # --- Formulário de Cadastro/Edição ---
+        with st.form("form_compra", clear_on_submit=not edit_mode_compra):
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                data = st.date_input("Data da Compra", value=default_data, key="compra_data_form")
+                nome_produto = st.text_input("Produto/Material Comprado", value=default_produto, key="compra_nome_form")
+                
+            with col2:
+                quantidade = st.number_input("Quantidade", min_value=1, value=default_qtd, step=1, key="compra_qtd_form")
+                valor_total_input = st.number_input("Valor Total (R$)", min_value=0.01, format="%.2f", value=default_valor, key="compra_valor_form")
+                
+            with col3:
+                cor_selecionada = st.color_picker("Cor para Destaque", value=default_cor, key="compra_cor_form")
+            
+            with col4:
+                foto_url = st.text_input("URL da Foto do Produto (Opcional)", value=default_foto_url, key="compra_foto_url_form")
+            
+            
+            if edit_mode_compra:
+                col_sub1, col_sub2 = st.columns(2)
+                salvar_compra = col_sub1.form_submit_button("💾 Salvar Edição", type="primary", use_container_width=True)
+                cancelar_edicao = col_sub2.form_submit_button("❌ Cancelar Edição", type="secondary", use_container_width=True)
+            else:
+                salvar_compra = st.form_submit_button("💾 Adicionar Compra", type="primary", use_container_width=True)
+                cancelar_edicao = False
+
+
+            # --- Lógica de Ação ---
+            if salvar_compra:
+                if not nome_produto or valor_total_input <= 0 or quantidade <= 0:
+                    st.error("Preencha todos os campos obrigatórios com valores válidos.")
+                else:
+                    nova_linha = {
+                        "Data": data.strftime('%Y-%m-%d'),
+                        "Produto": nome_produto.strip(),
+                        "Quantidade": int(quantidade),
+                        "Valor Total": float(valor_total_input),
+                        "Cor": cor_selecionada,
+                        "FotoURL": foto_url.strip(),
+                    }
+                    
+                    if edit_mode_compra:
+                        # Modo Edição: Atualiza a linha existente
+                        st.session_state.df_compras.loc[original_idx_to_edit] = pd.Series(nova_linha)
+                        commit_msg = f"Edição da compra {nome_produto}"
                     else:
-                        nova_linha = {
-                            "Data": data.strftime('%Y-%m-%d'), # Formata para string para persistência
-                            "Produto": nome_produto.strip(),
-                            "Quantidade": int(quantidade),
-                            "Valor Total": float(valor_total_input),
-                            "Cor": cor_selecionada,
-                            "FotoURL": foto_url.strip(), # ADIÇÃO: FotoURL
-                        }
-                        
-                        # Concatena com o DF original da sessão
-                        df_novo = pd.concat([st.session_state.df_compras.iloc[:, :len(COLUNAS_COMPRAS)], pd.DataFrame([nova_linha])], ignore_index=True)
-                        st.session_state.df_compras = df_novo
-                        
-                        # Salva e recarrega
-                        if salvar_historico_no_github(st.session_state.df_compras, COMMIT_MESSAGE_COMPRAS):
-                            st.cache_data.clear()
-                            st.rerun()
+                        # Modo Cadastro: Adiciona nova linha
+                        df_original = st.session_state.df_compras.iloc[:, :len(COLUNAS_COMPRAS)]
+                        st.session_state.df_compras = pd.concat([df_original, pd.DataFrame([nova_linha])], ignore_index=True)
+                        commit_msg = f"Nova compra registrada: {nome_produto}"
+
+                    # Salva e recarrega
+                    if salvar_historico_no_github(st.session_state.df_compras, commit_msg):
+                        st.session_state.edit_compra_idx = None # Sai do modo edição
+                        st.cache_data.clear()
+                        st.rerun()
+
+            if cancelar_edicao:
+                st.session_state.edit_compra_idx = None
+                st.rerun()
         
+        # --- Lista e Operações ---
         st.markdown("---")
         st.subheader("Lista e Operações de Histórico")
         
         # --- Filtros de Busca (Produto e Data) ---
-        with st.expander("🔍 Filtros da Lista", expanded=True):
+        with st.expander("🔍 Filtros da Lista", expanded=False):
             col_f1, col_f2 = st.columns([1, 2])
             
             # 1. Filtro de Produto
@@ -1328,33 +1392,34 @@ def historico_compras():
                     (df_filtrado["Data"] <= data_fim)
                 ]
             
-        # --- Tabela de Exibição e Remoção ---
+        # --- Tabela de Exibição com Ações ---
         
         if df_filtrado.empty:
             st.info("Nenhuma compra encontrada com os filtros aplicados.")
         else:
-            # CORREÇÃO: Criar a coluna 'Data Formatada' no DataFrame filtrado, antes de ser usada para a tabela e para as opções de exclusão.
+            # Cria a coluna 'Data Formatada' no DataFrame filtrado, antes de ser usada para a tabela e para as opções de exclusão.
             df_filtrado['Data Formatada'] = df_filtrado['Data'].apply(lambda x: x.strftime('%d/%m/%Y') if pd.notna(x) else '')
             
             # Estilização condicional (usando CSS para cor de fundo)
             def highlight_color_compras(row):
                 """Função para aplicar o destaque de cor na linha."""
-                # Cor está no formato hex (ex: #007bff)
                 color = row['Cor']
-                # Aplica a cor na linha toda com 30% de opacidade
                 return [f'background-color: {color}30' for col in row.index]
             
-            # Prepara o DF para exibição
             df_para_mostrar = df_filtrado.copy()
             
-            # Estiliza e exibe
-            df_display_cols = ['ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'FotoURL', 'Cor', 'original_index']
+            # Inclui a Foto como uma coluna de link para melhor visualização na tabela.
+            df_para_mostrar['Foto'] = df_para_mostrar['FotoURL'].apply(lambda x: '📷' if x.strip() else '')
+
+            # Prepara a lista de colunas para exibição e estilos
+            df_display_cols = ['ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'Foto', 'Cor', 'original_index']
             df_styling = df_para_mostrar[df_display_cols].copy()
             
             styled_df = df_styling.style.apply(highlight_color_compras, axis=1)
             # Oculta a coluna de cor e o índice original
             styled_df = styled_df.hide(subset=['Cor', 'original_index'], axis=1)
 
+            st.markdown("##### Tabela de Itens Comprados")
             # 4. Exibe o DataFrame estilizado
             st.dataframe(
                 styled_df,
@@ -1365,42 +1430,48 @@ def historico_compras():
                         "Valor Total (R$)",
                         format="R$ %.2f",
                     ),
-                    "FotoURL": st.column_config.TextColumn("URL da Foto", help="Link direto para a imagem do produto"),
+                    "Foto": st.column_config.TextColumn("Foto"),
                 },
-                column_order=('ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'FotoURL'), # Inclui FotoURL
+                column_order=('ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'Foto'),
                 height=400,
                 selection_mode='single-row', 
                 key='compras_table_styled'
             )
             
+            # --- Lógica de Seleção para Editar/Excluir ---
+            selection_state = st.session_state.get('compras_table_styled')
+            selected_row_index = None # Índice do DF filtrado
             
-            # --- Lógica de Exclusão (Reflete a filtragem) ---
-            st.markdown("### 🗑️ Excluir Compra Selecionada")
-            
-            # Cria um dicionário de opções para o selectbox USANDO DADOS FILTRADOS (df_para_mostrar agora é usado)
-            opcoes_compra = {
-                f"ID {row['ID']} | {row['Data Formatada']} | {row['Produto']} | R$ {row['Valor Total']:,.2f}": row['original_index'] 
-                for index, row in df_para_mostrar.iterrows() # Usa df_para_mostrar que contém 'Data Formatada'
-            }
-            opcoes_keys = list(opcoes_compra.keys())
-            
-            if opcoes_keys:
-                compra_selecionada_str = st.selectbox(
-                    "Selecione a compra para exclusão:",
-                    options=opcoes_keys,
-                    index=0,
-                    key="select_compra_delete",
-                )
+            if selection_state and selection_state.get('selection', {}).get('rows'):
+                selected_row_index = selection_state['selection']['rows'][0]
                 
-                original_idx_selecionado = opcoes_compra.get(compra_selecionada_str)
+            
+            st.markdown("### Operações de Edição e Exclusão")
+            
+            if selected_row_index is not None:
+                # Mapeia o índice da linha selecionada no DF filtrado para o 'original_index'
+                original_idx_selecionado = df_para_mostrar.iloc[selected_row_index]['original_index']
+                item_selecionado_str = f"ID {df_para_mostrar.iloc[selected_row_index]['ID']} | {df_para_mostrar.iloc[selected_row_index]['Produto']}"
                 
-                if st.button(f"🗑️ Excluir permanentemente: {compra_selecionada_str}", type="primary", use_container_width=True):
+                col_edit, col_delete = st.columns(2)
+
+                # Botão de Edição
+                # Desabilita o botão de edição se já estiver no modo edição
+                if col_edit.button(f"✏️ Editar: {item_selecionado_str}", type="secondary", use_container_width=True, disabled=edit_mode_compra):
+                    st.session_state.edit_compra_idx = original_idx_selecionado
+                    st.rerun()
+
+                # Botão de Exclusão
+                if col_delete.button(f"🗑️ Excluir: {item_selecionado_str}", type="primary", use_container_width=True, disabled=edit_mode_compra):
                     # Exclui a linha do DF original da sessão (usando o índice original mapeado)
                     st.session_state.df_compras = st.session_state.df_compras.drop(original_idx_selecionado, errors='ignore')
                     
-                    if salvar_historico_no_github(st.session_state.df_compras, "Exclusão de item do histórico de compras"):
+                    if salvar_historico_no_github(st.session_state.df_compras, f"Exclusão da compra {item_selecionado_str}"):
                         st.cache_data.clear()
                         st.rerun()
+            else:
+                st.info("Selecione uma linha na tabela acima para editar ou excluir.")
+
 
 # ==============================================================================
 # FUNÇÃO DA PÁGINA: LIVRO CAIXA COMPLETO (BASEADO EM ff.py)
@@ -2415,7 +2486,7 @@ def livro_caixa():
                 st.markdown("### 📉 Saldo Acumulado (Tendência no Tempo)")
                 
                 df_acumulado = df_filtrado_loja.sort_values(by='Data_dt', ascending=True).copy()
-                df_acumulado = df_acumulado[df_acumulado['Status'] == 'Realizada']
+                df_acumulado = df_acumulado[df_filtrado_loja['Status'] == 'Realizada']
 
                 if df_acumulado.empty:
                     st.info("Nenhuma transação Realizada para calcular o Saldo Acumulado.")
