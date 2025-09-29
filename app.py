@@ -27,7 +27,7 @@ st.set_page_config(
 # Caminho para o logo carregado. 
 # ATUALIZAÇÃO: Usando a URL do CloudFront para maior estabilidade.
 LOGO_DOCEBELLA_FILENAME = "logo_docebella.jpg"
-LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo-docebella.png" # Mantido como placeholder seguro
+LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo-docebella.png" # Link direto para o logo
 
 # URLs das Imagens de Seção (CloudFront)
 URL_MAIS_VENDIDOS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-queridinhos1.png"
@@ -184,10 +184,12 @@ st.markdown("""
     .product-wrapper {
         display: flex; /* FORÇA OS CARDS A FICAREM LADO A LADO */
         flex-direction: row;
-        justify-content: center; /* Tenta centralizar, mas é limitado pelo overflow */
+        justify-content: flex-start; /* Alinhamento ao início */
         gap: 15px;
         padding: 0 50px; 
-        width: max-content; /* Permite que o flex container se estenda para forçar o scroll */
+        /* Centralização Avançada (garante centralização quando o conteúdo é menor que a largura) */
+        min-width: fit-content; 
+        margin: 0 auto; /* Centraliza o wrapper dentro do outer-container */
     }
     
     /* Classe para controlar o tamanho das imagens de título */
@@ -755,6 +757,7 @@ def homepage():
         st.info("Não há dados de vendas suficientes (Entradas Realizadas) para determinar os produtos mais vendidos.")
     else:
         # Início do Container Carrossel (Scroll Horizontal e Centralizado)
+        # O HTML precisa ser gerado em uma ÚNICA string markdown para evitar quebras de linha do Streamlit
         html_cards = ""
         for i, row in produtos_mais_vendidos.iterrows():
             # Busca a quantidade total vendida para este produto
@@ -766,8 +769,7 @@ def homepage():
             preco_vista = to_float(row.get('PrecoVista', 0))
             preco_cartao = to_float(row.get('PrecoCartao', 0)) 
             preco_exibido = preco_cartao
-            # Usando a URL segura do placeholder caso não haja foto no cadastro
-            foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/F48FB1/880E4F?text={nome_produto.replace(' ', '+')}"
+            foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/F48FB1/880E4F?text={row['Nome'].replace(' ', '+')}"
 
             # Constrói o Card
             html_cards += f'''
@@ -782,7 +784,7 @@ def homepage():
                 </div>
             '''
         
-        # Renderiza o Carrossel em um único bloco de Markdown
+        # Renderiza o Carrossel
         st.markdown(f'''
             <div class="carousel-outer-container">
                 <div class="product-wrapper">
@@ -815,7 +817,7 @@ def homepage():
             desconto = 1 - (preco_cartao_promo / preco_vista_original)
             desconto_percent = round(desconto * 100)
             
-            foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/E91E63/FFFFFF?text={nome_produto.replace(' ', '+')}"
+            foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/E91E63/FFFFFF?text={row['Nome'].replace(' ', '+')}"
 
             # Constrói o Card de Oferta
             html_cards_ofertas += f'''
@@ -831,7 +833,7 @@ def homepage():
                 </div>
             '''
         
-        # Renderiza o Carrossel em um único bloco de Markdown
+        # Renderiza o Carrossel
         st.markdown(f'''
             <div class="carousel-outer-container">
                 <div class="product-wrapper">
@@ -871,7 +873,7 @@ def homepage():
                 </div>
             '''
         
-        # Renderiza o Carrossel em um único bloco de Markdown
+        # Renderiza o Carrossel
         st.markdown(f'''
             <div class="carousel-outer-container">
                 <div class="product-wrapper">
@@ -1303,7 +1305,7 @@ def gestao_produtos():
                     
                     var_nome = var_c1.text_input(f"Nome da variação {i+1}", key=f"var_nome_{i}")
                     var_qtd = var_c2.number_input(f"Quantidade variação {i+1}", min_value=0, step=1, value=0, key=f"var_qtd_{i}")
-                    var_preco_custo = st.text_input("Preço de Custo variação {i+1}", value="0,00", key=f"var_pc_{i}")
+                    var_preco_custo = st.text_input(f"Preço de Custo variação {i+1}", value="0,00", key=f"var_pc_{i}")
                     var_preco_vista = st.text_input("Preço à Vista variação {i+1}", value="0,00", key=f"var_pv_{i}")
                     
                     var_cb_c1, var_cb_c2, var_cb_c3 = st.columns([2, 1, 1])
@@ -2710,7 +2712,7 @@ def livro_caixa():
                 st.markdown("##### ✅ Concluir Dívida Pendente")
                 
                 opcoes_pendentes = {
-                    f"ID {row['ID Visível']} | {row['Tipo']} | R$ {row['Valor'] if row['Tipo'] == 'Entrada' else abs(row['Valor']):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
+                    f"ID {row['ID Visível']} | {row['Tipo']} | R$ {row['Valor'] if row['Tipo'] == 'Entrada' else abs(row['Valor']):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%m') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
                     for index, row in df_pendentes_ordenado.iterrows()
                 }
                 opcoes_keys = [""] + list(opcoes_pendentes.keys())
@@ -2721,4 +2723,106 @@ def livro_caixa():
 
                 col_c1, col_c2 = st.columns(2)
                 with col_c1:
-                    data_conclusao =
+                    data_conclusao = st.date_input("Data Real da Conclusão", value=hoje_date, key="data_conclusao_divida")
+                with col_c2:
+                    forma_pagt_concluir = st.selectbox("Forma de Pagamento (Realizada)", FORMAS_PAGAMENTO, key="forma_pagt_concluir")
+
+                concluir = st.form_submit_button("✅ Concluir Selecionada", use_container_width=True, type="primary")
+
+                if concluir and original_idx_concluir is not None:
+                    idx_original = df_pendentes.loc[df_pendentes['original_index'] == original_idx_concluir].index[0]
+                    row_data = st.session_state.df.loc[idx_original].copy()
+                    
+                    st.session_state.df.loc[idx_original, 'Status'] = 'Realizada'
+                    st.session_state.df.loc[idx_original, 'Data'] = data_conclusao
+                    st.session_state.df.loc[idx_original, 'Data Pagamento'] = data_conclusao
+                    st.session_state.df.loc[idx_original, 'Forma de Pagamento'] = forma_pagt_concluir
+                    
+                    if row_data["Tipo"] == "Entrada" and row_data["Produtos Vendidos"]:
+                        try:
+                            produtos_vendidos = ast.literal_eval(row_data['Produtos Vendidos'])
+                            for item in produtos_vendidos:
+                                if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                            if salvar_produtos_no_github(st.session_state.produtos, f"Débito de estoque por conclusão de venda {row_data['Cliente']}"): inicializar_produtos.clear()
+                        except: st.warning("⚠️ Venda concluída, mas falha no débito do estoque (JSON inválido).")
+                    
+                    if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DEBT_REALIZED):
+                        st.cache_data.clear()
+                        st.rerun()
+                elif concluir: st.warning("Selecione uma dívida válida para concluir.")
+
+            st.markdown("---")
+
+            st.markdown("##### Tabela Detalhada de Dívidas Pendentes")
+            df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
+            df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(
+                lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
+            )
+            df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
+
+            st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+
+
+# ==============================================================================
+# ESTRUTURA PRINCIPAL E NAVEGAÇÃO SUPERIOR
+# ==============================================================================
+
+PAGINAS = {
+    "Home": homepage,
+    "Livro Caixa": livro_caixa,
+    "Produtos": gestao_produtos,
+    "Promoções": gestao_promocoes, # NOVA PÁGINA
+    "Histórico de Compra": historico_compras
+}
+
+if "pagina_atual" not in st.session_state:
+    st.session_state.pagina_atual = "Home"
+
+
+# --- Renderiza o Header e a Navegação no Topo ---
+
+def render_header():
+    """Renderiza o header customizado com a navegação em botões."""
+    
+    col_logo, col_nav = st.columns([1, 4])
+    
+    with col_logo:
+        # AQUI É A LINHA CORRIGIDA: usa o link direto para o logo.
+        # Se a imagem falhar, o CSS garante que a seção não quebre o layout.
+        st.image(LOGO_DOCEBELLA_URL, width=150)
+        
+    with col_nav:
+        cols_botoes = st.columns([1] * len(PAGINAS))
+        
+        # Cria a lista de páginas na ordem desejada
+        paginas_ordenadas = ["Home", "Livro Caixa", "Produtos", "Promoções", "Histórico de Compra"]
+        
+        for i, nome in enumerate(paginas_ordenadas):
+            if nome in PAGINAS:
+                is_active = st.session_state.pagina_atual == nome
+                
+                # Ajusta o estilo do botão para parecer um item de navegação
+                button_style = "color: white; font-weight: bold; border: none; background: none; cursor: pointer; padding: 10px 5px;"
+                if is_active:
+                    button_style += "border-bottom: 3px solid #FFCDD2; /* Linha de destaque rosa claro */"
+                
+                # Usando st.markdown e st.button em combinação para obter o efeito de botão customizado.
+                if cols_botoes[i].button(nome, key=f"nav_{nome}", use_container_width=True, help=f"Ir para {nome}"):
+                    st.session_state.pagina_atual = nome
+                    st.rerun()
+
+# O Streamlit nativamente não permite HTML/Markdown fora do corpo principal
+# Simulamos o Header customizado no topo da página
+with st.container():
+    st.markdown('<div class="header-container">', unsafe_allow_html=True)
+    render_header()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# --- RENDERIZAÇÃO DO CONTEÚDO DA PÁGINA ---
+PAGINAS[st.session_state.pagina_atual]()
+
+# --- Exibe/Oculta o Sidebar do Formulário ---
+# A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
+if st.session_state.pagina_atual != "Livro Caixa":
+    st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
