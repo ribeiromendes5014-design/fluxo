@@ -761,8 +761,8 @@ def homepage():
         st.info("Não há dados de vendas suficientes (Entradas Realizadas) para determinar os produtos mais vendidos.")
     else:
         # Início do Container Carrossel (Scroll Horizontal e Centralizado)
-        # O HTML precisa ser gerado em uma ÚNICA string markdown para evitar quebras de linha do Streamlit
-        html_cards = ""
+        # CORREÇÃO: Usar lista e join para evitar quebras de HTML/Sintaxe
+        html_cards = [] 
         for i, row in produtos_mais_vendidos.iterrows():
             # Busca a quantidade total vendida para este produto
             vendas_count = df_mais_vendidos_id[df_mais_vendidos_id["Produto_ID"] == row["ID"]]["Quantidade Total Vendida"].iloc[0] if not df_mais_vendidos_id.empty else 0
@@ -775,8 +775,8 @@ def homepage():
             preco_exibido = preco_cartao
             foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/F48FB1/880E4F?text={row['Nome'].replace(' ', '+')}"
 
-            # Constrói o Card (usando ASPAS DUPLAS internas para evitar conflito na f-string)
-            html_cards += f'''
+            # Constrói o Card (Usando f-string e aspas triplas para facilitar o HTML)
+            card_html = f'''
                 <div class="product-card">
                     <img src="{foto_url}" alt="{nome_produto}">
                     <p style="font-size: 0.9em; height: 40px; white-space: normal;">{nome_produto} - {descricao}</p>
@@ -787,12 +787,13 @@ def homepage():
                     <p style="font-size: 0.7em; color: #888; margin-top: 5px;">Vendas: {int(vendas_count)}</p>
                 </div>
             '''
+            html_cards.append(card_html)
         
         # Renderiza o Carrossel
         st.markdown(f'''
             <div class="carousel-outer-container">
                 <div class="product-wrapper">
-                    {html_cards}
+                    {"".join(html_cards)}
                 </div>
             </div>
         ''', unsafe_allow_html=True)
@@ -811,7 +812,7 @@ def homepage():
     if produtos_oferta.empty:
         st.info("Nenhum produto em promoção registrado no momento.")
     else:
-        html_cards_ofertas = ""
+        html_cards_ofertas = []
         for i, row in produtos_oferta.iterrows():
             nome_produto = row['Nome']
             descricao = row['Marca'] if row['Marca'] else row['Categoria']
@@ -824,7 +825,7 @@ def homepage():
             foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/E91E63/FFFFFF?text={row['Nome'].replace(' ', '+')}"
 
             # Constrói o Card de Oferta
-            html_cards_ofertas += f'''
+            card_html = f'''
                 <div class="product-card" style="background-color: #FFF5F7;">
                     <img src="{foto_url}" alt="{nome_produto}">
                     <p style="font-size: 0.9em; height: 40px; white-space: normal;">{nome_produto} - {descricao}</p>
@@ -836,12 +837,13 @@ def homepage():
                     <button onclick="window.alert('Compra simulada: {nome_produto}')" class="buy-button">COMPRAR</button>
                 </div>
             '''
+            html_cards_ofertas.append(card_html)
         
         # Renderiza o Carrossel
         st.markdown(f'''
             <div class="carousel-outer-container">
                 <div class="product-wrapper">
-                    {html_cards_ofertas}
+                    {"".join(html_cards_ofertas)}
                 </div>
             </div>
         ''', unsafe_allow_html=True)
@@ -850,30 +852,23 @@ def homepage():
 
     st.markdown("---")
     
-    def homepage():
-    # --- 1. Carrega dados e calcula métricas ---
-    produtos_df = inicializar_produtos()
-    df_movimentacoes = carregar_livro_caixa()
-    
-    # Produtos novos (últimos N cadastrados com estoque > 0)
-    produtos_novos = produtos_df[produtos_df['Quantidade'] > 0].sort_values(by='ID', ascending=False).head(10)
-
     # ==================================================
     # 5. SEÇÃO NOSSAS NOVIDADES (Carrossel)
     # ==================================================
     st.markdown(f'<img src="{URL_NOVIDADES}" class="section-header-img" alt="Nossas Novidades">', unsafe_allow_html=True)
-
+    
     if produtos_novos.empty:
         st.info("Não há produtos cadastrados no estoque para exibir como novidades.")
     else:
-        html_cards_novidades = ""
+        html_cards_novidades = []
         for i, row in produtos_novos.iterrows():
+            
             foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/400x400/FFC1E3/E91E63?text={row['Nome'].replace(' ', '+')}"
             preco_vista = to_float(row.get('PrecoVista', 0))
             descricao = f"R$ {preco_vista:,.2f}" if preco_vista > 0 else "Preço não disponível"
-
+            
             # Constrói o Card
-            html_cards_novidades += f'''
+            card_html = f'''
                 <div class="product-card">
                     <p style="font-weight: bold; color: #E91E63; margin-bottom: 10px; font-size: 0.9em;">✨ Doce&Bella - Novidade</p>
                     <img src="{foto_url}" alt="{row['Nome']}">
@@ -883,17 +878,16 @@ def homepage():
                     <button onclick="window.alert('Compra simulada: {row['Nome']}')" class="buy-button">COMPRAR</button>
                 </div>
             '''
-
-        # Renderiza o Carrossel Horizontal
+            html_cards_novidades.append(card_html)
+        
+        # Renderiza o Carrossel
         st.markdown(f'''
             <div class="carousel-outer-container">
                 <div class="product-wrapper">
-                    {html_cards_novidades}
+                    {"".join(html_cards_novidades)}
                 </div>
             </div>
         ''', unsafe_allow_html=True)
-
-
 
         
 # ==============================================================================
@@ -2839,5 +2833,3 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
-
-
