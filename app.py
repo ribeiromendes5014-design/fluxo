@@ -29,6 +29,11 @@ st.set_page_config(
 LOGO_DOCEBELLA_FILENAME = "logo_docebella.jpg"
 LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo-docebella.png"
 
+# Novas URLs das Imagens de Seção
+URL_MAIS_VENDIDOS = "https://i.ibb.co/4nnKb5n/mais-vendidos.png" # Link direto corrigido
+URL_OFERTAS = "https://i.ibb.co/Kx2QWXsz/nossas-ofertas.png"   # Link direto corrigido
+URL_NOVIDADES = "https://i.ibb.co/Df0cDSkb/nossas-novidades.png" # Link direto corrigido
+
 
 # Adiciona CSS para simular a navegação no topo e o tema pink/magenta
 st.markdown("""
@@ -691,7 +696,7 @@ def homepage():
     top_4_ids = df_mais_vendidos_id["Produto_ID"].head(4).tolist()
     produtos_mais_vendidos = produtos_df[produtos_df["ID"].isin(top_4_ids)].set_index("ID").loc[top_4_ids].reset_index()
     
-    # Produtos em Oferta: Preço no Cartão (PrecoCartao) < Preço à Vista (PrecoVista)
+    # Produtos em Oferta: Preço no Cartão (PrecoCartao) < PrecoVista (PrecoVista)
     # Garante que os valores sejam convertidos para float antes da comparação
     produtos_oferta = produtos_df.copy()
     produtos_oferta['PrecoVista_f'] = pd.to_numeric(produtos_oferta['PrecoVista'], errors='coerce').fillna(0)
@@ -706,16 +711,20 @@ def homepage():
     
     # --- 2. Conteúdo Estático (Título) ---
     st.markdown('<h1 class="homepage-title">Doce&Bella! 🌸</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="homepage-subtitle">Seu parceiro de gestão e beleza!</p>', unsafe_allow_html=True)
+    st.info("Esta é a página de apresentação da sua loja virtual, simulando o layout que você enviou. Use os botões no topo para acessar a Gestão Financeira.")
 
-    # A seção Loja Física foi removida conforme solicitado.
+    # A seção Loja Física foi removida.
     
     st.markdown("---")
 
 
     # ==================================================
-    # 3. SEÇÃO MAIS VENDIDOS (Top 4, baseado na imagem)
+    # 3. SEÇÃO MAIS VENDIDOS (Top 4, com imagem de cabeçalho)
     # ==================================================
-    st.markdown('<h2 style="color: #888; text-align: center; margin-bottom: 30px;">Mais Vendidos</h2>', unsafe_allow_html=True)
+    # Substitui o H2 pelo componente de imagem
+    st.image(URL_MAIS_VENDIDOS, use_column_width=True, caption="Mais Vendidos")
+    st.markdown('<div style="margin-bottom: 30px;"></div>', unsafe_allow_html=True)
     
     if produtos_mais_vendidos.empty:
         st.info("Não há dados de vendas suficientes (Entradas Realizadas) para determinar os produtos mais vendidos.")
@@ -759,11 +768,12 @@ def homepage():
     
     
     # ==================================================
-    # 4. SEÇÃO NOSSAS OFERTAS (Top 4 em promoção)
+    # 4. SEÇÃO NOSSAS OFERTAS (Top 4 em promoção, com imagem de cabeçalho)
     # ==================================================
     st.markdown('<div class="offer-section">', unsafe_allow_html=True)
-    st.markdown('<div class="megaphone-icon">📢</div>', unsafe_allow_html=True) # Ícone de megafone simulado
-    st.markdown('<h2 class="offer-title">Nossas Ofertas</h2>', unsafe_allow_html=True)
+    
+    # Substitui o H2 e o ícone pela imagem de cabeçalho
+    st.image(URL_OFERTAS, use_column_width=True, caption="Nossas Ofertas")
 
     if produtos_oferta.empty:
         st.info("Nenhum produto em promoção registrado no momento. Ajuste o Preço no Cartão (PrecoCartao) para ser menor que o Preço à Vista (PrecoVista) para criar uma oferta.")
@@ -806,9 +816,10 @@ def homepage():
     st.markdown("---")
     
     # ==================================================
-    # 5. SEÇÃO NOSSAS NOVIDADES (Últimos 3 produtos - Mantido)
+    # 5. SEÇÃO NOSSAS NOVIDADES (Últimos 3 produtos - com imagem de cabeçalho)
     # ==================================================
-    st.markdown('<h2 style="color: #E91E63; text-align: center;">Nossas Novidades</h2>', unsafe_allow_html=True)
+    # Substitui o H2 pela imagem de cabeçalho
+    st.image(URL_NOVIDADES, use_column_width=True, caption="Nossas Novidades")
     
     card1, card2, card3 = st.columns(3)
     cards = [card1, card2, card3]
@@ -2793,5 +2804,3 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
-
-
