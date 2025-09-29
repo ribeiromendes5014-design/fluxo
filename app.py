@@ -2322,20 +2322,45 @@ def livro_caixa():
                     "Data Pagamento": st.column_config.DateColumn("Data Pagt. Previsto/Real", format="DD/MM/YYYY")
                 },
                 height=400,
-                selection_mode='single-row', 
-                key='movimentacoes_table_styled'
+                selection_mode='disabled', # <-- ALTERADO: Desabilita seleção de linha
+                key='movimentacoes_table_styled_display_only' # <-- ALTERADO: Nova chave apenas para exibição
             )
 
 
-            # --- Lógica de Exibição de Detalhes da Linha Selecionada ---
-            selection_state = st.session_state.get('movimentacoes_table_styled')
+            # --- NOVO: Lógica de Edição e Exclusão com SelectBox e Botões (Conforme a imagem) ---
+            st.markdown("---")
+            st.markdown("### Operações de Edição e Exclusão")
+            
+            if df_para_mostrar.empty:
+                st.info("Nenhuma movimentação disponível para edição/exclusão com os filtros aplicados.")
+            else:
+                # 1. Cria o dicionário de mapeamento para o selectbox
+                opcoes_movimentacao_operacao = {
+                    f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Cliente']} | R$ {abs(row['Valor']):,.2f}": row['original_index']
+                    for index, row in df_para_mostrar.iterrows()
+                }
+                opcoes_keys = ["Selecione uma movimentação..."] + list(opcoes_movimentacao_operacao.keys())
 
-            if selection_state and selection_state.get('selection', {}).get('rows'):
-                selected_index = selection_state['selection']['rows'][0]
-                
-                if selected_index < len(df_para_mostrar):
-                    row = df_para_mostrar.iloc[selected_index]
+                # 2. Dropdown para seleção
+                movimentacao_selecionada_str = st.selectbox(
+                    "Selecione o item para Editar ou Excluir:",
+                    options=opcoes_keys,
+                    index=0, # Default to the placeholder
+                    key="select_movimentacao_operacao_lc"
+                )
 
+                original_idx_selecionado = opcoes_movimentacao_operacao.get(movimentacao_selecionada_str)
+                item_selecionado_str = movimentacao_selecionada_str
+
+                # O bloco de botões aparece se houver uma seleção válida (não o placeholder)
+                if original_idx_selecionado is not None and movimentacao_selecionada_str != "Selecione uma movimentação...":
+
+                    # Obtém a linha real do DataFrame de exibição (df_exibicao)
+                    # Usamos df_exibicao para obter o objeto `row` com todas as colunas processadas
+                    row = df_exibicao[df_exibicao['original_index'] == original_idx_selecionado].iloc[0]
+
+
+                    # --- Exibição de Detalhes da Linha Selecionada (reutilizando a lógica existente) ---
                     if row['Tipo'] == 'Entrada' and row['Produtos Vendidos'] and pd.notna(row['Produtos Vendidos']):
                         st.markdown("#### Detalhes dos Produtos Selecionados")
                         try:
@@ -2344,16 +2369,17 @@ def livro_caixa():
                                 produtos = json.loads(row['Produtos Vendidos'])
                             except json.JSONDecodeError:
                                 produtos = ast.literal_eval(row['Produtos Vendidos'])
-                            
+
                             df_detalhe = pd.DataFrame(produtos)
-                            
+
                             for col in ['Quantidade', 'Preço Unitário', 'Custo Unitário']:
                                 df_detalhe[col] = pd.to_numeric(df_detalhe[col], errors='coerce').fillna(0)
-                            
+
                             df_detalhe['Total Venda'] = df_detalhe['Quantidade'] * df_detalhe['Preço Unitário']
                             df_detalhe['Total Custo'] = df_detalhe['Quantidade'] * df_detalhe['Custo Unitário']
                             df_detalhe['Lucro Bruto'] = df_detalhe['Total Venda'] - df_detalhe['Total Custo']
 
+                            # Exibição do DataFrame de detalhes
                             st.dataframe(
                                 df_detalhe,
                                 hide_index=True,
@@ -2362,7 +2388,6 @@ def livro_caixa():
                                     "Produto": "Produto",
                                     "Quantidade": st.column_config.NumberColumn("Qtd"),
                                     "Preço Unitário": st.column_config.NumberColumn("Preço Un.", format="R$ %.2f"),
-                                    # FIX APPLIED HERE: Complete the dictionary and close the call
                                     "Custo Unitário": st.column_config.NumberColumn("Custo Un.", format="R$ %.2f"),
                                     "Total Venda": st.column_config.NumberColumn("Total Venda", format="R$ %.2f"),
                                     "Total Custo": st.column_config.NumberColumn("Total Custo", format="R$ %.2f"),
@@ -2374,13 +2399,21 @@ def livro_caixa():
                         except Exception as e:
                             st.error(f"Erro ao processar detalhes dos produtos: {e}")
 
-                    st.markdown("---")
-                    
-                    # --- Opções de Ação (Editar e Excluir) ---
+                        st.markdown("---")
+
+
+                    # --- Botões de Edição e Exclusão (Matching the image) ---
                     col_op_1, col_op_2 = st.columns(2)
-                    
+
+                    # Editar
+                    if col_op_1.button(f"✏️ Editar: {item_selecionado_str}", key=f"edit_mov_{original_idx_selecionado}", use_container_width=True, type="secondary"):
+                        # Define o original_index para carregar a edição na sidebar
+                        st.session_state.edit_id = original_idx_selecionado
+                        st.session_state.lista_produtos = [] # Limpa a lista de produtos temporária
+                        st.rerun()
+
                     # Excluir
-                    if col_op_1.button(f"🗑️ Excluir Movimentação ID {row['ID Visível']}", key=f"del_{row['ID Visível']}", use_container_width=True, type="primary"):
+                    if col_op_2.button(f"🗑️ Excluir: {item_selecionado_str}", key=f"del_mov_{original_idx_selecionado}", use_container_width=True, type="primary"):
                         if row['Status'] == 'Realizada' and row['Tipo'] == 'Entrada':
                             # Reverte o débito de estoque (credita)
                             try:
@@ -2398,17 +2431,8 @@ def livro_caixa():
                         if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
                             st.cache_data.clear()
                             st.rerun()
-
-                    # Editar
-                    if col_op_2.button(f"✏️ Editar Movimentação ID {row['ID Visível']}", key=f"edit_{row['ID Visível']}", use_container_width=True):
-                        # Define o original_index para carregar a edição na sidebar
-                        st.session_state.edit_id = row['original_index']
-                        st.session_state.lista_produtos = [] # Limpa a lista de produtos temporária
-                        st.rerun()
-                # FIM DO IF SELECTION STATE
-                
-            else:
-                st.info("Selecione uma linha na tabela acima para ver detalhes e opções de edição/exclusão.")
+                else:
+                    st.info("Selecione uma movimentação no menu acima para ver detalhes e opções de edição/exclusão.")
 
 
     with tab_rel:
