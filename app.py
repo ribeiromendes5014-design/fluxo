@@ -1168,7 +1168,8 @@ def historico_compras():
     # ==================================================
     
     # Define as abas: Cadastro + Dashboard/Lista/Filtro
-    tab_cadastro, tab_dashboard, tab_lista_filtro = st.tabs(["📝 Cadastro de Compras", "📈 Dashboard de Gastos", "📑 Lista & Filtro"])
+    # REMOÇÃO DE ABA "LISTA & FILTRO" - MOVENDO CONTEÚDO PARA CADASTRO
+    tab_cadastro, tab_dashboard = st.tabs(["📝 Cadastro & Lista de Compras", "📈 Dashboard de Gastos"])
     
     # ==================================================
     # 2. DASHBOARD DE GASTOS (Nova Aba)
@@ -1229,10 +1230,12 @@ def historico_compras():
                 st.plotly_chart(fig_mensal, use_container_width=True)
     
     # ==================================================
-    # 3. CADASTRO (Lógica original na Aba 1)
+    # 3. CADASTRO & LISTA DE COMPRAS (Aba Unificada)
     # ==================================================
     with tab_cadastro:
-        # Conteúdo original do Formulário de Cadastro (movido para a aba)
+        st.subheader("📝 Formulário de Registro")
+        
+        # --- Formulário de Cadastro ---
         with st.expander("➕ Registrar Nova Compra", expanded=True):
             with st.form("form_nova_compra", clear_on_submit=True):
                 
@@ -1279,58 +1282,53 @@ def historico_compras():
                         if salvar_historico_no_github(st.session_state.df_compras, COMMIT_MESSAGE_COMPRAS):
                             st.cache_data.clear()
                             st.rerun()
-
-    # ==================================================
-    # 4. LISTA & FILTRO (Lógica original na Aba 3)
-    # ==================================================
-    with tab_lista_filtro:
+        
+        st.markdown("---")
+        st.subheader("Lista e Operações de Histórico")
         
         # --- Filtros de Busca (Produto e Data) ---
-        st.subheader("🔍 Filtro de Histórico")
-        
-        col_f1, col_f2 = st.columns([1, 2])
-        
-        # 1. Filtro de Produto
-        with col_f1:
-            filtro_produto = st.text_input("Filtrar por nome do Produto:", key="filtro_compra_produto_tab")
-        
-        # 2. Filtro de Data
-        with col_f2:
-            data_range_option = st.radio(
-                "Filtrar por Período:",
-                ["Todo o Histórico", "Personalizar Data"],
-                key="filtro_compra_data_opt_tab",
-                horizontal=True
-            )
-
-        df_filtrado = df_exibicao.copy()
-
-        if filtro_produto:
-            df_filtrado = df_filtrado[df_filtrado["Produto"].astype(str).str.contains(filtro_produto, case=False, na=False)]
-
-        if data_range_option == "Personalizar Data":
-            if not df_filtrado.empty:
-                min_date_val = df_filtrado['Data'].min() if pd.notna(df_filtrado['Data'].min()) else date.today()
-                max_date_val = df_filtrado['Data'].max() if pd.notna(df_filtrado['Data'].max()) else date.today()
-            else:
-                min_date_val = date.today()
-                max_date_val = date.today()
-                
-            col_date1, col_date2 = st.columns(2)
-            with col_date1:
-                data_ini = st.date_input("De:", value=min_date_val, key="filtro_compra_data_ini_tab")
-            with col_date2:
-                data_fim = st.date_input("Até:", value=max_date_val, key="filtro_compra_data_fim_tab")
-                
-            # Requer conversão de volta para date para comparação, mas o DF já está com objetos date
-            df_filtrado = df_filtrado[
-                (df_filtrado["Data"] >= data_ini) &
-                (df_filtrado["Data"] <= data_fim)
-            ]
+        with st.expander("🔍 Filtros da Lista", expanded=True):
+            col_f1, col_f2 = st.columns([1, 2])
             
-        st.markdown("---")
+            # 1. Filtro de Produto
+            with col_f1:
+                filtro_produto = st.text_input("Filtrar por nome do Produto:", key="filtro_compra_produto_tab")
+            
+            # 2. Filtro de Data
+            with col_f2:
+                data_range_option = st.radio(
+                    "Filtrar por Período:",
+                    ["Todo o Histórico", "Personalizar Data"],
+                    key="filtro_compra_data_opt_tab",
+                    horizontal=True
+                )
+
+            df_filtrado = df_exibicao.copy()
+
+            if filtro_produto:
+                df_filtrado = df_filtrado[df_filtrado["Produto"].astype(str).str.contains(filtro_produto, case=False, na=False)]
+
+            if data_range_option == "Personalizar Data":
+                if not df_filtrado.empty:
+                    min_date_val = df_filtrado['Data'].min() if pd.notna(df_filtrado['Data'].min()) else date.today()
+                    max_date_val = df_filtrado['Data'].max() if pd.notna(df_filtrado['Data'].max()) else date.today()
+                else:
+                    min_date_val = date.today()
+                    max_date_val = date.today()
+                    
+                col_date1, col_date2 = st.columns(2)
+                with col_date1:
+                    data_ini = st.date_input("De:", value=min_date_val, key="filtro_compra_data_ini_tab")
+                with col_date2:
+                    data_fim = st.date_input("Até:", value=max_date_val, key="filtro_compra_data_fim_tab")
+                    
+                # Requer conversão de volta para date para comparação, mas o DF já está com objetos date
+                df_filtrado = df_filtrado[
+                    (df_filtrado["Data"] >= data_ini) &
+                    (df_filtrado["Data"] <= data_fim)
+                ]
+            
         # --- Tabela de Exibição e Remoção ---
-        st.subheader("Lista de Compras Registradas (Filtrada)")
         
         if df_filtrado.empty:
             st.info("Nenhuma compra encontrada com os filtros aplicados.")
@@ -1377,8 +1375,7 @@ def historico_compras():
             
             
             # --- Lógica de Exclusão (Reflete a filtragem) ---
-            st.markdown("---")
-            st.markdown("### 🗑️ Excluir Compra")
+            st.markdown("### 🗑️ Excluir Compra Selecionada")
             
             # Cria um dicionário de opções para o selectbox USANDO DADOS FILTRADOS (df_para_mostrar agora é usado)
             opcoes_compra = {
@@ -1389,7 +1386,7 @@ def historico_compras():
             
             if opcoes_keys:
                 compra_selecionada_str = st.selectbox(
-                    "Selecione a compra para exclusão (apenas itens filtrados):",
+                    "Selecione a compra para exclusão:",
                     options=opcoes_keys,
                     index=0,
                     key="select_compra_delete",
