@@ -871,7 +871,7 @@ def homepage():
             <div class="carousel-outer-container">
                 <div class="product-wrapper">
                     {''.join(html_cards_novidades)}
-                </div>
+               
             </div>
         """, unsafe_allow_html=True)
 
@@ -2823,6 +2823,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
 
 
 
