@@ -798,7 +798,7 @@ def gestao_produtos():
                         "PrecoCusto": to_float(var_preco_custo),
                         "PrecoVista": to_float(var_preco_vista),
                         "PrecoCartao": round(to_float(var_preco_vista) / FATOR_CARTAO, 2) if to_float(var_preco_vista) > 0 else 0.0,
-                        "CodigoBarras": var_codigo_barras.strip() 
+                        "CodigoBarras": var["CodigoBarras"]
                     })
                 
             # --- BOTÃO SALVAR PRODUTO (CHAMANDO CALLBACK) ---
@@ -1416,8 +1416,7 @@ def historico_compras():
             
             df_para_mostrar = df_filtrado.copy()
             
-            # CORREÇÃO: Trata NaN ou valores não string na coluna FotoURL antes de chamar .strip()
-            # Isso corrige o AttributeError
+            # CORREÇÃO DO AttributeError: Trata NaN ou valores não string na coluna FotoURL antes de chamar .strip()
             df_para_mostrar['Foto'] = df_para_mostrar['FotoURL'].fillna('').astype(str).apply(lambda x: '📷' if x.strip() else '')
 
 
@@ -1444,25 +1443,33 @@ def historico_compras():
                 },
                 column_order=('ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'Foto'),
                 height=400,
-                selection_mode='single-row', 
+                selection_mode='disabled', # DESATIVA A SELEÇÃO DA TABELA, JÁ QUE AGORA USAMOS O SELECTBOX
                 key='compras_table_styled'
             )
             
-            # --- Lógica de Seleção para Editar/Excluir ---
-            selection_state = st.session_state.get('compras_table_styled')
-            selected_row_index = None # Índice do DF filtrado
-            
-            # Garante que as operações só apareçam se houver uma linha selecionada.
-            if selection_state and selection_state.get('selection', {}).get('rows'):
-                selected_row_index = selection_state['selection']['rows'][0]
-                
             
             st.markdown("### Operações de Edição e Exclusão")
             
-            if selected_row_index is not None:
-                # Mapeia o índice da linha selecionada no DF filtrado para o 'original_index'
-                original_idx_selecionado = df_para_mostrar.iloc[selected_row_index]['original_index']
-                item_selecionado_str = f"ID {df_para_mostrar.iloc[selected_row_index]['ID']} | {df_para_mostrar.iloc[selected_row_index]['Produto']}"
+            # 1. Cria o dicionário de mapeamento para o selectbox
+            opcoes_compra_operacao = {
+                f"ID {row['ID']} | {row['Data Formatada']} | {row['Produto']} | R$ {row['Valor Total']:,.2f}": row['original_index'] 
+                for index, row in df_para_mostrar.iterrows()
+            }
+            opcoes_keys = list(opcoes_compra_operacao.keys())
+            
+            # 2. Dropdown para seleção
+            compra_selecionada_str = st.selectbox(
+                "Selecione o item para Editar ou Excluir:",
+                options=opcoes_keys,
+                index=0, # Default to the first item
+                key="select_compra_operacao"
+            )
+            
+            original_idx_selecionado = opcoes_compra_operacao.get(compra_selecionada_str)
+            item_selecionado_str = compra_selecionada_str
+            
+            # O bloco de botões agora aparece se houver uma seleção válida no dropdown
+            if original_idx_selecionado is not None:
                 
                 col_edit, col_delete = st.columns(2)
 
@@ -1481,8 +1488,7 @@ def historico_compras():
                         st.cache_data.clear()
                         st.rerun()
             else:
-                # Mensagem de instrução se nenhuma linha estiver selecionada
-                st.info("Selecione uma linha na tabela acima para editar ou excluir.")
+                st.info("Selecione um item no menu acima para editar ou excluir.")
 
 
 # ==============================================================================
