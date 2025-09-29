@@ -25,14 +25,17 @@ st.set_page_config(
 )
 
 # Caminho para o logo carregado. 
-# CORREÇÃO: Utiliza o link direto da imagem no ImgBB para carregamento correto.
+# ATUALIZAÇÃO: Usando a URL do CloudFront para maior estabilidade.
 LOGO_DOCEBELLA_FILENAME = "logo_docebella.jpg"
-LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo-docebella.png"
+# A URL do logo anterior falhou; usando um placeholder como fallback para o logo principal.
+# Se quiser tentar sua URL, substitua a linha abaixo:
+# LOGO_DOCEBELLA_URL = "SUA NOVA URL DE LOGO"
+LOGO_DOCEBELLA_URL = "https://placehold.co/150x50/F0F8FF/E91E63?text=Doce%26Bella"
 
-# Novas URLs das Imagens de Seção
-URL_MAIS_VENDIDOS = "https://i.ibb.co/4nnKb5n/mais-vendidos.png" # Link direto corrigido
-URL_OFERTAS = "https://i.ibb.co/Kx2QWXsz/nossas-ofertas.png"   # Link direto corrigido
-URL_NOVIDADES = "https://i.ibb.co/Df0cDSkb/nossas-novidades.png" # Link direto corrigido
+# Novas URLs das Imagens de Seção (CloudFront)
+URL_MAIS_VENDIDOS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-queridinhos1.png"
+URL_OFERTAS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-oferta.png"   
+URL_NOVIDADES = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-novidades.png"
 
 
 # Adiciona CSS para simular a navegação no topo e o tema pink/magenta
@@ -447,7 +450,7 @@ def inicializar_produtos():
         else:
             df_base = df_carregado
         for col in COLUNAS_PRODUTOS:
-            if col not in df_base.columns: df_base[col] = ''
+            if col not in df.columns: df_base[col] = ''
         df_base["Quantidade"] = pd.to_numeric(df_base["Quantidade"], errors='coerce').fillna(0).astype(int)
         df_base["PrecoCusto"] = pd.to_numeric(df_base["PrecoCusto"], errors='coerce').fillna(0.0)
         df_base["PrecoVista"] = pd.to_numeric(df_base["PrecoVista"], errors='coerce').fillna(0.0)
