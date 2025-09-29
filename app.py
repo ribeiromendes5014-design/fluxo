@@ -168,6 +168,14 @@ st.markdown("""
         margin-bottom: 10px;
         display: inline-block;
     }
+
+    /* --- NOVA CLASSE PARA CONTROLAR O TAMANHO DAS IMAGENS DE TÍTULO --- */
+    .section-header-img {
+        max-width: 400px; /* Limita a largura máxima */
+        height: auto;
+        display: block;
+        margin: 0 auto 10px; /* Centraliza a imagem */
+    }
     
     </style>
 """, unsafe_allow_html=True)
@@ -722,8 +730,8 @@ def homepage():
     # ==================================================
     # 3. SEÇÃO MAIS VENDIDOS (Top 4, com imagem de cabeçalho)
     # ==================================================
-    # Substitui o H2 pelo componente de imagem
-    st.image(URL_MAIS_VENDIDOS, use_column_width=True, caption="Mais Vendidos")
+    # Aplica a classe CSS para limitar o tamanho
+    st.markdown(f'<img src="{URL_MAIS_VENDIDOS}" class="section-header-img" alt="Mais Vendidos">', unsafe_allow_html=True)
     st.markdown('<div style="margin-bottom: 30px;"></div>', unsafe_allow_html=True)
     
     if produtos_mais_vendidos.empty:
@@ -772,8 +780,8 @@ def homepage():
     # ==================================================
     st.markdown('<div class="offer-section">', unsafe_allow_html=True)
     
-    # Substitui o H2 e o ícone pela imagem de cabeçalho
-    st.image(URL_OFERTAS, use_column_width=True, caption="Nossas Ofertas")
+    # Aplica a classe CSS para limitar o tamanho
+    st.markdown(f'<img src="{URL_OFERTAS}" class="section-header-img" alt="Nossas Ofertas">', unsafe_allow_html=True)
 
     if produtos_oferta.empty:
         st.info("Nenhum produto em promoção registrado no momento. Ajuste o Preço no Cartão (PrecoCartao) para ser menor que o Preço à Vista (PrecoVista) para criar uma oferta.")
@@ -818,8 +826,8 @@ def homepage():
     # ==================================================
     # 5. SEÇÃO NOSSAS NOVIDADES (Últimos 3 produtos - com imagem de cabeçalho)
     # ==================================================
-    # Substitui o H2 pela imagem de cabeçalho
-    st.image(URL_NOVIDADES, use_column_width=True, caption="Nossas Novidades")
+    # Aplica a classe CSS para limitar o tamanho
+    st.markdown(f'<img src="{URL_NOVIDADES}" class="section-header-img" alt="Nossas Novidades">', unsafe_allow_html=True)
     
     card1, card2, card3 = st.columns(3)
     cards = [card1, card2, card3]
