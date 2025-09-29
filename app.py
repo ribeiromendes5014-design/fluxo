@@ -1528,7 +1528,7 @@ def gestao_produtos():
                     preco_html = (
                         f'<div class="custom-price-block">'
                         f'<small>Custo: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>'
-                        f'VAlor: R$ {pv:,.2f}<br>'
+                        f'Valor: R$ {pv:,.2f}<br>'
                         f'Cartão: R$ {pc_calc:,.2f}'
                         f'</div>'
                     )
@@ -2933,5 +2933,6 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
 
 
