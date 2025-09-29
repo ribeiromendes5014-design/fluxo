@@ -25,12 +25,9 @@ st.set_page_config(
 )
 
 # Caminho para o logo carregado. 
-# ATUALIZAÇÃO: Usando a URL do CloudFront para maior estabilidade.
+# CORREÇÃO: Utiliza o link direto da imagem no ImgBB para carregamento correto.
 LOGO_DOCEBELLA_FILENAME = "logo_docebella.jpg"
-# A URL do logo anterior falhou; usando um placeholder como fallback para o logo principal.
-# Se quiser tentar sua URL, substitua a linha abaixo:
-# LOGO_DOCEBELLA_URL = "SUA NOVA URL DE LOGO"
-LOGO_DOCEBELLA_URL = "https://placehold.co/150x50/F0F8FF/E91E63?text=Doce%26Bella"
+LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo-docebella.png"
 
 # Novas URLs das Imagens de Seção (CloudFront)
 URL_MAIS_VENDIDOS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-queridinhos1.png"
@@ -2815,3 +2812,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
