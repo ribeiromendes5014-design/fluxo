@@ -1160,7 +1160,7 @@ def historico_compras():
         (df_exibicao["Valor Total"] > 0)
     ].copy()
 
-    # A métrica usa a coluna 'Valor Total' que já representa o custo total da compra.
+    # O cálculo está correto: soma todos os "Valor Total" das linhas do mês.
     total_gasto_mes = df_mes_atual['Valor Total'].sum() 
 
     st.markdown("---")
@@ -1262,7 +1262,8 @@ def historico_compras():
                 # CORREÇÃO: Para edição, o valor_total_input deve ser o VALOR UNITÁRIO (Valor Total / Quantidade),
                 # se estamos assumindo que o usuário vai inserir o valor unitário e o sistema calcula o total.
                 # Se o usuário edita a QUANTIDADE, o valor unitário fica estável.
-                valor_unitario_existente = compra_data['Valor Total'] / compra_data['Quantidade'] if compra_data['Quantidade'] > 0 else compra_data['Valor Total']
+                valor_total_compra = compra_data['Valor Total']
+                valor_unitario_existente = valor_total_compra / default_qtd if default_qtd > 0 else valor_total_compra
                 default_valor = float(valor_unitario_existente)
                 
                 default_cor = compra_data['Cor']
@@ -1296,7 +1297,7 @@ def historico_compras():
                 
             with col2:
                 quantidade = st.number_input("Quantidade", min_value=1, value=default_qtd, step=1, key="compra_qtd_form")
-                # CORREÇÃO: Alterado rótulo para refletir que este é o preço unitário para cálculo.
+                # Rótulo corrigido para Preço Unitário, para que a multiplicação faça sentido:
                 valor_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=default_valor, key="compra_valor_form")
                 
             with col3:
@@ -1307,7 +1308,7 @@ def historico_compras():
             
             # Novo valor total a ser salvo, calculado automaticamente:
             valor_total_calculado = float(quantidade) * float(valor_unitario_input)
-            st.markdown(f"**Custo Total (R$):** R$ {valor_total_calculado:,.2f}")
+            st.markdown(f"**Custo Total Calculado:** R$ {valor_total_calculado:,.2f}")
             
             
             if edit_mode_compra:
@@ -1322,7 +1323,8 @@ def historico_compras():
             # --- Lógica de Ação ---
             if salvar_compra:
                 if not nome_produto or valor_total_calculado <= 0 or quantidade <= 0:
-                    st.error("Preencha todos os campos obrigatórios com valores válidos.")
+                    # Usa o valor calculado para a validação (que é a multiplicação)
+                    st.error("Preencha todos os campos obrigatórios com valores válidos. O Custo Total deve ser maior que R$ 0,00.")
                 else:
                     nova_linha = {
                         "Data": data.strftime('%Y-%m-%d'),
@@ -1463,13 +1465,11 @@ def historico_compras():
                 col_edit, col_delete = st.columns(2)
 
                 # Botão de Edição
-                # CORREÇÃO: Removido o `disabled=edit_mode_compra` para que a edição possa ser iniciada.
                 if col_edit.button(f"✏️ Editar: {item_selecionado_str}", type="secondary", use_container_width=True):
                     st.session_state.edit_compra_idx = original_idx_selecionado
                     st.rerun()
 
                 # Botão de Exclusão
-                # CORREÇÃO: Removido o `disabled=edit_mode_compra` para que a exclusão possa ser executada.
                 if col_delete.button(f"🗑️ Excluir: {item_selecionado_str}", type="primary", use_container_width=True):
                     # Exclui a linha do DF original da sessão (usando o índice original mapeado)
                     st.session_state.df_compras = st.session_state.df_compras.drop(original_idx_selecionado, errors='ignore')
