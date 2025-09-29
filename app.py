@@ -27,7 +27,7 @@ st.set_page_config(
 # Caminho para o logo carregado. 
 # CORREÇÃO: Utiliza URL pública fornecida pelo usuário para maior estabilidade.
 LOGO_DOCEBELLA_FILENAME = "logo_docebella.jpg"
-LOGO_DOCEBELLA_URL = "https://i.imgur.com/7b4E4rJ.jpg"
+LOGO_DOCEBELLA_URL = "https://imgur.com/a/je4YIoi"
 
 
 # Adiciona CSS para simular a navegação no topo e o tema pink/magenta
@@ -2852,6 +2852,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
 
 
 
