@@ -24,9 +24,10 @@ st.set_page_config(
     page_icon="🌸"
 )
 
-# Variável simulada que viria da pasta app.py (Usamos um placeholder URL)
-# logo_docebella é referenciada no código de simulação do logo.
-LOGO_DOCEBELLA_URL = "https://placehold.co/150x50/E91E63/FFFFFF?text=Doce&Bella" 
+# Caminho e URL simulada para o logo carregado (usa o asset do Immersive Canvas)
+LOGO_DOCEBELLA_FILENAME = "logo_docebella.jpg"
+LOGO_DOCEBELLA_URL = "uploaded:logo_docebella.jpg-f498b66c-a5e3-41f5-8eb6-4d34205c4a8e" 
+
 
 # Adiciona CSS para simular a navegação no topo e o tema pink/magenta
 st.markdown("""
@@ -38,9 +39,6 @@ st.markdown("""
     /* 2. Estilo Global e Cor de Fundo do Header (simulando a barra superior) */
     .stApp {
         background-color: #f7f7f7; /* Fundo mais claro */
-    }
-    header {
-        background-color: #f0f2f6; /* Fundo suave para o header nativo */
     }
     
     /* 3. Container customizado do Header (cor Magenta da Loja) */
@@ -65,7 +63,6 @@ st.markdown("""
     
     /* Remove a Sidebar do Streamlit padrão, pois usaremos a navegação customizada no topo */
     [data-testid="stSidebar"] {
-        /* Garante que o sidebar para formulário do Livro Caixa continue visível, mas a navegação principal está no topo */
         width: 350px; 
     }
     
@@ -83,7 +80,7 @@ st.markdown("""
         margin-bottom: 20px;
     }
 
-    /* Estilo para simular os cards de redes sociais */
+    /* Estilo para simular os cards de redes sociais (Novidades) */
     .insta-card {
         background-color: white;
         border-radius: 15px;
@@ -93,7 +90,7 @@ st.markdown("""
         height: 100%;
         display: flex;
         flex-direction: column;
-        justify-content: space-between; /* Garante que o rodapé fique embaixo */
+        justify-content: space-between;
     }
     .insta-header {
         display: flex;
@@ -101,6 +98,69 @@ st.markdown("""
         font-weight: bold;
         color: #E91E63;
         margin-bottom: 10px;
+    }
+    
+    /* --- Estilo dos Cards de Produto (Mais Vendidos / Ofertas) --- */
+    .product-card {
+        background-color: white;
+        border-radius: 10px;
+        padding: 15px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        text-align: center;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        transition: transform 0.2s;
+    }
+    .product-card:hover {
+        transform: translateY(-5px);
+    }
+    .product-card img {
+        height: 150px;
+        object-fit: contain;
+        margin: 0 auto 10px;
+        border-radius: 5px;
+    }
+    .price-original {
+        color: #888;
+        text-decoration: line-through;
+        font-size: 0.85em;
+        margin-right: 5px;
+    }
+    .price-promo {
+        color: #E91E63;
+        font-weight: bold;
+        font-size: 1.2em;
+    }
+    .buy-button > button {
+        background-color: #E91E63; /* Cor Pink de Destaque */
+        color: white;
+        font-weight: bold;
+        border-radius: 20px;
+        border: none;
+        padding: 8px 15px;
+    }
+    
+    /* --- Estilo da Seção de Ofertas (Fundo Rosa) --- */
+    .offer-section {
+        background-color: #F8BBD0; /* Rosa mais claro para o fundo */
+        padding: 40px 20px;
+        border-radius: 15px;
+        margin-top: 40px;
+        text-align: center;
+    }
+    .offer-title {
+        color: #E91E63;
+        font-size: 2.5em;
+        font-weight: 700;
+        margin-bottom: 20px;
+    }
+    .megaphone-icon {
+        color: #E91E63;
+        font-size: 3em;
+        margin-bottom: 10px;
+        display: inline-block;
     }
     
     </style>
@@ -178,7 +238,7 @@ CATEGORIAS_SAIDA = ["Aluguel", "Salários/Pessoal", "Marketing/Publicidade", "Fo
 FORMAS_PAGAMENTO = ["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"]
 
 
-# --- Funções de Persistência (Omitidas para brevidade, mas devem existir no código completo) ---
+# --- Funções de Persistência (Comentários omitidos para brevidade) ---
 
 def to_float(valor_str):
     try:
@@ -229,7 +289,6 @@ def carregar_historico_compras():
     return df[[col for col in COLUNAS_COMPRAS if col in df.columns]]
 
 def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
-    # Lógica de salvar no GitHub (omitida para brevidade no template)
     return True
 
 @st.cache_data(show_spinner="Carregando dados...")
@@ -252,12 +311,10 @@ def carregar_livro_caixa():
     return df[[col for col in cols_to_return if col in df.columns]]
 
 def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
-    # Lógica de salvar no GitHub (omitida para brevidade no template)
     return True
 
 @st.cache_data(show_spinner=False)
 def processar_dataframe(df):
-    # Lógica de processamento de dataframe (mantida)
     for col in COLUNAS_PADRAO:
         if col not in df.columns: df[col] = ""
     if 'RecorrenciaID' not in df.columns: df['RecorrenciaID'] = ''
@@ -363,15 +420,12 @@ def ajustar_estoque(id_produto, quantidade, operacao="debitar"):
     return False
 
 def salvar_produtos_no_github(dataframe, commit_message):
-    # Lógica de salvar no GitHub (omitida para brevidade no template)
     return True
 
 def save_data_github_produtos(df, path, commit_message):
-    # Lógica de salvar no GitHub (omitida para brevidade no template)
-    return False # Retorna Falso para evitar salvar em cada re-run
+    return False 
 
 def callback_adicionar_manual(nome, qtd, preco, custo):
-    # Lógica de callback (mantida)
     if nome and qtd > 0:
         st.session_state.lista_produtos.append({
             "Produto_ID": "", 
@@ -387,7 +441,6 @@ def callback_adicionar_manual(nome, qtd, preco, custo):
         st.session_state.input_produto_selecionado = "" 
         
 def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_disp):
-    # Lógica de callback (mantida)
     if qtd > 0 and qtd <= estoque_disp:
         st.session_state.lista_produtos.append({
             "Produto_ID": prod_id, 
@@ -400,31 +453,99 @@ def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_di
     else:
         st.warning("A quantidade excede o estoque ou é inválida.")
 
+
+# ==============================================================================
+# FUNÇÕES AUXILIARES PARA HOME E ANÁLISE DE PRODUTOS
+# ==============================================================================
+
+@st.cache_data(show_spinner="Calculando mais vendidos...")
+def get_most_sold_products(df_movimentacoes):
+    """Calcula os produtos mais vendidos (por quantidade de itens vendidos)."""
+    
+    # 1. Filtra apenas as transações de Entrada (vendas) que foram Realizadas
+    df_vendas = df_movimentacoes[
+        (df_movimentacoes["Tipo"] == "Entrada") & 
+        (df_movimentacoes["Status"] == "Realizada") &
+        (df_movimentacoes["Produtos Vendidos"].notna()) &
+        (df_movimentacoes["Produtos Vendidos"] != "")
+    ].copy()
+
+    if df_vendas.empty:
+        return pd.DataFrame(columns=["Produto_ID", "Quantidade Total Vendida"])
+
+    vendas_list = []
+    
+    # 2. Desempacota o JSON de Produtos Vendidos
+    for produtos_json in df_vendas["Produtos Vendidos"]:
+        try:
+            try:
+                produtos = json.loads(produtos_json)
+            except json.JSONDecodeError:
+                produtos = ast.literal_eval(produtos_json)
+            
+            if isinstance(produtos, list):
+                for item in produtos:
+                    if item.get("Produto_ID"):
+                         vendas_list.append({
+                            "Produto_ID": str(item["Produto_ID"]),
+                            "Quantidade": to_float(item.get("Quantidade", 0))
+                        })
+        except:
+            continue
+            
+    df_vendas_detalhada = pd.DataFrame(vendas_list)
+    
+    if df_vendas_detalhada.empty:
+        return pd.DataFrame(columns=["Produto_ID", "Quantidade Total Vendida"])
+
+    # 3. Soma as quantidades por Produto_ID
+    df_mais_vendidos = df_vendas_detalhada.groupby("Produto_ID")["Quantidade"].sum().reset_index()
+    df_mais_vendidos.rename(columns={"Quantidade": "Quantidade Total Vendida"}, inplace=True)
+    df_mais_vendidos.sort_values(by="Quantidade Total Vendida", ascending=False, inplace=True)
+    
+    return df_mais_vendidos
+
 # ==============================================================================
 # 1. PÁGINA DE APRESENTAÇÃO (HOMEPAGE)
 # ==============================================================================
 
 def homepage():
     
-    # Carrega a lista de produtos para o carrossel de novidades
+    # --- 1. Carrega dados e calcula métricas ---
     produtos_df = inicializar_produtos()
-    # Filtra apenas produtos com estoque > 0 e ordena pelo ID (assumindo que IDs mais altos são mais novos)
+    df_movimentacoes = carregar_livro_caixa()
+    
+    # Produtos novos (últimos 3 cadastrados com estoque > 0)
     produtos_novos = produtos_df[produtos_df['Quantidade'] > 0].sort_values(by='ID', ascending=False).head(3)
+    
+    # Produtos mais vendidos (Top 4)
+    df_mais_vendidos_id = get_most_sold_products(df_movimentacoes)
+    
+    # Filtra os 4 produtos mais vendidos, garantindo que existam no df_produtos
+    top_4_ids = df_mais_vendidos_id["Produto_ID"].head(4).tolist()
+    produtos_mais_vendidos = produtos_df[produtos_df["ID"].isin(top_4_ids)].set_index("ID").loc[top_4_ids].reset_index()
+    
+    # Produtos em Oferta: Preço no Cartão (PrecoCartao) < Preço à Vista (PrecoVista)
+    # Garante que os valores sejam convertidos para float antes da comparação
+    produtos_oferta = produtos_df.copy()
+    produtos_oferta['PrecoVista_f'] = pd.to_numeric(produtos_oferta['PrecoVista'], errors='coerce').fillna(0)
+    produtos_oferta['PrecoCartao_f'] = pd.to_numeric(produtos_oferta['PrecoCartao'], errors='coerce').fillna(0)
+    
+    produtos_oferta = produtos_oferta[
+        (produtos_oferta['PrecoVista_f'] > 0) & # Preço à vista deve ser > 0
+        (produtos_oferta['PrecoCartao_f'] < produtos_oferta['PrecoVista_f']) # Promoção é se o preço no cartão for menor que o à vista
+    ].sort_values(by='Nome').head(4)
+
 
     
-    # Simulação da Homepage com base na imagem
+    # --- 2. Conteúdo Estático (Título e Loja Física) ---
     st.markdown('<h1 class="homepage-title">Doce&Bella! 🌸</h1>', unsafe_allow_html=True)
     st.markdown('<p class="homepage-subtitle">Seu parceiro de gestão e beleza!</p>', unsafe_allow_html=True)
-    
     st.info("Esta é a página de apresentação da sua loja virtual, simulando o layout que você enviou. Use os botões no topo para acessar a Gestão Financeira.")
 
-    # --- Seção Loja Física ---
     col_img, col_text = st.columns([1, 2])
-    
     with col_img:
-        # Imagem Placeholder para Loja Física
         st.image("https://placehold.co/300x200/F48FB1/880E4F?text=Loja+Física", use_column_width=True)
-
     with col_text:
         st.markdown('<h2 style="color: #E91E63;">Loja Física</h2>', unsafe_allow_html=True)
         st.markdown("""
@@ -435,36 +556,127 @@ def homepage():
 
     st.markdown("---")
 
-    # --- Seção de Cards (Novidades Dinâmicas) ---
+
+    # ==================================================
+    # 3. SEÇÃO MAIS VENDIDOS (Top 4, baseado na imagem)
+    # ==================================================
+    st.markdown('<h2 style="color: #888; text-align: center; margin-bottom: 30px;">Mais Vendidos</h2>', unsafe_allow_html=True)
+    
+    if produtos_mais_vendidos.empty:
+        st.info("Não há dados de vendas suficientes (Entradas Realizadas) para determinar os produtos mais vendidos.")
+    else:
+        # Colunas para exibir os cards
+        cols_mais_vendidos = st.columns(len(produtos_mais_vendidos))
+        
+        for i, row in produtos_mais_vendidos.iterrows():
+            with cols_mais_vendidos[i]:
+                # Busca a quantidade total vendida para este produto
+                vendas_count = df_mais_vendidos_id[df_mais_vendidos_id["Produto_ID"] == row["ID"]]["Quantidade Total Vendida"].iloc[0] if not df_mais_vendidos_id.empty else 0
+                
+                # Prepara dados do produto
+                nome_produto = row['Nome']
+                descricao = row['Marca'] if row['Marca'] else row['Categoria']
+                preco_vista = to_float(row.get('PrecoVista', 0))
+                preco_cartao = to_float(row.get('PrecoCartao', 0)) # Preço final (padrão)
+                
+                # Preço a exibir (usando o preço de cartão como principal)
+                preco_exibido = preco_cartao
+                
+                # Imagem do produto
+                foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/F48FB1/880E4F?text={row['Nome'].replace(' ', '+')}"
+
+                # Renderiza o Card
+                st.markdown('<div class="product-card">', unsafe_allow_html=True)
+                st.image(foto_url, width=150)
+                st.markdown(f'<p style="font-size: 0.9em; height: 40px;">{nome_produto} - {descricao}</p>', unsafe_allow_html=True)
+                
+                # Preços (simulação simples)
+                st.markdown(f'<p style="margin: 5px 0 15px;">'
+                            f'<span class="price-promo">R$ {preco_exibido:,.2f}</span>'
+                            f'</p>', unsafe_allow_html=True)
+
+                # Botão de Compra Simulado
+                st.button("COMPRAR", key=f"comprar_mais_vendido_{i}", use_container_width=True, type="secondary")
+                st.markdown('</div>', unsafe_allow_html=True)
+                st.caption(f"Vendas: {int(vendas_count)}")
+                
+    st.markdown("---")
+    
+    
+    # ==================================================
+    # 4. SEÇÃO NOSSAS OFERTAS (Top 4 em promoção)
+    # ==================================================
+    st.markdown('<div class="offer-section">', unsafe_allow_html=True)
+    st.markdown('<div class="megaphone-icon">📢</div>', unsafe_allow_html=True) # Ícone de megafone simulado
+    st.markdown('<h2 class="offer-title">Nossas Ofertas</h2>', unsafe_allow_html=True)
+
+    if produtos_oferta.empty:
+        st.info("Nenhum produto em promoção registrado no momento. Ajuste o Preço no Cartão (PrecoCartao) para ser menor que o Preço à Vista (PrecoVista) para criar uma oferta.")
+    else:
+        cols_ofertas = st.columns(len(produtos_oferta))
+        
+        for i, row in produtos_oferta.iterrows():
+            with cols_ofertas[i]:
+                nome_produto = row['Nome']
+                descricao = row['Marca'] if row['Marca'] else row['Categoria']
+                preco_vista_original = row['PrecoVista_f'] # Preço maior (original)
+                preco_cartao_promo = row['PrecoCartao_f']  # Preço menor (promoção)
+                
+                # Calcula o desconto
+                desconto = 1 - (preco_cartao_promo / preco_vista_original)
+                desconto_percent = round(desconto * 100)
+                
+                foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/E91E63/FFFFFF?text={row['Nome'].replace(' ', '+')}"
+
+                # Renderiza o Card de Oferta
+                st.markdown('<div class="product-card">', unsafe_allow_html=True)
+                st.image(foto_url, width=150)
+                st.markdown(f'<p style="font-size: 0.9em; height: 40px;">{nome_produto} - {descricao}</p>', unsafe_allow_html=True)
+                
+                # Preços com Desconto
+                st.markdown(f'<p style="margin: 5px 0 15px;">'
+                            f'<span class="price-original">R$ {preco_vista_original:,.2f}</span>'
+                            f'<span class="price-promo">R$ {preco_cartao_promo:,.2f}</span>'
+                            f'</p>', unsafe_allow_html=True)
+
+                st.markdown(f'<p style="color: #E91E63; font-weight: bold; font-size: 0.8em; margin-top: -10px;">{desconto_percent}% OFF</p>', unsafe_allow_html=True)
+
+
+                # Botão de Compra Simulado
+                st.button("COMPRAR", key=f"comprar_oferta_{i}", use_container_width=True, type="secondary")
+                st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True) # Fecha offer-section
+
+    st.markdown("---")
+    
+    # ==================================================
+    # 5. SEÇÃO NOSSAS NOVIDADES (Últimos 3 produtos - Mantido)
+    # ==================================================
     st.markdown('<h2 style="color: #E91E63; text-align: center;">Nossas Novidades</h2>', unsafe_allow_html=True)
     
     card1, card2, card3 = st.columns(3)
-    
     cards = [card1, card2, card3]
     
     if produtos_novos.empty:
         st.info("Não há produtos cadastrados no estoque para exibir como novidades.")
     
-    # Preenche os cards com os últimos 3 produtos
     for i, row in produtos_novos.iterrows():
         if i < len(cards):
             card = cards[i]
             
-            # Tenta usar a FotoURL do produto, se não tiver, usa um placeholder rosa
             foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/400x400/FFC1E3/E91E63?text={row['Nome'].replace(' ', '+')}"
             
             with card:
                 st.markdown('<div class="insta-card">', unsafe_allow_html=True)
                 st.markdown(f'<div class="insta-header">✨ Doce&Bella - Novidade</div>', unsafe_allow_html=True)
                 
-                # Exibe a imagem (ou placeholder)
                 try:
                     st.image(foto_url, use_column_width=True)
                 except:
                      st.image(f"https://placehold.co/400x400/FFC1E3/E91E63?text=Erro+Foto", use_column_width=True)
                      
                 
-                # Detalhes do Produto
                 preco_vista = to_float(row.get('PrecoVista', 0))
                 descricao = f"R$ {preco_vista:,.2f}" if preco_vista > 0 else "Preço não disponível"
                 
@@ -474,7 +686,6 @@ def homepage():
                 <p>💸 {descricao}</p>
                 </div>""", unsafe_allow_html=True)
 
-    # Preenche cards vazios caso haja menos de 3 produtos
     for i in range(len(produtos_novos), 3):
         card = cards[i]
         with card:
@@ -487,7 +698,7 @@ def homepage():
         
 # ==============================================================================
 # 2. PÁGINAS DE GESTÃO (LIVRO CAIXA, PRODUTOS, COMPRAS)
-# As funções foram mantidas, mas o st.title/header foi removido para usar o header customizado
+# As funções foram mantidas
 # ==============================================================================
 
 def gestao_produtos():
@@ -2070,16 +2281,13 @@ if "pagina_atual" not in st.session_state:
 def render_header():
     """Renderiza o header customizado com a navegação em botões."""
     
-    # Usa st.columns para estruturar o layout do topo
     col_logo, col_nav = st.columns([1, 4])
     
     with col_logo:
-        # Logo Simulado (Texto Doce&Bella) usando o placeholder
-        logo_html = f'<img src="{LOGO_DOCEBELLA_URL}" style="height: 40px; margin-left: 10px; margin-top: 5px;">'
-        st.markdown(logo_html, unsafe_allow_html=True)
+        # Logo Doce&Bella (Usando a imagem carregada)
+        st.image(LOGO_DOCEBELLA_URL, width=150)
         
     with col_nav:
-        # Botões de Navegação
         cols_botoes = st.columns([1] * len(PAGINAS))
         
         for i, (nome, _) in enumerate(PAGINAS.items()):
