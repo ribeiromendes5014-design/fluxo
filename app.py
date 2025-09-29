@@ -114,11 +114,12 @@ URL_PRODUTOS = URL_BASE_REPOS + ARQ_PRODUTOS
 ARQ_LOCAL = "livro_caixa.csv"
 PATH_DIVIDAS = CSV_PATH # Caminho do livro caixa
 
-# >>> INÍCIO ADIÇÃO: CONSTANTES DO HISTÓRICO DE COMPRAS <<<
+# >>> INÍCIO ADIÇÃO: CONSTANTES DO HISTÓRICO DE COMPRAS <<<<
 ARQ_COMPRAS = "historico_compras.csv" # Novo arquivo para o histórico
 COMMIT_MESSAGE_COMPRAS = "Atualiza histórico de compras via Streamlit"
-COLUNAS_COMPRAS = ["Data", "Produto", "Quantidade", "Valor Total", "Cor"] # Colunas padrão para o histórico
-# >>> FIM ADIÇÃO: CONSTANTES DO HISTÓRICO DE COMPRAS <<<
+# ADIÇÃO: Nova coluna "FotoURL" para o histórico de compras
+COLUNAS_COMPRAS = ["Data", "Produto", "Quantidade", "Valor Total", "Cor", "FotoURL"] 
+# >>> FIM ADIÇÃO: CONSTANTES DO HISTÓRICO DE COMPRAS <<<<
 
 
 # Mensagens de Commit (do ff.py)
@@ -214,7 +215,8 @@ def carregar_historico_compras():
         if col not in df.columns:
             df[col] = "" 
             
-    return df[COLUNAS_COMPRAS] # Retorna apenas as colunas necessárias
+    # Assegura que o DataFrame retornado tem as colunas corretas (e na ordem)
+    return df[COLUNAS_COMPRAS] 
 
 def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
     """Salva o DataFrame CSV de Histórico de Compras no GitHub e localmente."""
@@ -412,7 +414,12 @@ def format_produtos_resumo(produtos_json):
     
     if produtos_json:
         try:
-            produtos = json.loads(produtos_json)
+            # Usa ast.literal_eval como fallback, pois o json.loads pode falhar se a string não for estritamente JSON
+            try:
+                produtos = json.loads(produtos_json)
+            except json.JSONDecodeError:
+                produtos = ast.literal_eval(produtos_json)
+
             if not isinstance(produtos, list) or not all(isinstance(p, dict) for p in produtos):
                 return "Dados inválidos"
 
@@ -793,7 +800,7 @@ def gestao_produtos():
                         "PrecoCartao": round(to_float(var_preco_vista) / FATOR_CARTAO, 2) if to_float(var_preco_vista) > 0 else 0.0,
                         "CodigoBarras": var_codigo_barras.strip() 
                     })
-            
+                
             # --- BOTÃO SALVAR PRODUTO (CHAMANDO CALLBACK) ---
             if st.button(
                 "💾 Salvar", # Rótulo curto
@@ -830,7 +837,12 @@ def gestao_produtos():
                 elif criterio == "Valor":
                     try:
                         valor = float(termo.replace(",", "."))
-                        produtos_filtrados = produtos[produtos["PrecoVista"].astype(float) == valor]
+                        # Busca por valor de custo, vista ou cartão
+                        produtos_filtrados = produtos[
+                            (produtos["PrecoVista"].astype(float) == valor) |
+                            (produtos["PrecoCusto"].astype(float) == valor) |
+                            (produtos["PrecoCartao"].astype(float) == valor)
+                        ]
                     except:
                         st.warning("Digite um número válido para buscar por valor.")
                         produtos_filtrados = produtos.copy()
@@ -846,15 +858,18 @@ def gestao_produtos():
         if produtos_filtrados.empty:
             st.info("Nenhum produto encontrado.")
         else:
+            # Garante que as colunas sejam tratadas corretamente (float/int) antes de filtrar
+            produtos_filtrados["Quantidade"] = pd.to_numeric(produtos_filtrados["Quantidade"], errors='coerce').fillna(0).astype(int)
             produtos_pai = produtos_filtrados[produtos_filtrados["PaiID"].isnull()]
             produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull()]
             
             # --- CSS Customizado para o Layout da Lista ---
+            # O CSS já está configurado para o layout de grade e botões minimalistas.
             st.markdown("""
                 <style>
                 .custom-header, .custom-row {
                     display: grid;
-                    /* Layout: Img | Produto/Marca | Estoque | Validade | Preços | Ações */
+                    /* Layout: Img | Produto/Marca | Estoque | Validade | Preços | Ações (2 cols) */
                     grid-template-columns: 80px 3fr 1fr 1fr 1.5fr 0.5fr 0.5fr;
                     align-items: center;
                     gap: 5px;
@@ -885,11 +900,11 @@ def gestao_produtos():
                 }
                 </style>
                 <div class="custom-header">
-                    <div></div>
+                    <div>Foto</div>
                     <div>Produto & Marca</div>
                     <div>Estoque</div>
                     <div>Validade</div>
-                    <div>Preços (Custo/Vista/Cartão)</div>
+                    <div>Preços (C/V/C)</div>
                     <div style="grid-column: span 2;">Ações</div>
                 </div>
             """, unsafe_allow_html=True)
@@ -927,7 +942,6 @@ def gestao_produtos():
                     
                     # --- 5. Detalhes de Preço (Custo/Vista/Cartão) ---
                     pv = to_float(pai['PrecoVista'])
-                    pc = to_float(pai['PrecoCartao'])
                     pc_calc = round(pv / FATOR_CARTAO, 2)
                     
                     # Formatando o bloco de preços de forma mais limpa
@@ -942,9 +956,9 @@ def gestao_produtos():
                     
                     # --- 6 & 7. Ações Minimalistas (Editar & Excluir) ---
                     try:
-                        eid = int(pai["ID"])
+                        eid = str(pai["ID"])
                     except Exception:
-                        eid = index
+                        eid = str(index) # Fallback
 
                     if c[5].button("✏️", key=f"edit_pai_{index}_{eid}", help="Editar produto"):
                         st.session_state["edit_prod"] = eid
@@ -952,8 +966,8 @@ def gestao_produtos():
 
                     if c[6].button("🗑️", key=f"del_pai_{index}_{eid}", help="Excluir produto"):
                         # Lógica de exclusão direta 
-                        produtos = produtos[produtos["ID"] != str(eid)]
-                        produtos = produtos[produtos["PaiID"] != str(eid)]
+                        produtos = produtos[produtos["ID"] != eid]
+                        produtos = produtos[produtos["PaiID"] != eid]
                         st.session_state["produtos"] = produtos
                         
                         nome_pai = str(pai.get('Nome', 'Produto Desconhecido'))
@@ -961,17 +975,17 @@ def gestao_produtos():
                             inicializar_produtos.clear() 
                         st.rerun()
                         
-
                     if not filhos_do_pai.empty:
                         # --- Variações ---
                         with st.expander(f"Variações de {pai['Nome']} ({len(filhos_do_pai)} variações)"):
                             for index_var, var in filhos_do_pai.iterrows():
                                 c_var = st.columns([1, 3, 1, 1, 1.5, 0.5, 0.5]) 
                                 
-                                # 1. Imagem (Variação)
-                                if str(var["FotoURL"]).strip():
+                                # 1. Imagem (Variação) - usa FotoURL do pai se a variação não tiver
+                                foto_url_var = str(var["FotoURL"]).strip() or str(pai["FotoURL"]).strip()
+                                if foto_url_var:
                                     try:
-                                        c_var[0].image(var["FotoURL"], width=60)
+                                        c_var[0].image(foto_url_var, width=60)
                                     except Exception:
                                         c_var[0].write("—")
                                 else:
@@ -989,7 +1003,6 @@ def gestao_produtos():
 
                                 # 5. Detalhes de Preço (Variação)
                                 pv_var = to_float(var['PrecoVista'])
-                                pc_var = to_float(var['PrecoCartao'])
                                 pc_var_calc = round(pv_var / FATOR_CARTAO, 2)
                                 
                                 preco_var_html = (
@@ -1002,17 +1015,17 @@ def gestao_produtos():
                                 c_var[4].markdown(preco_var_html, unsafe_allow_html=True)
                                 
                                 try:
-                                    eid_var = int(var["ID"])
+                                    eid_var = str(var["ID"])
                                 except Exception:
-                                    eid_var = index_var
-                                
+                                    eid_var = str(index_var)
+
                                 # 6 & 7. Ações Minimalistas (Variação)
                                 if c_var[5].button("✏️", key=f"edit_filho_{index_var}_{eid_var}", help="Editar variação"):
                                     st.session_state["edit_prod"] = eid_var
                                     st.rerun()
 
                                 if c_var[6].button("🗑️", key=f"del_filho_{index_var}_{eid_var}", help="Excluir variação"):
-                                    products = produtos[produtos["ID"] != str(eid_var)]
+                                    products = produtos[produtos["ID"] != eid_var]
                                     st.session_state["produtos"] = products
                                     
                                     nome_var = str(var.get('Nome', 'Variação Desconhecida'))
@@ -1020,13 +1033,14 @@ def gestao_produtos():
                                         inicializar_produtos.clear() 
                                     st.rerun()
 
-            # Editor inline (para pais e filhos)
+            # Editor inline (para pais e filhos) - Mantido para permitir a edição
             if "edit_prod" in st.session_state:
                 eid = st.session_state["edit_prod"]
                 row = produtos[produtos["ID"] == str(eid)]
                 if not row.empty:
-                    st.subheader("Editar produto")
+                    st.subheader(f"Editar produto ID: {eid} ({row.iloc[0]['Nome']})")
                     row = row.iloc[0]
+                    
                     # Layout dos inputs de edição (3 colunas, 3 itens por coluna)
                     c1, c2, c3 = st.columns(3)
                     with c1:
@@ -1034,9 +1048,12 @@ def gestao_produtos():
                         nova_marca = st.text_input("Marca", value=row["Marca"], key=f"edit_marca_{eid}")
                         nova_cat = st.text_input("Categoria", value=row["Categoria"], key=f"edit_cat_{eid}")
                     with c2:
-                        nova_qtd = st.number_input("Quantidade", min_value=0, step=1, value=int(row["Quantidade"]), key=f"edit_qtd_{eid}")
-                        novo_preco_custo = st.text_input("Preço de Custo", value=str(row["PrecoCusto"]).replace(".", ","), key=f"edit_pc_{eid}")
-                        novo_preco_vista = st.text_input("Preço à Vista", value=str(row["PrecoVista"]).replace(".", ","), key=f"edit_pv_{eid}")
+                        # Garante que a quantidade seja um int para o number_input
+                        qtd_value = int(row["Quantidade"]) if pd.notna(row["Quantidade"]) else 0
+                        nova_qtd = st.number_input("Quantidade", min_value=0, step=1, value=qtd_value, key=f"edit_qtd_{eid}")
+                        # Formata o float para string com vírgula para o input
+                        novo_preco_custo = st.text_input("Preço de Custo", value=f"{to_float(row["PrecoCusto"]):.2f}".replace(".", ","), key=f"edit_pc_{eid}")
+                        novo_preco_vista = st.text_input("Preço à Vista", value=f"{to_float(row["PrecoVista"]):.2f}".replace(".", ","), key=f"edit_pv_{eid}")
                     with c3:
                         try:
                             vdata = datetime.strptime(str(row["Validade"] or date.today()), "%Y-%m-%d").date()
@@ -1054,16 +1071,16 @@ def gestao_produtos():
                                 novo_cb = codigo_lido[0]
                                 st.success(f"Código lido: **{novo_cb}**")
 
-                    # ALINHAMENTO DOS BOTÕES DE AÇÃO: Usar colunas vazias para empurrar os botões para a direita
-                    # CORREÇÃO: Colunas menores para os botões para forçar o texto a caber
+                    # ALINHAMENTO DOS BOTÕES DE AÇÃO:
                     col_empty_left, col_save, col_cancel = st.columns([3, 1.5, 1.5]) 
                     
                     with col_save:
                         # Botão "Salvar" 
                         if st.button("💾 Salvar", key=f"save_{eid}", type="primary", use_container_width=True, help="Salvar Alterações"):
                             
-                            novo_preco_cartao = round(to_float(novo_preco_vista) / FATOR_CARTAO, 2) if to_float(novo_preco_vista) > 0 else 0.0
-
+                            preco_vista_float = to_float(novo_preco_vista)
+                            novo_preco_cartao = round(preco_vista_float / FATOR_CARTAO, 2) if preco_vista_float > 0 else 0.0
+                            
                             produtos.loc[produtos["ID"] == str(eid), [
                                 "Nome", "Marca", "Categoria", "Quantidade",
                                 "PrecoCusto", "PrecoVista", "PrecoCartao",
@@ -1074,14 +1091,14 @@ def gestao_produtos():
                                 nova_cat.strip(),
                                 int(nova_qtd),
                                 to_float(novo_preco_custo),
-                                to_float(novo_preco_vista),
+                                preco_vista_float,
                                 novo_preco_cartao,
                                 str(nova_validade),
                                 nova_foto.strip(),
                                 str(novo_cb).strip()
                             ]
                             st.session_state["produtos"] = produtos
-                            # CORREÇÃO: Chama salvar_produtos_no_github diretamente (com 2 args)
+                            # CORREÇÃO: Chama salvar_produtos_no_github
                             if salvar_produtos_no_github(produtos, "Atualizando produto"):
                                 inicializar_produtos.clear() # Limpa o cache após edição
                                 
@@ -1100,8 +1117,8 @@ def gestao_produtos():
 # ==============================================================================
 
 def historico_compras():
-    st.title("🛒 Histórico de Compras do Mês")
-    st.info("Utilize esta página para registrar produtos (insumos, materiais, estoque) comprados durante o mês. Estes dados são **separados** da Gestão de Produtos e do Livro Caixa.")
+    st.title("🛒 Histórico de Compras de Insumos")
+    st.info("Utilize esta página para registrar produtos (insumos, materiais, estoque) comprados. Estes dados são **separados** do controle de estoque principal e do Livro Caixa.")
 
     # --- Inicialização e Carregamento ---
     if "df_compras" not in st.session_state:
@@ -1126,7 +1143,7 @@ def historico_compras():
     with st.expander("➕ Registrar Nova Compra", expanded=True):
         with st.form("form_nova_compra", clear_on_submit=True):
             
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 data = st.date_input("Data da Compra", value=date.today(), key="compra_data")
@@ -1138,6 +1155,10 @@ def historico_compras():
                 
             with col3:
                 cor_selecionada = st.color_picker("Cor para Destaque", value="#007bff", key="compra_cor")
+            
+            # ADIÇÃO: URL da Foto
+            with col4:
+                foto_url = st.text_input("URL da Foto do Produto (Opcional)", key="compra_foto_url")
                 
             
             salvar_compra = st.form_submit_button("💾 Adicionar Compra", type="primary", use_container_width=True)
@@ -1154,6 +1175,7 @@ def historico_compras():
                         "Quantidade": int(quantidade),
                         "Valor Total": float(valor_total_input),
                         "Cor": cor_selecionada,
+                        "FotoURL": foto_url.strip(), # ADIÇÃO: FotoURL
                     }
                     
                     # Concatena com o DF original da sessão
@@ -1166,12 +1188,56 @@ def historico_compras():
                         st.rerun()
 
 
-    # --- Tabela de Exibição e Remoção ---
+    # --- Filtros de Busca (Produto e Data) ---
     st.markdown("---")
-    st.subheader("Lista de Compras Registradas")
+    st.subheader("🔍 Filtro de Histórico")
     
-    if df_exibicao.empty:
-        st.info("Nenhuma compra registrada ainda.")
+    col_f1, col_f2 = st.columns([1, 2])
+    
+    # 1. Filtro de Produto
+    with col_f1:
+        filtro_produto = st.text_input("Filtrar por nome do Produto:", key="filtro_compra_produto")
+    
+    # 2. Filtro de Data
+    with col_f2:
+        data_range_option = st.radio(
+            "Filtrar por Período:",
+            ["Todo o Histórico", "Personalizar Data"],
+            key="filtro_compra_data_opt",
+            horizontal=True
+        )
+
+    df_filtrado = df_exibicao.copy()
+
+    if filtro_produto:
+        df_filtrado = df_filtrado[df_filtrado["Produto"].astype(str).str.contains(filtro_produto, case=False, na=False)]
+
+    if data_range_option == "Personalizar Data":
+        if not df_filtrado.empty:
+            min_date_val = df_filtrado['Data'].min() if pd.notna(df_filtrado['Data'].min()) else date.today()
+            max_date_val = df_filtrado['Data'].max() if pd.notna(df_filtrado['Data'].max()) else date.today()
+        else:
+            min_date_val = date.today()
+            max_date_val = date.today()
+            
+        col_date1, col_date2 = st.columns(2)
+        with col_date1:
+            data_ini = st.date_input("De:", value=min_date_val, key="filtro_compra_data_ini")
+        with col_date2:
+            data_fim = st.date_input("Até:", value=max_date_val, key="filtro_compra_data_fim")
+            
+        # Requer conversão de volta para date para comparação, mas o DF já está com objetos date
+        df_filtrado = df_filtrado[
+            (df_filtrado["Data"] >= data_ini) &
+            (df_filtrado["Data"] <= data_fim)
+        ]
+        
+    st.markdown("---")
+    # --- Tabela de Exibição e Remoção ---
+    st.subheader("Lista de Compras Registradas (Filtrada)")
+    
+    if df_filtrado.empty:
+        st.info("Nenhuma compra encontrada com os filtros aplicados.")
     else:
         # Estilização condicional (usando CSS para cor de fundo)
         def highlight_color_compras(row):
@@ -1182,13 +1248,17 @@ def historico_compras():
             return [f'background-color: {color}30' for col in row.index]
         
         # Prepara o DF para exibição
-        df_para_mostrar = df_exibicao.copy()
+        df_para_mostrar = df_filtrado.copy()
         
         # Cria uma coluna de data formatada para a UI (mas mantém a data original para a função de destaque)
         df_para_mostrar['Data Formatada'] = df_para_mostrar['Data'].apply(lambda x: x.strftime('%d/%m/%Y') if pd.notna(x) else '')
         
         # Estiliza e exibe
-        styled_df = df_para_mostrar[['ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'Cor', 'original_index']].style.apply(highlight_color_compras, axis=1)
+        # ADIÇÃO: Inclui FotoURL
+        df_display_cols = ['ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'FotoURL', 'Cor', 'original_index']
+        df_styling = df_para_mostrar[df_display_cols].copy()
+        
+        styled_df = df_styling.style.apply(highlight_color_compras, axis=1)
         # Oculta a coluna de cor e o índice original
         styled_df = styled_df.hide(subset=['Cor', 'original_index'], axis=1)
 
@@ -1202,28 +1272,29 @@ def historico_compras():
                     "Valor Total (R$)",
                     format="R$ %.2f",
                 ),
+                "FotoURL": st.column_config.TextColumn("URL da Foto", help="Link direto para a imagem do produto"),
             },
-            column_order=('ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total'),
+            column_order=('ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'FotoURL'), # Inclui FotoURL
             height=400,
             selection_mode='single-row', 
             key='compras_table_styled'
         )
         
         
-        # --- Lógica de Exclusão ---
+        # --- Lógica de Exclusão (Reflete a filtragem) ---
         st.markdown("---")
         st.markdown("### 🗑️ Excluir Compra")
         
-        # Cria um dicionário de opções para o selectbox
+        # Cria um dicionário de opções para o selectbox USANDO DADOS FILTRADOS
         opcoes_compra = {
             f"ID {row['ID']} | {row['Data Formatada']} | {row['Produto']} | R$ {row['Valor Total']:,.2f}": row['original_index'] 
-            for index, row in df_exibicao.iterrows()
+            for index, row in df_filtrado.iterrows()
         }
         opcoes_keys = list(opcoes_compra.keys())
         
         if opcoes_keys:
             compra_selecionada_str = st.selectbox(
-                "Selecione a compra para exclusão:",
+                "Selecione a compra para exclusão (apenas itens filtrados):",
                 options=opcoes_keys,
                 index=0,
                 key="select_compra_delete",
@@ -1232,7 +1303,7 @@ def historico_compras():
             original_idx_selecionado = opcoes_compra.get(compra_selecionada_str)
             
             if st.button(f"🗑️ Excluir permanentemente: {compra_selecionada_str}", type="primary", use_container_width=True):
-                # Exclui a linha do DF original da sessão
+                # Exclui a linha do DF original da sessão (usando o índice original mapeado)
                 st.session_state.df_compras = st.session_state.df_compras.drop(original_idx_selecionado, errors='ignore')
                 
                 if salvar_historico_no_github(st.session_state.df_compras, "Exclusão de item do histórico de compras"):
@@ -1295,7 +1366,7 @@ def livro_caixa():
 
     # **GARANTIA DE ESTADO:** Garante que 'produtos' esteja no session_state para chamadas futuras.
     if "produtos" not in st.session_state:
-          st.session_state.produtos = produtos
+            st.session_state.produtos = produtos
 
     if "lista_produtos" not in st.session_state:
         st.session_state.lista_produtos = []
@@ -1388,7 +1459,12 @@ def livro_caixa():
             # Carrega os produtos na lista de sessão (se for entrada)
             if default_tipo == "Entrada" and default_produtos_json:
                 try:
-                    produtos_list = json.loads(default_produtos_json)
+                    # Tenta usar json.loads, mas usa ast.literal_eval como fallback
+                    try:
+                        produtos_list = json.loads(default_produtos_json)
+                    except json.JSONDecodeError:
+                        produtos_list = ast.literal_eval(default_produtos_json)
+
                     for p in produtos_list:
                         p['Quantidade'] = float(p.get('Quantidade', 0))
                         p['Preço Unitário'] = float(p.get('Preço Unitário', 0))
@@ -1505,7 +1581,7 @@ def livro_caixa():
                             args=(nome_produto_manual, quantidade_manual, preco_unitario_manual, custo_unitario_manual),
                             help="Adicionar Item Manual à Lista de Venda" # Rótulo completo
                         ):
-                             st.rerun() 
+                            st.rerun() 
                         # --- FIM ENTRADA MANUAL ---
 
                     
@@ -1572,9 +1648,9 @@ def livro_caixa():
             
             st.markdown("#### ⚙️ Centro de Custo (Saída)")
             categoria_selecionada = st.selectbox("Categoria de Gasto", 
-                                                 CATEGORIAS_SAIDA, 
-                                                 index=default_select_index,
-                                                 key="input_categoria_saida")
+                                                    CATEGORIAS_SAIDA, 
+                                                    index=default_select_index,
+                                                    key="input_categoria_saida")
                 
             if categoria_selecionada == "Outro/Diversos":
                 descricao_personalizada = st.text_input("Especifique o Gasto", 
@@ -1608,14 +1684,14 @@ def livro_caixa():
             # Tenta usar o valor anterior da sessão se houver
             default_data_status_index = 0
             if data_status_key in st.session_state:
-                 # Se estiver em modo edição, usa o default_data_status_previsto (do load_data)
+                   # Se estiver em modo edição, usa o default_data_status_previsto (do load_data)
                 if edit_mode:
                     default_data_status_index = data_status_opcoes.index(default_data_status_previsto) if default_data_status_previsto in data_status_opcoes else 0
                 # Caso contrário, usa o último estado salvo (para nova movimentação)
                 else:
                     default_data_status_index = data_status_opcoes.index(st.session_state[data_status_key]) if st.session_state[data_status_key] in data_status_opcoes else 0
             else:
-                 default_data_status_index = data_status_opcoes.index(default_data_status_previsto) if default_data_status_previsto in data_status_opcoes else 0
+                   default_data_status_index = data_status_opcoes.index(default_data_status_previsto) if default_data_status_previsto in data_status_opcoes else 0
 
             data_status_selecionado_previsto = st.radio(
                 "Essa pendência tem data prevista?",
@@ -1647,15 +1723,15 @@ def livro_caixa():
             
             # Inputs restantes que precisam ser resetados na submissão
             loja_selecionada = st.selectbox("Loja Responsável", 
-                                            LOJAS_DISPONIVEIS, 
-                                            index=LOJAS_DISPONIVEIS.index(default_loja) if default_loja in LOJAS_DISPONIVEIS else 0,
-                                            key="input_loja_form")
+                                                 LOJAS_DISPONIVEIS, 
+                                                 index=LOJAS_DISPONIVEIS.index(default_loja) if default_loja in LOJAS_DISPONIVEIS else 0,
+                                                 key="input_loja_form")
             data_input = st.date_input("Data da Transação (Lançamento)", value=default_data, key="input_data_form")
             cliente = st.text_input("Nome do Cliente (ou Descrição)", value=default_cliente, key="input_cliente_form")
             forma_pagamento = st.selectbox("Forma de Pagamento", 
-                                            FORMAS_PAGAMENTO, 
-                                            index=FORMAS_PAGAMENTO.index(default_forma) if default_forma in FORMAS_PAGAMENTO else 0,
-                                            key="input_forma_pagamento_form")
+                                                 FORMAS_PAGAMENTO, 
+                                                 index=FORMAS_PAGAMENTO.index(default_forma) if default_forma in FORMAS_PAGAMENTO else 0,
+                                                 key="input_forma_pagamento_form")
             
             
             if status_selecionado == "Realizada":
@@ -1703,6 +1779,8 @@ def livro_caixa():
                         # Se status antigo Realizada -> novo Pendente
                         if original_row["Status"] == "Realizada" and status_selecionado == "Pendente" and original_row["Tipo"] == "Entrada":
                             try:
+                                # Reverte o estoque (credita)
+                                # Garantindo que o valor seja avaliado corretamente (pode ser string de JSON)
                                 produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
                                 for item in produtos_vendidos_antigos:
                                     if item.get("Produto_ID"): # Só credita se tiver ID de estoque
@@ -1711,7 +1789,7 @@ def livro_caixa():
                             
                         # Se status continua Realizada, ajusta a diferença
                         elif original_row["Status"] == "Realizada" and status_selecionado == "Realizada" and original_row["Tipo"] == "Entrada":
-                            # Credita o estoque antigo (se existia)
+                            # 1. Credita o estoque antigo (se existia)
                             try:
                                 produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
                                 for item in produtos_vendidos_antigos:
@@ -1719,7 +1797,7 @@ def livro_caixa():
                                         ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
                             except: pass
                             
-                            # Debita o novo estoque (se houver lista atualizada e itens com ID)
+                            # 2. Debita o novo estoque (se houver lista atualizada e itens com ID)
                             if produtos_vendidos_json:
                                 produtos_vendidos_novos = json.loads(produtos_vendidos_json)
                                 for item in produtos_vendidos_novos:
@@ -1747,7 +1825,7 @@ def livro_caixa():
                     nova_linha_data = {
                         "Data": data_input,
                         "Loja": loja_selecionada, 
-                        "Cliente": cliente, # Usa o cliente do formulário
+                        "Cliente": cliente_desc, # Usa o cliente do formulário
                         "Valor": valor_armazenado, 
                         "Forma de Pagamento": forma_pagamento,
                         "Tipo": tipo,
@@ -1949,7 +2027,11 @@ def livro_caixa():
                     if row['Tipo'] == 'Entrada' and row['Produtos Vendidos'] and pd.notna(row['Produtos Vendidos']):
                         st.markdown("#### Detalhes dos Produtos Selecionados")
                         try:
-                            produtos = json.loads(row['Produtos Vendidos'])
+                            # Tenta usar json.loads, mas usa ast.literal_eval como fallback
+                            try:
+                                produtos = json.loads(row['Produtos Vendidos'])
+                            except json.JSONDecodeError:
+                                produtos = ast.literal_eval(row['Produtos Vendidos'])
                             
                             df_detalhe = pd.DataFrame(produtos)
                             
@@ -2039,12 +2121,12 @@ def livro_caixa():
                                         produto_id = item.get("Produto_ID")
                                         if produto_id: 
                                             ajustar_estoque(produto_id, item["Quantidade"], "creditar")
-                                    if salvar_produtos_no_github(st.session_state.produtos, "Crédito de estoque por exclusão de venda"): # CORREÇÃO: Removido ARQ_PRODUTOS
+                                    if salvar_produtos_no_github(st.session_state.produtos, "Crédito de estoque por exclusão de venda"): 
                                         inicializar_produtos.clear()
                                         st.warning("Estoque creditado de volta.")
                                 except Exception as e:
                                     st.error(f"Erro ao creditar estoque: {e}")
-                            
+                                
                             # Exclui a linha e salva
                             st.session_state.df = st.session_state.df.drop(original_idx_selecionado, errors='ignore')
                             
@@ -2081,7 +2163,6 @@ def livro_caixa():
         else:
             st.info("Não há dados suficientes para gerar relatórios e filtros.")
         
-
         subtab_dashboard, subtab_filtro, subtab_produtos, subtab_dividas = st.tabs(["Dashboard Geral", "Filtro e Tabela", "Produtos e Lucro", "🧾 Dívidas Pendentes"])
         
         # O teste df_filtrado_loja.empty garante que a lógica de relatórios só ocorra com dados.
@@ -2218,7 +2299,7 @@ def livro_caixa():
                                             produto_id = item.get("Produto_ID")
                                             if produto_id: 
                                                 ajustar_estoque(produto_id, item["Quantidade"], "debitar")
-                                        if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por liquidação de dívida"): # CORREÇÃO: Removido ARQ_PRODUTOS
+                                        if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por liquidação de dívida"): 
                                             inicializar_produtos.clear()
                                             st.success("Estoque debitado por venda liquidada.")
                                     except Exception as e:
@@ -2326,7 +2407,12 @@ def livro_caixa():
                     for index, row in df_entradas_produtos.iterrows():
                         if pd.notna(row['Produtos Vendidos']) and row['Produtos Vendidos'] and row['Produtos Vendidos'] != "":
                             try:
-                                produtos = json.loads(row['Produtos Vendidos'])
+                                # Tenta usar json.loads, mas usa ast.literal_eval como fallback
+                                try:
+                                    produtos = json.loads(row['Produtos Vendidos'])
+                                except json.JSONDecodeError:
+                                    produtos = ast.literal_eval(row['Produtos Vendidos'])
+
                                 for p in produtos:
                                     try:
                                         qtd = float(p.get('Quantidade', 0))
