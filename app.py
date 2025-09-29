@@ -717,10 +717,7 @@ def homepage():
 
 
     
-    # --- 2. Conteúdo Estático (Título) ---
-    st.markdown('<h1 class="homepage-title">Doce&Bella! 🌸</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="homepage-subtitle">Seu parceiro de gestão e beleza!</p>', unsafe_allow_html=True)
-    st.info("Esta é a página de apresentação da sua loja virtual, simulando o layout que você enviou. Use os botões no topo para acessar a Gestão Financeira.")
+    
 
     # A seção Loja Física foi removida.
     
@@ -2812,4 +2809,5 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
 
