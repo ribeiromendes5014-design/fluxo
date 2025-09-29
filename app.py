@@ -25,9 +25,9 @@ st.set_page_config(
 )
 
 # Caminho para o logo carregado. 
-# CORREÇÃO: Utiliza o link direto da imagem no ImgBB para carregamento correto.
+# ATUALIZAÇÃO: Usando a URL do CloudFront para maior estabilidade.
 LOGO_DOCEBELLA_FILENAME = "logo_docebella.jpg"
-LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo-docebella.png"
+LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo-docebella.png" # Mantido como placeholder seguro
 
 # URLs das Imagens de Seção (CloudFront)
 URL_MAIS_VENDIDOS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-queridinhos1.png"
@@ -173,21 +173,21 @@ st.markdown("""
     }
 
     /* --- CLASSES PARA CARROSSEL HORIZONTAL --- */
-    /* Container que habilita o scroll horizontal */
-    .carousel-container {
-        overflow-x: auto;
-        white-space: nowrap; /* Impede que os itens internos quebrem a linha */
-        padding-bottom: 20px; /* Espaço para a barra de rolagem */
+    /* Contêiner que controla a barra de rolagem e centraliza o conteúdo */
+    .carousel-outer-container {
         width: 100%;
-        text-align: center; /* Centraliza o wrapper */
+        overflow-x: auto;
+        padding-bottom: 20px; 
     }
-
-    /* Wrapper que mantém os cards em linha e os centraliza no container */
+    
+    /* Wrapper interno que força o alinhamento horizontal e permite centralização */
     .product-wrapper {
-        display: inline-flex; /* Permite que o wrapper seja centralizado */
-        justify-content: center; /* Centraliza horizontalmente */
-        align-items: flex-start;
-        padding: 0 50px; /* Adiciona padding nas laterais para que os primeiros/últimos cards não colem na borda */
+        display: flex; /* Força os cards a ficarem lado a lado */
+        flex-direction: row;
+        gap: 15px;
+        padding: 0 50px; /* Adiciona padding nas laterais */
+        justify-content: center; /* Centraliza o conteúdo (cards) quando há espaço */
+        width: fit-content; /* Permite que o flex container se estenda para forçar o scroll */
     }
     
     /* Classe para controlar o tamanho das imagens de título */
@@ -755,9 +755,8 @@ def homepage():
         st.info("Não há dados de vendas suficientes (Entradas Realizadas) para determinar os produtos mais vendidos.")
     else:
         # Início do Container Carrossel (Scroll Horizontal e Centralizado)
-        st.markdown('<div class="carousel-container">', unsafe_allow_html=True)
-        st.markdown('<div class="product-wrapper">', unsafe_allow_html=True)
-        
+        # O HTML precisa ser gerado em uma ÚNICA string markdown para evitar quebras de linha do Streamlit
+        html_cards = ""
         for i, row in produtos_mais_vendidos.iterrows():
             # Busca a quantidade total vendida para este produto
             vendas_count = df_mais_vendidos_id[df_mais_vendidos_id["Produto_ID"] == row["ID"]]["Quantidade Total Vendida"].iloc[0] if not df_mais_vendidos_id.empty else 0
@@ -770,8 +769,8 @@ def homepage():
             preco_exibido = preco_cartao
             foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/F48FB1/880E4F?text={row['Nome'].replace(' ', '+')}"
 
-            # Renderiza o Card dentro do wrapper
-            st.markdown(f'''
+            # Constrói o Card
+            html_cards += f'''
                 <div class="product-card">
                     <img src="{foto_url}" alt="{nome_produto}">
                     <p style="font-size: 0.9em; height: 40px; white-space: normal;">{nome_produto} - {descricao}</p>
@@ -781,10 +780,16 @@ def homepage():
                     <button onclick="window.alert('Compra simulada: {nome_produto}')" style="width: 100%;" class="buy-button">COMPRAR</button>
                     <p style="font-size: 0.7em; color: #888; margin-top: 5px;">Vendas: {int(vendas_count)}</p>
                 </div>
-            ''', unsafe_allow_html=True)
-
-        st.markdown('</div>', unsafe_allow_html=True) # Fim do product-wrapper
-        st.markdown('</div>', unsafe_allow_html=True) # Fim do carousel-container
+            '''
+        
+        # Renderiza o Carrossel
+        st.markdown(f'''
+            <div class="carousel-outer-container">
+                <div class="product-wrapper">
+                    {html_cards}
+                </div>
+            </div>
+        ''', unsafe_allow_html=True)
 
                 
     st.markdown("---")
@@ -800,10 +805,7 @@ def homepage():
     if produtos_oferta.empty:
         st.info("Nenhum produto em promoção registrado no momento.")
     else:
-        # Início do Container Carrossel (Scroll Horizontal e Centralizado)
-        st.markdown('<div class="carousel-container">', unsafe_allow_html=True)
-        st.markdown('<div class="product-wrapper">', unsafe_allow_html=True)
-        
+        html_cards_ofertas = ""
         for i, row in produtos_oferta.iterrows():
             nome_produto = row['Nome']
             descricao = row['Marca'] if row['Marca'] else row['Categoria']
@@ -815,8 +817,8 @@ def homepage():
             
             foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/E91E63/FFFFFF?text={row['Nome'].replace(' ', '+')}"
 
-            # Renderiza o Card de Oferta dentro do wrapper
-            st.markdown(f'''
+            # Constrói o Card de Oferta
+            html_cards_ofertas += f'''
                 <div class="product-card" style="background-color: #FFF5F7;">
                     <img src="{foto_url}" alt="{nome_produto}">
                     <p style="font-size: 0.9em; height: 40px; white-space: normal;">{nome_produto} - {descricao}</p>
@@ -827,10 +829,16 @@ def homepage():
                     <p style="color: #E91E63; font-weight: bold; font-size: 0.8em; margin-top: 5px; margin-bottom: 10px;">{desconto_percent}% OFF</p>
                     <button onclick="window.alert('Compra simulada: {nome_produto}')" style="width: 100%;" class="buy-button">COMPRAR</button>
                 </div>
-            ''', unsafe_allow_html=True)
-
-        st.markdown('</div>', unsafe_allow_html=True) # Fim do product-wrapper
-        st.markdown('</div>', unsafe_allow_html=True) # Fim do carousel-container
+            '''
+        
+        # Renderiza o Carrossel
+        st.markdown(f'''
+            <div class="carousel-outer-container">
+                <div class="product-wrapper">
+                    {html_cards_ofertas}
+                </div>
+            </div>
+        ''', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True) # Fecha offer-section
 
@@ -844,18 +852,15 @@ def homepage():
     if produtos_novos.empty:
         st.info("Não há produtos cadastrados no estoque para exibir como novidades.")
     else:
-        # Início do Container Carrossel (Scroll Horizontal e Centralizado)
-        st.markdown('<div class="carousel-container">', unsafe_allow_html=True)
-        st.markdown('<div class="product-wrapper">', unsafe_allow_html=True)
-        
+        html_cards_novidades = ""
         for i, row in produtos_novos.iterrows():
             
             foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/400x400/FFC1E3/E91E63?text={row['Nome'].replace(' ', '+')}"
             preco_vista = to_float(row.get('PrecoVista', 0))
             descricao = f"R$ {preco_vista:,.2f}" if preco_vista > 0 else "Preço não disponível"
             
-            # Renderiza o Card dentro do wrapper
-            st.markdown(f'''
+            # Constrói o Card
+            html_cards_novidades += f'''
                 <div class="product-card">
                     <p style="font-weight: bold; color: #E91E63; margin-bottom: 10px; font-size: 0.9em;">✨ Doce&Bella - Novidade</p>
                     <img src="{foto_url}" alt="{row['Nome']}">
@@ -864,10 +869,16 @@ def homepage():
                     <p style="font-weight: bold; color: #E91E63; margin-top: 5px;">💸 {descricao}</p>
                     <button onclick="window.alert('Compra simulada: {row['Nome']}')" style="width: 100%; margin-top: 10px;" class="buy-button">COMPRAR</button>
                 </div>
-            ''', unsafe_allow_html=True)
-            
-        st.markdown('</div>', unsafe_allow_html=True) # Fim do product-wrapper
-        st.markdown('</div>', unsafe_allow_html=True) # Fim do carousel-container
+            '''
+        
+        # Renderiza o Carrossel
+        st.markdown(f'''
+            <div class="carousel-outer-container">
+                <div class="product-wrapper">
+                    {html_cards_novidades}
+                </div>
+            </div>
+        ''', unsafe_allow_html=True)
 
         
 # ==============================================================================
