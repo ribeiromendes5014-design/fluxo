@@ -853,41 +853,40 @@ def homepage():
     st.markdown("---")
     
     # ==================================================
-    # 5. SEÇÃO NOSSAS NOVIDADES (Carrossel)
-    # ==================================================
-    st.markdown(f'<img src="{URL_NOVIDADES}" class="section-header-img" alt="Nossas Novidades">', unsafe_allow_html=True)
-    
-    if produtos_novos.empty:
-        st.info("Não há produtos cadastrados no estoque para exibir como novidades.")
-    else:
-        html_cards_novidades = []
-        for i, row in produtos_novos.iterrows():
-            
-            foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/400x400/FFC1E3/E91E63?text={row['Nome'].replace(' ', '+')}"
-            preco_vista = to_float(row.get('PrecoVista', 0))
-            descricao = f"R$ {preco_vista:,.2f}" if preco_vista > 0 else "Preço não disponível"
-            
-            # Constrói o Card
-            card_html = f'''
-                <div class="product-card">
-                    <p style="font-weight: bold; color: #E91E63; margin-bottom: 10px; font-size: 0.9em;">✨ Doce&Bella - Novidade</p>
-                    <img src="{foto_url}" alt="{row['Nome']}">
-                    <p style="font-weight: bold; margin-top: 10px; height: 30px; white-space: normal;">{row['Nome']} ({row['Marca']})</p>
-                    <p style="font-size: 0.9em;">✨ Estoque: {row['Quantidade']}</p>
-                    <p style="font-weight: bold; color: #E91E63; margin-top: 5px;">💸 {descricao}</p>
-                    <button onclick="window.alert('Compra simulada: {row['Nome']}')" class="buy-button">COMPRAR</button>
-                </div>
-            '''
-            html_cards_novidades.append(card_html)
-        
-        # Renderiza o Carrossel
-        st.markdown(f'''
-            <div class="carousel-outer-container">
-                <div class="product-wrapper">
-                    {"".join(html_cards_novidades)}
-                </div>
+# 5. SEÇÃO NOSSAS NOVIDADES (Carrossel)
+# ==================================================
+st.markdown(f'<img src="{URL_NOVIDADES}" class="section-header-img" alt="Nossas Novidades">', unsafe_allow_html=True)
+
+if produtos_novos.empty:
+    st.info("Não há produtos cadastrados no estoque para exibir como novidades.")
+else:
+    html_cards_novidades = ""
+    for i, row in produtos_novos.iterrows():
+        foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/400x400/FFC1E3/E91E63?text={row['Nome'].replace(' ', '+')}"
+        preco_vista = to_float(row.get('PrecoVista', 0))
+        descricao = f"R$ {preco_vista:,.2f}" if preco_vista > 0 else "Preço não disponível"
+
+        # Constrói o Card
+        html_cards_novidades += f'''
+            <div class="product-card">
+                <p style="font-weight: bold; color: #E91E63; margin-bottom: 10px; font-size: 0.9em;">✨ Doce&Bella - Novidade</p>
+                <img src="{foto_url}" alt="{row['Nome']}">
+                <p style="font-weight: bold; margin-top: 10px; height: 30px; white-space: normal;">{row['Nome']} ({row['Marca']})</p>
+                <p style="font-size: 0.9em;">✨ Estoque: {row['Quantidade']}</p>
+                <p style="font-weight: bold; color: #E91E63; margin-top: 5px;">💸 {descricao}</p>
+                <button onclick="window.alert('Compra simulada: {row['Nome']}')" class="buy-button">COMPRAR</button>
             </div>
-        ''', unsafe_allow_html=True)
+        '''
+
+    # Renderiza o Carrossel Horizontal
+    st.markdown(f'''
+        <div class="carousel-outer-container">
+            <div class="product-wrapper">
+                {html_cards_novidades}
+            </div>
+        </div>
+    ''', unsafe_allow_html=True)
+
 
         
 # ==============================================================================
@@ -2833,3 +2832,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
