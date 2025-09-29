@@ -20,9 +20,13 @@ import calendar
 # Define o tema de cores com base no estilo da imagem (predominantemente rosa/magenta)
 st.set_page_config(
     layout="wide", 
-    page_title="Perduts | Gestão Financeira", 
+    page_title="Doce&Bella | Gestão Financeira", 
     page_icon="🌸"
 )
+
+# Variável simulada que viria da pasta app.py (Usamos um placeholder URL)
+# logo_docebella é referenciada no código de simulação do logo.
+LOGO_DOCEBELLA_URL = "https://placehold.co/150x50/E91E63/FFFFFF?text=Doce&Bella" 
 
 # Adiciona CSS para simular a navegação no topo e o tema pink/magenta
 st.markdown("""
@@ -87,6 +91,9 @@ st.markdown("""
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
         padding: 15px;
         height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between; /* Garante que o rodapé fique embaixo */
     }
     .insta-header {
         display: flex;
@@ -398,11 +405,15 @@ def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_di
 # ==============================================================================
 
 def homepage():
-    # --- Header Customizado (para simular a barra do topo) ---
-    # NOTE: O header real do Streamlit é difícil de controlar. Usamos st.markdown com CSS fixo.
+    
+    # Carrega a lista de produtos para o carrossel de novidades
+    produtos_df = inicializar_produtos()
+    # Filtra apenas produtos com estoque > 0 e ordena pelo ID (assumindo que IDs mais altos são mais novos)
+    produtos_novos = produtos_df[produtos_df['Quantidade'] > 0].sort_values(by='ID', ascending=False).head(3)
+
     
     # Simulação da Homepage com base na imagem
-    st.markdown('<h1 class="homepage-title">Perduts! 🌸</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="homepage-title">Doce&Bella! 🌸</h1>', unsafe_allow_html=True)
     st.markdown('<p class="homepage-subtitle">Seu parceiro de gestão e beleza!</p>', unsafe_allow_html=True)
     
     st.info("Esta é a página de apresentação da sua loja virtual, simulando o layout que você enviou. Use os botões no topo para acessar a Gestão Financeira.")
@@ -424,34 +435,55 @@ def homepage():
 
     st.markdown("---")
 
-    # --- Seção de Cards (Simulando Instagram/Novidades) ---
+    # --- Seção de Cards (Novidades Dinâmicas) ---
     st.markdown('<h2 style="color: #E91E63; text-align: center;">Nossas Novidades</h2>', unsafe_allow_html=True)
     
     card1, card2, card3 = st.columns(3)
     
-    with card1:
-        st.markdown('<div class="insta-card">', unsafe_allow_html=True)
-        st.markdown('<div class="insta-header">🌸 _perduts</div>', unsafe_allow_html=True)
-        st.image("https://placehold.co/400x400/FFC1E3/E91E63?text=Foto+1", use_column_width=True)
-        st.markdown("""
-        <p>❤️ Novo cantinho da maquiagem! Venha conferir as tendências. #maquiagem #beleza</p>
-        </div>""", unsafe_allow_html=True)
-        
-    with card2:
-        st.markdown('<div class="insta-card">', unsafe_allow_html=True)
-        st.markdown('<div class="insta-header">🛒 _perduts</div>', unsafe_allow_html=True)
-        st.image("https://placehold.co/400x400/FFC1E3/E91E63?text=Foto+2", use_column_width=True)
-        st.markdown("""
-        <p>✨ Chegaram reposições do nosso best-seller! Não perca! #cosmeticos #novidades</p>
-        </div>""", unsafe_allow_html=True)
+    cards = [card1, card2, card3]
+    
+    if produtos_novos.empty:
+        st.info("Não há produtos cadastrados no estoque para exibir como novidades.")
+    
+    # Preenche os cards com os últimos 3 produtos
+    for i, row in produtos_novos.iterrows():
+        if i < len(cards):
+            card = cards[i]
+            
+            # Tenta usar a FotoURL do produto, se não tiver, usa um placeholder rosa
+            foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/400x400/FFC1E3/E91E63?text={row['Nome'].replace(' ', '+')}"
+            
+            with card:
+                st.markdown('<div class="insta-card">', unsafe_allow_html=True)
+                st.markdown(f'<div class="insta-header">✨ Doce&Bella - Novidade</div>', unsafe_allow_html=True)
+                
+                # Exibe a imagem (ou placeholder)
+                try:
+                    st.image(foto_url, use_column_width=True)
+                except:
+                     st.image(f"https://placehold.co/400x400/FFC1E3/E91E63?text=Erro+Foto", use_column_width=True)
+                     
+                
+                # Detalhes do Produto
+                preco_vista = to_float(row.get('PrecoVista', 0))
+                descricao = f"R$ {preco_vista:,.2f}" if preco_vista > 0 else "Preço não disponível"
+                
+                st.markdown(f"""
+                <p><strong>{row['Nome']} ({row['Marca']})</strong></p>
+                <p>✨ Estoque: {row['Quantidade']}</p>
+                <p>💸 {descricao}</p>
+                </div>""", unsafe_allow_html=True)
 
-    with card3:
-        st.markdown('<div class="insta-card">', unsafe_allow_html=True)
-        st.markdown('<div class="insta-header">💳 _perduts</div>', unsafe_allow_html=True)
-        st.image("https://placehold.co/400x400/FFC1E3/E91E63?text=Foto+3", use_column_width=True)
-        st.markdown("""
-        <p>🎁 Passe no crédito em até 12x! Mais facilidade para você. #passenocredito #facilidade</p>
-        </div>""", unsafe_allow_html=True)
+    # Preenche cards vazios caso haja menos de 3 produtos
+    for i in range(len(produtos_novos), 3):
+        card = cards[i]
+        with card:
+            st.markdown('<div class="insta-card">', unsafe_allow_html=True)
+            st.markdown(f'<div class="insta-header">🛒 Doce&Bella</div>', unsafe_allow_html=True)
+            st.image("https://placehold.co/400x400/F48FB1/880E4F?text=Espaço+Disponível", use_column_width=True)
+            st.markdown("""
+            <p>Em breve, mais novidades e produtos incríveis para você!</p>
+            </div>""", unsafe_allow_html=True)
         
 # ==============================================================================
 # 2. PÁGINAS DE GESTÃO (LIVRO CAIXA, PRODUTOS, COMPRAS)
@@ -2042,9 +2074,9 @@ def render_header():
     col_logo, col_nav = st.columns([1, 4])
     
     with col_logo:
-        # Logo Simulado (Texto Perduts)
-        logo_html = f'<h1 style="color: white; font-size: 2em; margin: 0;">Perduts!</h1>'
-        st.markdown(f'<div style="padding-left: 20px;">{logo_html}</div>', unsafe_allow_html=True)
+        # Logo Simulado (Texto Doce&Bella) usando o placeholder
+        logo_html = f'<img src="{LOGO_DOCEBELLA_URL}" style="height: 40px; margin-left: 10px; margin-top: 5px;">'
+        st.markdown(logo_html, unsafe_allow_html=True)
         
     with col_nav:
         # Botões de Navegação
