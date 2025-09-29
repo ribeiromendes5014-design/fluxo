@@ -1239,6 +1239,10 @@ def historico_compras():
     if df_filtrado.empty:
         st.info("Nenhuma compra encontrada com os filtros aplicados.")
     else:
+        # **CORREÇÃO:** Criar a coluna 'Data Formatada' no DataFrame filtrado, antes de ser usada para a tabela 
+        # e para as opções de exclusão.
+        df_filtrado['Data Formatada'] = df_filtrado['Data'].apply(lambda x: x.strftime('%d/%m/%Y') if pd.notna(x) else '')
+        
         # Estilização condicional (usando CSS para cor de fundo)
         def highlight_color_compras(row):
             """Função para aplicar o destaque de cor na linha."""
@@ -1249,9 +1253,6 @@ def historico_compras():
         
         # Prepara o DF para exibição
         df_para_mostrar = df_filtrado.copy()
-        
-        # Cria uma coluna de data formatada para a UI (mas mantém a data original para a função de destaque)
-        df_para_mostrar['Data Formatada'] = df_para_mostrar['Data'].apply(lambda x: x.strftime('%d/%m/%Y') if pd.notna(x) else '')
         
         # Estiliza e exibe
         # ADIÇÃO: Inclui FotoURL
@@ -1285,10 +1286,10 @@ def historico_compras():
         st.markdown("---")
         st.markdown("### 🗑️ Excluir Compra")
         
-        # Cria um dicionário de opções para o selectbox USANDO DADOS FILTRADOS
+        # Cria um dicionário de opções para o selectbox USANDO DADOS FILTRADOS (df_para_mostrar agora é usado)
         opcoes_compra = {
             f"ID {row['ID']} | {row['Data Formatada']} | {row['Produto']} | R$ {row['Valor Total']:,.2f}": row['original_index'] 
-            for index, row in df_filtrado.iterrows()
+            for index, row in df_para_mostrar.iterrows() # LINHA CORRIGIDA: Usa df_para_mostrar que contém 'Data Formatada'
         }
         opcoes_keys = list(opcoes_compra.keys())
         
