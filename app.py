@@ -211,13 +211,19 @@ st.markdown("""
 
 # Importa a biblioteca PyGithub para gerenciamento de persistência
 try:
-    from github import Github
+    # Tenta importar PyGithub se estiver disponível no ambiente
+    from github import Github, InputGitTreeElement
 except ImportError:
+    # Classe Mock para evitar erros de referência se não estiver disponível
     class Github:
         def __init__(self, token): pass
         def get_repo(self, repo_name): return self
         def update_file(self, path, msg, content, sha, branch): pass
         def create_file(self, path, msg, content, branch): pass
+    # Mock do elemento necessário para commit
+    class InputGitTreeElement:
+        def __init__(self, path, mode, type, content, sha=None): pass
+
 
 def ler_codigo_barras_api(image_bytes):
     """
@@ -284,6 +290,7 @@ def add_months(d: date, months: int) -> date:
 
 # ==================== CONFIGURAÇÕES DO APLICATIVO E CONSTANTES ====================
 try:
+    # 🔑 Tenta carregar as secrets do Streamlit
     TOKEN = st.secrets["GITHUB_TOKEN"]
     OWNER = st.secrets["REPO_OWNER"]
     REPO_NAME = st.secrets["REPO_NAME"]
@@ -295,6 +302,7 @@ try:
     GITHUB_BRANCH = BRANCH
     
 except KeyError:
+    # Valores de fallback caso as secrets não estejam disponíveis
     TOKEN = "TOKEN_FICTICIO"
     OWNER = "user"
     REPO_NAME = "repo_default"
@@ -329,7 +337,7 @@ CATEGORIAS_SAIDA = ["Aluguel", "Salários/Pessoal", "Marketing/Publicidade", "Fo
 FORMAS_PAGAMENTO = ["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"]
 
 
-# --- Funções de Persistência (Comentários omitidos para brevidade) ---
+# --- Funções de Persistência (AGORA IMPLEMENTAÇÃO REAL) ---
 
 def to_float(valor_str):
     try:
@@ -369,9 +377,49 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
         return None
 
 def save_csv_github(df: pd.DataFrame, file_path: str, commit_message: str):
-    """Função dummy para simular o salvamento no GitHub."""
-    # A implementação real foi omitida para simplificar o código
-    return True
+    """
+    Função REAL para salvar o DataFrame como CSV no GitHub, substituindo o dummy.
+    Retorna True em caso de sucesso, False em caso de falha.
+    """
+    if GITHUB_TOKEN == "TOKEN_FICTICIO":
+        st.warning("⚠️ Operação de salvamento ignorada: GITHUB_TOKEN é fictício. Configure suas secrets.")
+        return True # Retorna True para não quebrar a aplicação demo
+
+    try:
+        # 1. Conecta-se ao repositório
+        g = Github(GITHUB_TOKEN)
+        repo = g.get_repo(GITHUB_REPO)
+        
+        # 2. Converte o DataFrame para CSV e depois para Base64
+        csv_content = df.to_csv(index=False, sep=',', encoding='utf-8')
+        encoded_content = base64.b64encode(csv_content.encode('utf-8')).decode('utf-8')
+
+        # 3. Tenta obter o SHA do arquivo existente (necessário para update)
+        sha = None
+        try:
+            contents = repo.get_contents(file_path, ref=GITHUB_BRANCH)
+            sha = contents.sha
+        except Exception as e:
+            # st.info(f"Arquivo não existe ou erro ao obter SHA: {e}. Será criado.")
+            pass
+
+        # 4. Cria ou atualiza o arquivo
+        if sha:
+            # Update
+            repo.update_file(file_path, commit_message, encoded_content, sha, branch=GITHUB_BRANCH)
+            st.toast(f"💾 Sucesso! Arquivo '{file_path}' atualizado.")
+        else:
+            # Create
+            repo.create_file(file_path, commit_message, encoded_content, branch=GITHUB_BRANCH)
+            st.toast(f"💾 Sucesso! Arquivo '{file_path}' criado.")
+            
+        return True
+
+    except Exception as e:
+        st.error(f"❌ Falha ao salvar no GitHub ({file_path}): {e}")
+        st.error("Verifique seu token de acesso, nome do repositório ou permissões.")
+        return False
+
 
 def parse_date_yyyy_mm_dd(date_str):
     """Tenta converter uma string para objeto date."""
@@ -417,7 +465,8 @@ def carregar_historico_compras():
     return df[[col for col in COLUNAS_COMPRAS if col in df.columns]]
 
 def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
-    return True
+    """Função wrapper para salvar o histórico de compras."""
+    return save_csv_github(df, ARQ_COMPRAS, commit_message)
 
 @st.cache_data(show_spinner="Carregando dados...")
 def carregar_livro_caixa():
@@ -439,7 +488,11 @@ def carregar_livro_caixa():
     return df[[col for col in cols_to_return if col in df.columns]]
 
 def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
-    return True
+    """
+    Função wrapper para salvar o Livro Caixa (PATH_DIVIDAS).
+    Substitui a função dummy pela chamada à implementação real.
+    """
+    return save_csv_github(df, PATH_DIVIDAS, commit_message)
 
 @st.cache_data(show_spinner=False)
 def processar_dataframe(df):
@@ -554,10 +607,12 @@ def ajustar_estoque(id_produto, quantidade, operacao="debitar"):
     return False
 
 def salvar_produtos_no_github(dataframe, commit_message):
-    return True
+    """Função wrapper para salvar os produtos/estoque."""
+    return save_csv_github(dataframe, ARQ_PRODUTOS, commit_message)
 
 def save_data_github_produtos(df, path, commit_message):
-    return False 
+    """Função para salvar produtos/estoque (chamada no fluxo de Livro Caixa)."""
+    return save_csv_github(df, ARQ_PRODUTOS, commit_message)
 
 def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações):
     if not nome:
@@ -592,7 +647,7 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             round(to_float(preco_vista) / FATOR_CARTAO, 2) if to_float(preco_vista) > 0 else 0.0,
             validade, foto_url, codigo_barras
         )
-        if save_csv_github(produtos, ARQ_PRODUTOS, f"Novo produto simples: {nome} (ID {new_id})"):
+        if salvar_produtos_no_github(produtos, f"Novo produto simples: {nome} (ID {new_id})"):
             st.session_state.produtos = produtos
             inicializar_produtos.clear()
             st.success(f"Produto '{nome}' cadastrado com sucesso!")
@@ -637,7 +692,7 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
                 cont_variacoes += 1
                 
         if cont_variacoes > 0:
-            if save_csv_github(produtos, ARQ_PRODUTOS, f"Novo produto com grade: {nome} ({cont_variacoes} variações)"):
+            if salvar_produtos_no_github(produtos, f"Novo produto com grade: {nome} ({cont_variacoes} variações)"):
                 st.session_state.produtos = produtos
                 inicializar_produtos.clear()
                 st.success(f"Produto '{nome}' com {cont_variacoes} variações cadastrado com sucesso!")
@@ -1077,10 +1132,10 @@ def gestao_promocoes():
                     }
                     st.session_state.promocoes = pd.concat([st.session_state.promocoes, pd.DataFrame([novo])], ignore_index=True)
 
-                if save_csv_github(st.session_state.promocoes, ARQ_PROMOCOES, "Criando promoções automáticas de produtos parados"):
-                    carregar_promocoes.clear()
-                    st.success(f"Promoções criadas para {len(produtos_parados_sugeridos)} produtos parados!")
-                    st.rerun()  # 🔑 atualização imediata
+                    if save_csv_github(st.session_state.promocoes, ARQ_PROMOCOES, "Criando promoções automáticas de produtos parados"):
+                        carregar_promocoes.clear()
+                        st.success(f"Promoções criadas para {len(produtos_parados_sugeridos)} produtos parados!")
+                        st.rerun()  # 🔑 atualização imediata
 
     st.markdown("---")
     
@@ -2531,11 +2586,12 @@ def livro_caixa():
                             st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
                             commit_msg = COMMIT_MESSAGE
                     
-                    salvar_dados_no_github(st.session_state.df, commit_msg)
-                    st.session_state.edit_id = None
-                    st.session_state.lista_produtos = [] 
-                    st.cache_data.clear()
-                    st.rerun()
+                    # CORREÇÃO CRÍTICA: CHAMADA REAL DE SALVAMENTO
+                    if salvar_dados_no_github(st.session_state.df, commit_msg):
+                        st.session_state.edit_id = None
+                        st.session_state.lista_produtos = [] 
+                        st.cache_data.clear()
+                        st.rerun()
 
 
             if cancelar:
@@ -2586,7 +2642,7 @@ def livro_caixa():
         ]
 
         contas_a_receber_vencidas = df_vencidas[df_vencidas["Tipo"] == "Entrada"]["Valor"].abs().sum()
-        contas_a_pagar_vencidas = df_vencidas[df_vencidas["Tipo"] == "Saída"]["Valor"].abs().sum()
+        contas_a_pagar_vencidas = df_vencidas[df_vendas["Tipo"] == "Saída"]["Valor"].abs().sum()
         
         num_receber = df_vencidas[df_vencidas["Tipo"] == "Entrada"].shape[0]
         num_pagar = df_vencidas[df_vencidas["Tipo"] == "Saída"].shape[0] 
@@ -2758,6 +2814,7 @@ def livro_caixa():
 
                         st.session_state.df = st.session_state.df.drop(row['original_index'], errors='ignore')
 
+                        # CORREÇÃO CRÍTICA: CHAMADA REAL DE SALVAMENTO
                         if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
                             st.cache_data.clear()
                             st.rerun()
@@ -2853,6 +2910,7 @@ def livro_caixa():
                             if salvar_produtos_no_github(st.session_state.produtos, f"Débito de estoque por conclusão de venda {row_data['Cliente']}"): inicializar_produtos.clear()
                         except: st.warning("⚠️ Venda concluída, mas falha no débito do estoque (JSON inválido).")
                     
+                    # CORREÇÃO CRÍTICA: CHAMADA REAL DE SALVAMENTO
                     if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DEBT_REALIZED):
                         st.cache_data.clear()
                         st.rerun()
