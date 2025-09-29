@@ -442,6 +442,8 @@ def inicializar_produtos():
         df_base["PrecoCartao"] = pd.to_numeric(df_base["PrecoCartao"], errors='coerce').fillna(0.0)
         
         # Converte validade para Date para facilitar a lógica de promoções
+        # MANTEMOS COMO DATE PARA EXIBIÇÃO NO ESTOQUE, MAS CONVERTEMOS PARA DATETIME/TIMESTAMP
+        # PONTUALMENTE NA GESTAO_PROMOCOES PARA OPERAÇÕES DE COMPARAÇÃO NO PANDAS.
         df_base["Validade"] = pd.to_datetime(df_base["Validade"], errors='coerce').dt.date
         
         st.session_state.produtos = df_base
@@ -870,10 +872,10 @@ def gestao_promocoes():
 
     produtos_parados = produtos.merge(ultima_venda, left_on="ID", right_on="IDProduto", how="left")
     
-    # CORREÇÃO CRÍTICA: Converte UltimaVenda para datetime para comparação,
-    # caso contrário a comparação entre dtype=datetime64[ns] (merge default) e date (limite) falha.
+    # CORREÇÃO: Converte UltimaVenda para datetime para comparação com Timestamp
     produtos_parados["UltimaVenda"] = pd.to_datetime(produtos_parados["UltimaVenda"], errors='coerce')
     
+    # Cria o limite como Timestamp para comparação segura
     limite_dt = datetime.combine(date.today() - timedelta(days=int(dias_sem_venda)), datetime.min.time())
 
     # Filtra produtos com estoque e que a última venda foi antes do limite (ou nunca vendeu)
@@ -883,8 +885,8 @@ def gestao_promocoes():
         (produtos_parados["UltimaVenda"].isna() | (produtos_parados["UltimaVenda"] < limite_dt))
     ].copy()
     
-    # Prepara para exibição
-    produtos_parados_sugeridos['UltimaVenda'] = produtos_parados_sugeridos['UltimaVenda'].dt.date.fillna(pd.NaT) # Converte de volta para date para exibição
+    # Prepara para exibição (converte de volta para date)
+    produtos_parados_sugeridos['UltimaVenda'] = produtos_parados_sugeridos['UltimaVenda'].dt.date.fillna(pd.NaT) 
 
     if produtos_parados_sugeridos.empty:
         st.info("Nenhum produto parado encontrado com estoque e fora de promoção.")
@@ -931,16 +933,28 @@ def gestao_promocoes():
     
     limite_validade = date.today() + timedelta(days=int(dias_validade_limite))
 
-    produtos_validade_sugeridos = produtos[
-        (produtos["Quantidade"] > 0) &
-        # A coluna "Validade" já está como date graças à inicializar_produtos()
-        (produtos["Validade"].apply(lambda x: x is not None and x <= limite_validade))
+    # CRÍTICO: Produtos Validade é uma cópia. Garante que a coluna Validade seja um objeto datetime para a comparação.
+    produtos_validade_sugeridos = produtos.copy()
+    
+    # Converte Validade de volta para datetime/Timestamp para comparação segura (se já não estiver assim)
+    produtos_validade_sugeridos['Validade_dt'] = pd.to_datetime(produtos_validade_sugeridos['Validade'], errors='coerce')
+    limite_validade_dt = datetime.combine(limite_validade, datetime.min.time()) # Timestamp do limite
+    
+    
+    produtos_validade_sugeridos = produtos_validade_sugeridos[
+        (produtos_validade_sugeridos["Quantidade"] > 0) &
+        # Compara a Série de Timestamps (Validade_dt) com o Timestamp do limite_validade_dt
+        (produtos_validade_sugeridos["Validade_dt"].notna()) &
+        (produtos_validade_sugeridos["Validade_dt"] <= limite_validade_dt)
     ].copy()
     
     if produtos_validade_sugeridos.empty:
         st.info("Nenhum produto com estoque e próximo da validade encontrado.")
     else:
-        produtos_validade_sugeridos['Dias Restantes'] = produtos_validade_sugeridos['Validade'].apply(lambda x: (x - date.today()).days if x is not None else float('inf'))
+        # Calcula dias restantes usando a coluna Validade (que está em formato date)
+        produtos_validade_sugeridos['Dias Restantes'] = produtos_validade_sugeridos['Validade'].apply(
+            lambda x: (x - date.today()).days if x is not None and pd.notna(x) else float('inf')
+        )
         st.dataframe(
             produtos_validade_sugeridos[["ID", "Nome", "Quantidade", "Validade", "Dias Restantes"]].sort_values("Dias Restantes"), 
             use_container_width=True, hide_index=True
