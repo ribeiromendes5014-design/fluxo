@@ -875,7 +875,7 @@ def homepage():
             </div>
         ''', unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)  # Fecha offer-section
+    st.markdown('</div>', unsafe_allow_html=True)  # Fe
     st.markdown("---")
 
     # ==================================================
@@ -1133,7 +1133,7 @@ def gestao_promocoes():
     
     dias_validade_limite = st.number_input(
         "Considerar perto da validade (dias restantes)",
-        min_value=1, max_value=365, value=60, key="promo_dias_validade_restante"
+        min_value=1, max_value=365, value=60, key="promo_dias_validade_restante_2"
     )
     
     limite_validade = date.today() + timedelta(days=int(dias_validade_limite))
@@ -2684,4 +2684,51 @@ def livro_caixa():
             
             for i, row in df_resumo_loja.iterrows():
                 if i < len(cols_loja):
+                    # CORREÇÃO DA LINHA 2687: Fechando corretamente a chamada da função .metric()
                     cols_loja[i].metric(
+                        label=row['Loja'],
+                        value=f"R$ {row['Saldo']:,.2f}",
+                        delta=f"E: R$ {row['Entradas']:,.2f} / S: R$ {row['Saídas']:,.2f}"
+                    )
+                    # FIM DA CORREÇÃO DA LINHA 2687
+
+
+def main():
+    # Estrutura de navegação principal (usando st.sidebar)
+    st.markdown(f'''
+        <div class="header-container">
+            <img src="{LOGO_DOCEBELLA_URL}" alt="Doce&Bella Logo" style="height: 50px; margin-left: 20px; border-radius: 5px;">
+            <div class="nav-button-group">
+                <!-- Links de navegação serão simulados por estados de sessão -->
+                <button onclick="window.parent.postMessage('{"page": "home"}', '*')" style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">HOME</button>
+                <button onclick="window.parent.postMessage('{"page": "livro_caixa"}', '*')" style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">LIVRO CAIXA</button>
+                <button onclick="window.parent.postMessage('{"page": "produtos"}', '*')" style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">ESTOQUE/PRODUTOS</button>
+                <button onclick="window.parent.postMessage('{"page": "compras"}', '*')" style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">HISTÓRICO COMPRAS</button>
+                <button onclick="window.parent.postMessage('{"page": "promocoes"}', '*')" style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">PROMOÇÕES</button>
+            </div>
+        </div>
+    ''', unsafe_allow_html=True)
+
+
+    # Lógica de roteamento baseada no estado de sessão (simulando navegação)
+    query_params = st.query_params
+    if 'page' not in query_params:
+        query_params['page'] = 'home'
+    st.session_state.page = query_params['page']
+
+
+    if st.session_state.page == "home":
+        homepage()
+    elif st.session_state.page == "livro_caixa":
+        livro_caixa()
+    elif st.session_state.page == "produtos":
+        gestao_produtos()
+    elif st.session_state.page == "compras":
+        historico_compras()
+    elif st.session_state.page == "promocoes":
+        gestao_promocoes()
+    else:
+        homepage()
+
+if __name__ == "__main__":
+    main()
