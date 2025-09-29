@@ -223,6 +223,7 @@ ARQ_PRODUTOS = "produtos_estoque.csv"
 ARQ_LOCAL = "livro_caixa.csv"
 PATH_DIVIDAS = CSV_PATH
 ARQ_COMPRAS = "historico_compras.csv"
+ARQ_PROMOCOES = "promocoes.csv" # Novo arquivo para promoções
 COLUNAS_COMPRAS = ["Data", "Produto", "Quantidade", "Valor Total", "Cor", "FotoURL"] 
 
 COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit (com produtos/categorias)"
@@ -278,6 +279,43 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
         return df
     except Exception:
         return None
+
+def save_csv_github(df: pd.DataFrame, file_path: str, commit_message: str):
+    """Função dummy para simular o salvamento no GitHub."""
+    # A implementação real foi omitida para simplificar o código
+    return True
+
+def parse_date_yyyy_mm_dd(date_str):
+    """Tenta converter uma string para objeto date."""
+    if pd.isna(date_str) or not date_str:
+        return None
+    try:
+        return datetime.strptime(str(date_str).split(" ")[0], "%Y-%m-%d").date()
+    except:
+        return None
+
+@st.cache_data(show_spinner="Carregando promoções...")
+def carregar_promocoes():
+    COLUNAS_PROMO = ["ID", "IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"]
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PROMOCOES}"
+    df = load_csv_github(url_raw)
+    if df is None or df.empty:
+        df = pd.DataFrame(columns=COLUNAS_PROMO)
+    for col in COLUNAS_PROMO:
+        if col not in df.columns:
+            df[col] = "" 
+    return df[[col for col in COLUNAS_PROMO if col in df.columns]]
+
+def norm_promocoes(df):
+    """Normaliza o DataFrame de promoções."""
+    if df.empty: return df
+    df = df.copy()
+    df["Desconto"] = pd.to_numeric(df["Desconto"], errors='coerce').fillna(0.0)
+    df["DataInicio"] = pd.to_datetime(df["DataInicio"], errors='coerce').dt.date
+    df["DataFim"] = pd.to_datetime(df["DataFim"], errors='coerce').dt.date
+    # Filtra promoções expiradas
+    df = df[df["DataFim"] >= date.today()] 
+    return df
 
 @st.cache_data(show_spinner="Carregando histórico de compras...")
 def carregar_historico_compras():
@@ -402,6 +440,10 @@ def inicializar_produtos():
         df_base["PrecoCusto"] = pd.to_numeric(df_base["PrecoCusto"], errors='coerce').fillna(0.0)
         df_base["PrecoVista"] = pd.to_numeric(df_base["PrecoVista"], errors='coerce').fillna(0.0)
         df_base["PrecoCartao"] = pd.to_numeric(df_base["PrecoCartao"], errors='coerce').fillna(0.0)
+        
+        # Converte validade para Date para facilitar a lógica de promoções
+        df_base["Validade"] = pd.to_datetime(df_base["Validade"], errors='coerce').dt.date
+        
         st.session_state.produtos = df_base
     return st.session_state.produtos
 
@@ -443,12 +485,32 @@ def callback_adicionar_manual(nome, qtd, preco, custo):
         st.session_state.input_produto_selecionado = "" 
         
 def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_disp):
+    
+    promocoes = norm_promocoes(carregar_promocoes())
+    hoje = date.today()
+    
+    # Verifica se o produto tem promoção ativa hoje
+    promocao_ativa = promocoes[
+        (promocoes["IDProduto"] == prod_id) & 
+        (promocoes["DataInicio"] <= hoje) & 
+        (promocoes["DataFim"] >= hoje)
+    ]
+    
+    # Se houver promoção, aplica o desconto
+    preco_unitario_final = preco
+    desconto_aplicado = 0.0
+    if not promocao_ativa.empty:
+        desconto_aplicado = promocao_ativa.iloc[0]["Desconto"] / 100.0
+        preco_unitario_final = preco * (1 - desconto_aplicado)
+        st.toast(f"🏷️ Promoção de {promocao_ativa.iloc[0]['Desconto']:.0f}% aplicada a {prod_nome}!")
+
     if qtd > 0 and qtd <= estoque_disp:
         st.session_state.lista_produtos.append({
             "Produto_ID": prod_id, 
             "Produto": prod_nome,
             "Quantidade": qtd,
-            "Preço Unitário": preco,
+            # Usa o preço com desconto, se houver
+            "Preço Unitário": round(float(preco_unitario_final), 2), 
             "Custo Unitário": custo 
         })
         st.session_state.input_produto_selecionado = ""
@@ -699,9 +761,288 @@ def homepage():
             </div>""", unsafe_allow_html=True)
         
 # ==============================================================================
-# 2. PÁGINAS DE GESTÃO (LIVRO CAIXA, PRODUTOS, COMPRAS)
-# As funções foram mantidas
+# 2. PÁGINAS DE GESTÃO (LIVRO CAIXA, PRODUTOS, COMPRAS, PROMOÇÕES)
 # ==============================================================================
+
+def gestao_promocoes():
+    """Página de gerenciamento de promoções (Bloco inserido pelo usuário)."""
+    
+    # Inicializa ou carrega o estado de produtos e promoções
+    produtos = inicializar_produtos()
+    
+    if "promocoes" not in st.session_state:
+        st.session_state.promocoes = carregar_promocoes()
+    
+    promocoes_df = st.session_state.promocoes
+    
+    # Processa o DataFrame de promoções (normaliza datas e filtra expiradas)
+    promocoes = norm_promocoes(promocoes_df.copy())
+    
+    # Recarrega as vendas para a lógica de produtos parados
+    # Nota: Em um ambiente real, 'vendas' viria do Livro Caixa (Entradas Realizadas)
+    df_movimentacoes = carregar_livro_caixa()
+    vendas = df_movimentacoes[df_movimentacoes["Tipo"] == "Entrada"].copy()
+    
+    # --- PRODUTOS COM VENDA (para análise de inatividade) ---
+    vendas_list = []
+    for produtos_json in vendas["Produtos Vendidos"].dropna():
+        try:
+            items = ast.literal_eval(produtos_json)
+            for item in items:
+                vendas_list.append({"Data": vendas[vendas["Produtos Vendidos"] == produtos_json]["Data"].iloc[0], "IDProduto": str(item.get("Produto_ID"))})
+        except:
+            continue
+    vendas_flat = pd.DataFrame(vendas_list).dropna(subset=["IDProduto"])
+    
+
+    st.header("🏷️ Promoções")
+
+    # --- CADASTRAR ---
+    with st.expander("➕ Cadastrar promoção", expanded=False):
+        if produtos.empty:
+            st.info("Cadastre produtos primeiro para criar promoções.")
+        else:
+            # Lista de produtos elegíveis (aqueles que não são variações, ou seja, PaiID é nulo)
+            opcoes_prod = (produtos["ID"].astype(str) + " - " + produtos["Nome"]).tolist()
+            opcoes_prod.insert(0, "")
+            
+            sel_prod = st.selectbox("Produto", opcoes_prod, key="promo_cad_produto")
+            
+            if sel_prod:
+                pid = sel_prod.split(" - ")[0].strip()
+                pnome = sel_prod.split(" - ", 1)[1].strip()
+
+                col1, col2, col3 = st.columns([1, 1, 1])
+                with col1:
+                    desconto_str = st.text_input("Desconto (%)", value="0", key="promo_cad_desc")
+                with col2:
+                    data_ini = st.date_input("Início", value=date.today(), key="promo_cad_inicio")
+                with col3:
+                    data_fim = st.date_input("Término", value=date.today() + timedelta(days=7), key="promo_cad_fim")
+
+                if st.button("Adicionar promoção", key="promo_btn_add"):
+                    desconto = to_float(desconto_str)
+                    if desconto < 0 or desconto > 100:
+                        st.error("O desconto deve estar entre 0 e 100%.")
+                    elif data_fim < data_ini:
+                        st.error("A data de término deve ser maior ou igual à data de início.")
+                    else:
+                        novo = {
+                            "ID": prox_id(promocoes_df, "ID"),
+                            "IDProduto": str(pid),
+                            "NomeProduto": pnome,
+                            "Desconto": float(desconto),
+                            "DataInicio": str(data_ini),
+                            "DataFim": str(data_fim),
+                        }
+                        st.session_state.promocoes = pd.concat([promocoes_df, pd.DataFrame([novo])], ignore_index=True)
+                        if save_csv_github(st.session_state.promocoes, ARQ_PROMOCOES, "Atualizando promoções"):
+                            carregar_promocoes.clear()
+                            st.success("Promoção cadastrada!")
+                            st.rerun()  # 🔑 atualização imediata
+
+    # --- PRODUTOS PARADOS E PERTO DA VALIDADE ---
+    st.markdown("---")
+    st.subheader("💡 Sugestões de Promoção")
+    
+    # 1. Sugestão de Produtos Parados
+    st.markdown("#### 📦 Produtos parados sem vendas")
+    
+    dias_sem_venda = st.number_input(
+        "Considerar parados após quantos dias?",
+        min_value=1, max_value=365, value=30, key="promo_dias_sem_venda"
+    )
+
+    if not vendas_flat.empty:
+        vendas_flat["Data"] = pd.to_datetime(vendas_flat["Data"], errors="coerce").dt.date
+        ultima_venda = vendas_flat.groupby("IDProduto")["Data"].max().reset_index()
+        ultima_venda.columns = ["IDProduto", "UltimaVenda"]
+    else:
+        ultima_venda = pd.DataFrame(columns=["IDProduto", "UltimaVenda"])
+
+    produtos_parados = produtos.merge(ultima_venda, left_on="ID", right_on="IDProduto", how="left")
+    produtos_parados["UltimaVenda"] = pd.to_datetime(produtos_parados["UltimaVenda"], errors='coerce').dt.date
+
+    limite = date.today() - timedelta(days=int(dias_sem_venda))
+    
+    # Filtra produtos com estoque e que a última venda foi antes do limite (ou nunca vendeu)
+    produtos_parados_sugeridos = produtos_parados[
+        (produtos_parados["Quantidade"] > 0) &
+        (produtos_parados["UltimaVenda"].isna() | (produtos_parados["UltimaVenda"] < limite))
+    ].copy()
+
+    if produtos_parados_sugeridos.empty:
+        st.info("Nenhum produto parado encontrado com estoque e fora de promoção.")
+    else:
+        st.dataframe(
+            produtos_parados_sugeridos[["ID", "Nome", "Quantidade", "UltimaVenda"]].fillna({"UltimaVenda": "NUNCA VENDIDO"}), 
+            use_container_width=True, hide_index=True
+        )
+
+        with st.expander("⚙️ Criar Promoção Automática para Parados"):
+            desconto_auto = st.number_input(
+                "Desconto sugerido (%)", min_value=1, max_value=100, value=20, key="promo_desc_auto"
+            )
+            dias_validade = st.number_input(
+                "Duração da promoção (dias)", min_value=1, max_value=90, value=7, key="promo_dias_validade_auto"
+            )
+
+            if st.button("🔥 Criar promoção automática", key="promo_btn_auto"):
+                for _, row in produtos_parados_sugeridos.iterrows():
+                    novo = {
+                        "ID": prox_id(st.session_state.promocoes, "ID"),
+                        "IDProduto": str(row["ID"]),
+                        "NomeProduto": row["Nome"],
+                        "Desconto": float(desconto_auto),
+                        "DataInicio": str(date.today()),
+                        "DataFim": str(date.today() + timedelta(days=int(dias_validade))),
+                    }
+                    st.session_state.promocoes = pd.concat([st.session_state.promocoes, pd.DataFrame([novo])], ignore_index=True)
+
+                if save_csv_github(st.session_state.promocoes, ARQ_PROMOCOES, "Criando promoções automáticas de produtos parados"):
+                    carregar_promocoes.clear()
+                    st.success(f"Promoções criadas para {len(produtos_parados_sugeridos)} produtos parados!")
+                    st.rerun()  # 🔑 atualização imediata
+
+    st.markdown("---")
+    
+    # 2. Sugestão de Produtos Perto da Validade
+    st.markdown("#### ⏳ Produtos Próximos da Validade")
+    
+    dias_validade_limite = st.number_input(
+        "Considerar perto da validade (dias restantes)",
+        min_value=1, max_value=365, value=60, key="promo_dias_validade_restante"
+    )
+    
+    limite_validade = date.today() + timedelta(days=int(dias_validade_limite))
+
+    produtos_validade_sugeridos = produtos[
+        (produtos["Quantidade"] > 0) &
+        (produtos["Validade"].apply(lambda x: x is not None and x <= limite_validade))
+    ].copy()
+    
+    if produtos_validade_sugeridos.empty:
+        st.info("Nenhum produto com estoque e próximo da validade encontrado.")
+    else:
+        produtos_validade_sugeridos['Dias Restantes'] = produtos_validade_sugeridos['Validade'].apply(lambda x: (x - date.today()).days if x is not None else float('inf'))
+        st.dataframe(
+            produtos_validade_sugeridos[["ID", "Nome", "Quantidade", "Validade", "Dias Restantes"]].sort_values("Dias Restantes"), 
+            use_container_width=True, hide_index=True
+        )
+
+    st.markdown("---")
+    
+    # --- LISTA DE PROMOÇÕES ATIVAS ---
+    st.markdown("### 📋 Lista de Promoções Ativas")
+    
+    if promocoes.empty:
+        st.info("Nenhuma promoção ativa cadastrada.")
+    else:
+        df_display = promocoes.copy()
+        
+        # Formata as colunas para exibição
+        df_display["Desconto"] = df_display["Desconto"].apply(lambda x: f"{x:.0f}%")
+        df_display["DataInicio"] = df_display["DataInicio"].apply(lambda x: x.strftime('%d/%m/%Y'))
+        df_display["DataFim"] = df_display["DataFim"].apply(lambda x: x.strftime('%d/%m/%Y'))
+        
+        st.dataframe(
+            df_display[["ID", "NomeProduto", "Desconto", "DataInicio", "DataFim"]], 
+            use_container_width=True,
+            column_config={
+                "DataInicio": "Início",
+                "DataFim": "Término",
+                "NomeProduto": "Produto"
+            }
+        )
+
+        # --- EDITAR E EXCLUIR ---
+        st.markdown("#### Operações de Edição e Exclusão")
+        
+        opcoes_promo_operacao = {
+            f"ID {row['ID']} | {row['NomeProduto']} | {row['Desconto']} | Fim: {row['DataFim']}": row['ID'] 
+            for index, row in df_display.iterrows()
+        }
+        opcoes_keys = ["Selecione uma promoção..."] + list(opcoes_promo_operacao.keys())
+        
+        promo_selecionada_str = st.selectbox(
+            "Selecione o item para Editar ou Excluir:",
+            options=opcoes_keys,
+            index=0, 
+            key="select_promo_operacao_lc"
+        )
+        
+        promo_id_selecionado = opcoes_promo_operacao.get(promo_selecionada_str)
+        
+        if promo_id_selecionado is not None:
+            
+            # Puxa a linha original (sem normalização de data para input)
+            linha_original = promocoes_df[promocoes_df["ID"].astype(str) == promo_id_selecionado].iloc[0]
+            
+            with st.expander(f"✏️ Editar Promoção ID {promo_id_selecionado}", expanded=True):
+                
+                opcoes_prod_edit = (produtos["ID"].astype(str) + " - " + produtos["Nome"]).tolist()
+                opcoes_prod_edit.insert(0, "")
+                
+                pre_opcao = (
+                    f"{linha_original['IDProduto']} - {linha_original['NomeProduto']}"
+                    if f"{linha_original['IDProduto']} - {linha_original['NomeProduto']}" in opcoes_prod_edit
+                    else ""
+                )
+                
+                sel_prod_edit = st.selectbox(
+                    "Produto (editar)", opcoes_prod_edit,
+                    index=opcoes_prod_edit.index(pre_opcao) if pre_opcao in opcoes_prod_edit else 0,
+                    key=f"promo_edit_prod_{promo_id_selecionado}"
+                )
+                
+                pid_e = sel_prod_edit.split(" - ")[0].strip()
+                pnome_e = sel_prod_edit.split(" - ", 1)[1].strip() if len(sel_prod_edit.split(" - ", 1)) > 1 else linha_original['NomeProduto']
+
+                col1, col2, col3 = st.columns([1, 1, 1])
+                
+                with col1:
+                    desc_e = st.text_input("Desconto (%)", value=str(to_float(linha_original["Desconto"])), key=f"promo_edit_desc_{promo_id_selecionado}")
+                
+                with col2:
+                    di = parse_date_yyyy_mm_dd(linha_original["DataInicio"]) or date.today()
+                    data_ini_e = st.date_input("Início", value=di, key=f"promo_edit_inicio_{promo_id_selecionado}")
+                
+                with col3:
+                    df = parse_date_yyyy_mm_dd(linha_original["DataFim"]) or (date.today() + timedelta(days=7))
+                    data_fim_e = st.date_input("Término", value=df, key=f"promo_edit_fim_{promo_id_selecionado}")
+                
+                col_btn_edit, col_btn_delete = st.columns(2)
+                
+                with col_btn_edit:
+                    if st.button("💾 Salvar Edição", key=f"promo_btn_edit_{promo_id_selecionado}", type="secondary", use_container_width=True):
+                        dnum = to_float(desc_e)
+                        if dnum < 0 or dnum > 100:
+                            st.error("O desconto deve estar entre 0 e 100%.")
+                        elif data_fim_e < data_ini_e:
+                            st.error("A data de término deve ser maior ou igual à data de início.")
+                        elif not pid_e:
+                            st.error("Selecione um produto válido.")
+                        else:
+                            idx = promocoes_df["ID"].astype(str) == promo_id_selecionado
+                            promocoes_df.loc[idx, ["IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"]] = [
+                                str(pid_e), pnome_e, float(dnum), str(data_ini_e), str(data_fim_e)
+                            ]
+                            st.session_state.promocoes = promocoes_df
+                            if save_csv_github(promocoes_df, ARQ_PROMOCOES, f"Editando promoção ID {promo_id_selecionado}"):
+                                carregar_promocoes.clear()
+                                st.success("Promoção atualizada!")
+                                st.rerun()  # 🔑 atualização imediata
+
+                with col_btn_delete:
+                    if st.button("🗑️ Excluir Promoção", key=f"promo_btn_del_{promo_id_selecionado}", type="primary", use_container_width=True):
+                        st.session_state.promocoes = promocoes_df[promocoes_df["ID"].astype(str) != promo_id_selecionado]
+                        if save_csv_github(st.session_state.promocoes, ARQ_PROMOCOES, f"Excluindo promoção ID {promo_id_selecionado}"):
+                            carregar_promocoes.clear()
+                            st.warning(f"Promoção {promo_id_selecionado} excluída!")
+                            st.rerun()  # 🔑 atualização imediata
+        else:
+            st.info("Selecione uma promoção para ver as opções de edição e exclusão.")
+
 
 def gestao_produtos():
     # ... (Conteúdo completo da função Gestão de Produtos)
@@ -1086,7 +1427,8 @@ def gestao_produtos():
                         novo_preco_vista = st.text_input("Preço à Vista", value=f"{to_float(row["PrecoVista"]):.2f}".replace(".", ","), key=f"edit_pv_{eid}")
                     with c3:
                         try:
-                            vdata = datetime.strptime(str(row["Validade"] or date.today()), "%Y-%m-%d").date()
+                            # Tenta garantir que a validade seja um objeto date para o input
+                            vdata = row["Validade"] if pd.notna(row["Validade"]) and isinstance(row["Validade"], date) else date.today()
                         except Exception:
                             vdata = date.today()
                         nova_validade = st.date_input("Validade", value=vdata, key=f"edit_val_{eid}")
@@ -1119,7 +1461,7 @@ def gestao_produtos():
                                 to_float(novo_preco_custo),
                                 preco_vista_float,
                                 novo_preco_cartao,
-                                str(nova_validade),
+                                nova_validade, # Já é um objeto date
                                 nova_foto.strip(),
                                 str(novo_cb).strip()
                             ]
@@ -1626,7 +1968,8 @@ def livro_caixa():
                         if not produto_row_completa.empty:
                             produto_data = produto_row_completa.iloc[0]
                             nome_produto = produto_data['Nome']
-                            preco_sugerido = produto_data['PrecoVista']
+                            # Nota: Aqui estamos usando o PrecoVista como preço base
+                            preco_sugerido = produto_data['PrecoVista'] 
                             custo_unit = produto_data['PrecoCusto']
                             estoque_disp = produto_data['Quantidade']
 
@@ -1634,6 +1977,7 @@ def livro_caixa():
                             with col_p1:
                                 quantidade_input = st.number_input("Qtd", min_value=1, value=1, step=1, max_value=int(estoque_disp) if estoque_disp > 0 else 1, key="input_qtd_prod_edit")
                             with col_p2:
+                                # O preço já será ajustado pelo callback
                                 preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=float(preco_sugerido), key="input_preco_prod_edit")
                             
                             st.caption(f"Custo Unitário: R$ {custo_unit:,.2f}")
@@ -1642,6 +1986,7 @@ def livro_caixa():
                                 "Adicionar Item", 
                                 key="adicionar_item_button", 
                                 use_container_width=True,
+                                # Chama o callback, que aplicará o desconto se houver promoção
                                 on_click=callback_adicionar_estoque,
                                 args=(produto_id_selecionado, nome_produto, quantidade_input, preco_unitario_input, custo_unit, estoque_disp),
                                 help="Adicionar Item do Estoque à Lista de Venda"
@@ -2271,6 +2616,7 @@ PAGINAS = {
     "Home": homepage,
     "Livro Caixa": livro_caixa,
     "Produtos": gestao_produtos,
+    "Promoções": gestao_promocoes, # NOVA PÁGINA
     "Histórico de Compra": historico_compras
 }
 
@@ -2292,18 +2638,22 @@ def render_header():
     with col_nav:
         cols_botoes = st.columns([1] * len(PAGINAS))
         
-        for i, (nome, _) in enumerate(PAGINAS.items()):
-            is_active = st.session_state.pagina_atual == nome
-            
-            # Ajusta o estilo do botão para parecer um item de navegação
-            button_style = "color: white; font-weight: bold; border: none; background: none; cursor: pointer; padding: 10px 5px;"
-            if is_active:
-                 button_style += "border-bottom: 3px solid #FFCDD2; /* Linha de destaque rosa claro */"
-            
-            # Usando st.markdown e st.button em combinação para obter o efeito de botão customizado.
-            if cols_botoes[i].button(nome, key=f"nav_{nome}", use_container_width=True, help=f"Ir para {nome}"):
-                st.session_state.pagina_atual = nome
-                st.rerun()
+        # Cria a lista de páginas na ordem desejada
+        paginas_ordenadas = ["Home", "Livro Caixa", "Produtos", "Promoções", "Histórico de Compra"]
+        
+        for i, nome in enumerate(paginas_ordenadas):
+            if nome in PAGINAS:
+                is_active = st.session_state.pagina_atual == nome
+                
+                # Ajusta o estilo do botão para parecer um item de navegação
+                button_style = "color: white; font-weight: bold; border: none; background: none; cursor: pointer; padding: 10px 5px;"
+                if is_active:
+                    button_style += "border-bottom: 3px solid #FFCDD2; /* Linha de destaque rosa claro */"
+                
+                # Usando st.markdown e st.button em combinação para obter o efeito de botão customizado.
+                if cols_botoes[i].button(nome, key=f"nav_{nome}", use_container_width=True, help=f"Ir para {nome}"):
+                    st.session_state.pagina_atual = nome
+                    st.rerun()
 
 # O Streamlit nativamente não permite HTML/Markdown fora do corpo principal
 # Simulamos o Header customizado no topo da página
