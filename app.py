@@ -194,9 +194,57 @@ except ImportError:
         def create_file(self, path, msg, content, branch): pass
 
 def ler_codigo_barras_api(image_bytes):
-    """Decodifica códigos de barras (Função dummy para simplificar)."""
-    # A implementação real foi omitida para foco na refatoração da UI
-    return []
+    """
+    Decodifica códigos de barras (1D e QR) usando a API pública ZXing.
+    Mais robusta que WebQR porque suporta EAN/UPC/Code128 além de QR Codes.
+    """
+    URL_DECODER_ZXING = "https://zxing.org/w/decode"
+    
+    try:
+        # ⚠️ IMPORTANTE: ZXing espera o arquivo no campo 'f', não 'file'
+        files = {"f": ("barcode.png", image_bytes, "image/png")}
+        
+        response = requests.post(URL_DECODER_ZXING, files=files, timeout=30)
+
+        if response.status_code != 200:
+            if 'streamlit' in globals():
+                st.error(f"❌ Erro na API ZXing. Status HTTP: {response.status_code}")
+            return []
+
+        text = response.text
+        codigos = []
+
+        # Parse simples do HTML retornado
+        if "<pre>" in text:
+            partes = text.split("<pre>")
+            for p in partes[1:]:
+                codigo = p.split("</pre>")[0].strip()
+                if codigo and not codigo.startswith("Erro na decodificação"):
+                    codigos.append(codigo)
+
+        if 'streamlit' in globals():
+            st.write("Debug API ZXing:", codigos)
+
+        if not codigos and 'streamlit' in globals():
+            st.warning("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
+
+        return codigos
+
+    except ConnectionError as ce:
+        if 'streamlit' in globals():
+            st.error(f"❌ Erro de Conexão: O servidor ZXing recusou a conexão. Detalhe: {ce}")
+        return []
+        
+    except RequestException as e:
+        if 'streamlit' in globals():
+            st.error(f"❌ Erro de Requisição (Timeout/Outro): Falha ao completar a chamada à API ZXing. Detalhe: {e}")
+        return []
+    
+    except Exception as e:
+        if 'streamlit' in globals():
+            st.error(f"❌ Erro inesperado: {e}")
+        return []
+
 
 def add_months(d: date, months: int) -> date:
     """Adiciona um número específico de meses a uma data."""
@@ -2809,5 +2857,6 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
 
 
