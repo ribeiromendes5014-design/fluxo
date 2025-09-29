@@ -1138,178 +1138,272 @@ def historico_compras():
     df_exibicao.rename(columns={'index': 'original_index'}, inplace=True)
     df_exibicao.insert(0, 'ID', df_exibicao.index + 1)
     
-    
-    # --- Formulário de Cadastro ---
-    with st.expander("➕ Registrar Nova Compra", expanded=True):
-        with st.form("form_nova_compra", clear_on_submit=True):
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                data = st.date_input("Data da Compra", value=date.today(), key="compra_data")
-                nome_produto = st.text_input("Produto/Material Comprado", key="compra_nome")
-                
-            with col2:
-                quantidade = st.number_input("Quantidade", min_value=1, value=1, step=1, key="compra_qtd")
-                valor_total_input = st.number_input("Valor Total (R$)", min_value=0.01, format="%.2f", value=10.00, key="compra_valor")
-                
-            with col3:
-                cor_selecionada = st.color_picker("Cor para Destaque", value="#007bff", key="compra_cor")
-            
-            # ADIÇÃO: URL da Foto
-            with col4:
-                foto_url = st.text_input("URL da Foto do Produto (Opcional)", key="compra_foto_url")
-                
-            
-            salvar_compra = st.form_submit_button("💾 Adicionar Compra", type="primary", use_container_width=True)
+    # ==================================================
+    # 1. RELATÓRIO DO MÊS ATUAL
+    # ==================================================
+    hoje = date.today()
+    primeiro_dia_mes = hoje.replace(day=1)
 
-            if salvar_compra:
-                if not nome_produto or valor_total_input <= 0:
-                    st.error("Nome do produto e Valor Total são obrigatórios e devem ser válidos.")
-                elif quantidade <= 0:
-                    st.error("A quantidade deve ser maior que zero.")
-                else:
-                    nova_linha = {
-                        "Data": data.strftime('%Y-%m-%d'), # Formata para string para persistência
-                        "Produto": nome_produto.strip(),
-                        "Quantidade": int(quantidade),
-                        "Valor Total": float(valor_total_input),
-                        "Cor": cor_selecionada,
-                        "FotoURL": foto_url.strip(), # ADIÇÃO: FotoURL
-                    }
-                    
-                    # Concatena com o DF original da sessão
-                    df_novo = pd.concat([st.session_state.df_compras.iloc[:, :len(COLUNAS_COMPRAS)], pd.DataFrame([nova_linha])], ignore_index=True)
-                    st.session_state.df_compras = df_novo
-                    
-                    # Salva e recarrega
-                    if salvar_historico_no_github(st.session_state.df_compras, COMMIT_MESSAGE_COMPRAS):
-                        st.cache_data.clear()
-                        st.rerun()
-
-
-    # --- Filtros de Busca (Produto e Data) ---
-    st.markdown("---")
-    st.subheader("🔍 Filtro de Histórico")
-    
-    col_f1, col_f2 = st.columns([1, 2])
-    
-    # 1. Filtro de Produto
-    with col_f1:
-        filtro_produto = st.text_input("Filtrar por nome do Produto:", key="filtro_compra_produto")
-    
-    # 2. Filtro de Data
-    with col_f2:
-        data_range_option = st.radio(
-            "Filtrar por Período:",
-            ["Todo o Histórico", "Personalizar Data"],
-            key="filtro_compra_data_opt",
-            horizontal=True
-        )
-
-    df_filtrado = df_exibicao.copy()
-
-    if filtro_produto:
-        df_filtrado = df_filtrado[df_filtrado["Produto"].astype(str).str.contains(filtro_produto, case=False, na=False)]
-
-    if data_range_option == "Personalizar Data":
-        if not df_filtrado.empty:
-            min_date_val = df_filtrado['Data'].min() if pd.notna(df_filtrado['Data'].min()) else date.today()
-            max_date_val = df_filtrado['Data'].max() if pd.notna(df_filtrado['Data'].max()) else date.today()
-        else:
-            min_date_val = date.today()
-            max_date_val = date.today()
-            
-        col_date1, col_date2 = st.columns(2)
-        with col_date1:
-            data_ini = st.date_input("De:", value=min_date_val, key="filtro_compra_data_ini")
-        with col_date2:
-            data_fim = st.date_input("Até:", value=max_date_val, key="filtro_compra_data_fim")
-            
-        # Requer conversão de volta para date para comparação, mas o DF já está com objetos date
-        df_filtrado = df_filtrado[
-            (df_filtrado["Data"] >= data_ini) &
-            (df_filtrado["Data"] <= data_fim)
-        ]
-        
-    st.markdown("---")
-    # --- Tabela de Exibição e Remoção ---
-    st.subheader("Lista de Compras Registradas (Filtrada)")
-    
-    if df_filtrado.empty:
-        st.info("Nenhuma compra encontrada com os filtros aplicados.")
+    if hoje.month == 12:
+        proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
     else:
-        # **CORREÇÃO:** Criar a coluna 'Data Formatada' no DataFrame filtrado, antes de ser usada para a tabela 
-        # e para as opções de exclusão.
-        df_filtrado['Data Formatada'] = df_filtrado['Data'].apply(lambda x: x.strftime('%d/%m/%Y') if pd.notna(x) else '')
-        
-        # Estilização condicional (usando CSS para cor de fundo)
-        def highlight_color_compras(row):
-            """Função para aplicar o destaque de cor na linha."""
-            # Cor está no formato hex (ex: #007bff)
-            color = row['Cor']
-            # Aplica a cor na linha toda com 30% de opacidade
-            return [f'background-color: {color}30' for col in row.index]
-        
-        # Prepara o DF para exibição
-        df_para_mostrar = df_filtrado.copy()
-        
-        # Estiliza e exibe
-        # ADIÇÃO: Inclui FotoURL
-        df_display_cols = ['ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'FotoURL', 'Cor', 'original_index']
-        df_styling = df_para_mostrar[df_display_cols].copy()
-        
-        styled_df = df_styling.style.apply(highlight_color_compras, axis=1)
-        # Oculta a coluna de cor e o índice original
-        styled_df = styled_df.hide(subset=['Cor', 'original_index'], axis=1)
+        proximo_mes = hoje.replace(month=hoje.month + 1, day=1)
+    ultimo_dia_mes = proximo_mes - timedelta(days=1)
+    
+    # Filtra as compras do mês atual e onde o valor total é positivo (gasto)
+    df_mes_atual = df_exibicao[
+        (df_exibicao["Data"].apply(lambda x: pd.notna(x) and x >= primeiro_dia_mes and x <= ultimo_dia_mes)) &
+        (df_exibicao["Valor Total"] > 0)
+    ].copy()
 
-        # 4. Exibe o DataFrame estilizado
-        st.dataframe(
-            styled_df,
-            use_container_width=True,
-            column_config={
-                "Data Formatada": st.column_config.TextColumn("Data da Compra"),
-                "Valor Total": st.column_config.NumberColumn(
-                    "Valor Total (R$)",
-                    format="R$ %.2f",
-                ),
-                "FotoURL": st.column_config.TextColumn("URL da Foto", help="Link direto para a imagem do produto"),
-            },
-            column_order=('ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'FotoURL'), # Inclui FotoURL
-            height=400,
-            selection_mode='single-row', 
-            key='compras_table_styled'
-        )
+    total_gasto_mes = df_mes_atual['Valor Total'].sum()
+
+    st.markdown("---")
+    st.subheader(f"📊 Resumo de Gastos - Mês de {primeiro_dia_mes.strftime('%m/%Y')}")
+    st.metric(
+        label="💰 Total Gasto com Compras de Insumos (Mês Atual)",
+        value=f"R$ {total_gasto_mes:,.2f}"
+    )
+    st.markdown("---")
+    # ==================================================
+    
+    # Define as abas: Cadastro + Dashboard/Lista/Filtro
+    tab_cadastro, tab_dashboard, tab_lista_filtro = st.tabs(["📝 Cadastro de Compras", "📈 Dashboard de Gastos", "📑 Lista & Filtro"])
+    
+    # ==================================================
+    # 2. DASHBOARD DE GASTOS (Nova Aba)
+    # ==================================================
+    with tab_dashboard:
+        st.header("📈 Análise de Gastos com Compras")
         
+        if df_exibicao.empty:
+            st.info("Nenhum dado de compra registrado para gerar o dashboard.")
+        else:
+            # Agregação por Produto (calcula o total gasto por produto em todo o histórico)
+            df_gasto_por_produto = df_exibicao.groupby('Produto')['Valor Total'].sum().reset_index()
+            df_gasto_por_produto = df_gasto_por_produto.sort_values(by='Valor Total', ascending=False)
+            
+            st.markdown("### 🥇 Top Produtos Mais Gastos (Valor Total)")
+            
+            if df_gasto_por_produto.empty:
+                 st.info("Nenhum produto com gasto registrado.")
+            else:
+                top_n = st.slider("Mostrar Top N Produtos", min_value=5, max_value=20, value=10)
+                top_produtos = df_gasto_por_produto.head(top_n)
+
+                # Gráfico de Barras para Top Gastos
+                fig_top_produtos = px.bar(
+                    top_produtos,
+                    x='Produto',
+                    y='Valor Total',
+                    text='Valor Total',
+                    title=f'Top {top_n} Produtos por Gasto Total',
+                    labels={'Valor Total': 'Gasto Total (R$)', 'Produto': 'Produto'},
+                    color='Valor Total',
+                    color_continuous_scale=px.colors.sequential.Sunset
+                )
+                fig_top_produtos.update_traces(texttemplate='R$ %{y:,.2f}', textposition='outside')
+                fig_top_produtos.update_layout(xaxis={'categoryorder':'total descending'}, height=500)
+                st.plotly_chart(fig_top_produtos, use_container_width=True)
+
+                st.markdown("---")
+                st.markdown("### 📅 Gasto Mensal Histórico (Agregado)")
+                
+                # Análise temporal (cria coluna MesAno)
+                df_temp_data = df_exibicao[df_exibicao['Data'].notna()].copy()
+                df_temp_data['Data_dt'] = pd.to_datetime(df_temp_data['Data'])
+                df_temp_data['MesAno'] = df_temp_data['Data_dt'].dt.strftime('%Y-%m')
+                
+                df_gasto_mensal = df_temp_data.groupby('MesAno')['Valor Total'].sum().reset_index()
+                df_gasto_mensal = df_gasto_mensal.sort_values(by='MesAno')
+
+                # Gráfico de Linha para Gasto Mensal
+                fig_mensal = px.line(
+                    df_gasto_mensal,
+                    x='MesAno',
+                    y='Valor Total',
+                    title='Evolução do Gasto Mensal com Compras',
+                    labels={'Valor Total': 'Gasto (R$)', 'MesAno': 'Mês/Ano'},
+                    markers=True
+                )
+                st.plotly_chart(fig_mensal, use_container_width=True)
+    
+    # ==================================================
+    # 3. CADASTRO (Lógica original na Aba 1)
+    # ==================================================
+    with tab_cadastro:
+        # Conteúdo original do Formulário de Cadastro (movido para a aba)
+        with st.expander("➕ Registrar Nova Compra", expanded=True):
+            with st.form("form_nova_compra", clear_on_submit=True):
+                
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    data = st.date_input("Data da Compra", value=date.today(), key="compra_data")
+                    nome_produto = st.text_input("Produto/Material Comprado", key="compra_nome")
+                    
+                with col2:
+                    quantidade = st.number_input("Quantidade", min_value=1, value=1, step=1, key="compra_qtd")
+                    valor_total_input = st.number_input("Valor Total (R$)", min_value=0.01, format="%.2f", value=10.00, key="compra_valor")
+                    
+                with col3:
+                    cor_selecionada = st.color_picker("Cor para Destaque", value="#007bff", key="compra_cor")
+                
+                # ADIÇÃO: URL da Foto
+                with col4:
+                    foto_url = st.text_input("URL da Foto do Produto (Opcional)", key="compra_foto_url")
+                    
+                
+                salvar_compra = st.form_submit_button("💾 Adicionar Compra", type="primary", use_container_width=True)
+
+                if salvar_compra:
+                    if not nome_produto or valor_total_input <= 0:
+                        st.error("Nome do produto e Valor Total são obrigatórios e devem ser válidos.")
+                    elif quantidade <= 0:
+                        st.error("A quantidade deve ser maior que zero.")
+                    else:
+                        nova_linha = {
+                            "Data": data.strftime('%Y-%m-%d'), # Formata para string para persistência
+                            "Produto": nome_produto.strip(),
+                            "Quantidade": int(quantidade),
+                            "Valor Total": float(valor_total_input),
+                            "Cor": cor_selecionada,
+                            "FotoURL": foto_url.strip(), # ADIÇÃO: FotoURL
+                        }
+                        
+                        # Concatena com o DF original da sessão
+                        df_novo = pd.concat([st.session_state.df_compras.iloc[:, :len(COLUNAS_COMPRAS)], pd.DataFrame([nova_linha])], ignore_index=True)
+                        st.session_state.df_compras = df_novo
+                        
+                        # Salva e recarrega
+                        if salvar_historico_no_github(st.session_state.df_compras, COMMIT_MESSAGE_COMPRAS):
+                            st.cache_data.clear()
+                            st.rerun()
+
+    # ==================================================
+    # 4. LISTA & FILTRO (Lógica original na Aba 3)
+    # ==================================================
+    with tab_lista_filtro:
         
-        # --- Lógica de Exclusão (Reflete a filtragem) ---
+        # --- Filtros de Busca (Produto e Data) ---
+        st.subheader("🔍 Filtro de Histórico")
+        
+        col_f1, col_f2 = st.columns([1, 2])
+        
+        # 1. Filtro de Produto
+        with col_f1:
+            filtro_produto = st.text_input("Filtrar por nome do Produto:", key="filtro_compra_produto_tab")
+        
+        # 2. Filtro de Data
+        with col_f2:
+            data_range_option = st.radio(
+                "Filtrar por Período:",
+                ["Todo o Histórico", "Personalizar Data"],
+                key="filtro_compra_data_opt_tab",
+                horizontal=True
+            )
+
+        df_filtrado = df_exibicao.copy()
+
+        if filtro_produto:
+            df_filtrado = df_filtrado[df_filtrado["Produto"].astype(str).str.contains(filtro_produto, case=False, na=False)]
+
+        if data_range_option == "Personalizar Data":
+            if not df_filtrado.empty:
+                min_date_val = df_filtrado['Data'].min() if pd.notna(df_filtrado['Data'].min()) else date.today()
+                max_date_val = df_filtrado['Data'].max() if pd.notna(df_filtrado['Data'].max()) else date.today()
+            else:
+                min_date_val = date.today()
+                max_date_val = date.today()
+                
+            col_date1, col_date2 = st.columns(2)
+            with col_date1:
+                data_ini = st.date_input("De:", value=min_date_val, key="filtro_compra_data_ini_tab")
+            with col_date2:
+                data_fim = st.date_input("Até:", value=max_date_val, key="filtro_compra_data_fim_tab")
+                
+            # Requer conversão de volta para date para comparação, mas o DF já está com objetos date
+            df_filtrado = df_filtrado[
+                (df_filtrado["Data"] >= data_ini) &
+                (df_filtrado["Data"] <= data_fim)
+            ]
+            
         st.markdown("---")
-        st.markdown("### 🗑️ Excluir Compra")
+        # --- Tabela de Exibição e Remoção ---
+        st.subheader("Lista de Compras Registradas (Filtrada)")
         
-        # Cria um dicionário de opções para o selectbox USANDO DADOS FILTRADOS (df_para_mostrar agora é usado)
-        opcoes_compra = {
-            f"ID {row['ID']} | {row['Data Formatada']} | {row['Produto']} | R$ {row['Valor Total']:,.2f}": row['original_index'] 
-            for index, row in df_para_mostrar.iterrows() # LINHA CORRIGIDA: Usa df_para_mostrar que contém 'Data Formatada'
-        }
-        opcoes_keys = list(opcoes_compra.keys())
-        
-        if opcoes_keys:
-            compra_selecionada_str = st.selectbox(
-                "Selecione a compra para exclusão (apenas itens filtrados):",
-                options=opcoes_keys,
-                index=0,
-                key="select_compra_delete",
+        if df_filtrado.empty:
+            st.info("Nenhuma compra encontrada com os filtros aplicados.")
+        else:
+            # CORREÇÃO: Criar a coluna 'Data Formatada' no DataFrame filtrado, antes de ser usada para a tabela e para as opções de exclusão.
+            df_filtrado['Data Formatada'] = df_filtrado['Data'].apply(lambda x: x.strftime('%d/%m/%Y') if pd.notna(x) else '')
+            
+            # Estilização condicional (usando CSS para cor de fundo)
+            def highlight_color_compras(row):
+                """Função para aplicar o destaque de cor na linha."""
+                # Cor está no formato hex (ex: #007bff)
+                color = row['Cor']
+                # Aplica a cor na linha toda com 30% de opacidade
+                return [f'background-color: {color}30' for col in row.index]
+            
+            # Prepara o DF para exibição
+            df_para_mostrar = df_filtrado.copy()
+            
+            # Estiliza e exibe
+            df_display_cols = ['ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'FotoURL', 'Cor', 'original_index']
+            df_styling = df_para_mostrar[df_display_cols].copy()
+            
+            styled_df = df_styling.style.apply(highlight_color_compras, axis=1)
+            # Oculta a coluna de cor e o índice original
+            styled_df = styled_df.hide(subset=['Cor', 'original_index'], axis=1)
+
+            # 4. Exibe o DataFrame estilizado
+            st.dataframe(
+                styled_df,
+                use_container_width=True,
+                column_config={
+                    "Data Formatada": st.column_config.TextColumn("Data da Compra"),
+                    "Valor Total": st.column_config.NumberColumn(
+                        "Valor Total (R$)",
+                        format="R$ %.2f",
+                    ),
+                    "FotoURL": st.column_config.TextColumn("URL da Foto", help="Link direto para a imagem do produto"),
+                },
+                column_order=('ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'FotoURL'), # Inclui FotoURL
+                height=400,
+                selection_mode='single-row', 
+                key='compras_table_styled'
             )
             
-            original_idx_selecionado = opcoes_compra.get(compra_selecionada_str)
             
-            if st.button(f"🗑️ Excluir permanentemente: {compra_selecionada_str}", type="primary", use_container_width=True):
-                # Exclui a linha do DF original da sessão (usando o índice original mapeado)
-                st.session_state.df_compras = st.session_state.df_compras.drop(original_idx_selecionado, errors='ignore')
+            # --- Lógica de Exclusão (Reflete a filtragem) ---
+            st.markdown("---")
+            st.markdown("### 🗑️ Excluir Compra")
+            
+            # Cria um dicionário de opções para o selectbox USANDO DADOS FILTRADOS (df_para_mostrar agora é usado)
+            opcoes_compra = {
+                f"ID {row['ID']} | {row['Data Formatada']} | {row['Produto']} | R$ {row['Valor Total']:,.2f}": row['original_index'] 
+                for index, row in df_para_mostrar.iterrows() # Usa df_para_mostrar que contém 'Data Formatada'
+            }
+            opcoes_keys = list(opcoes_compra.keys())
+            
+            if opcoes_keys:
+                compra_selecionada_str = st.selectbox(
+                    "Selecione a compra para exclusão (apenas itens filtrados):",
+                    options=opcoes_keys,
+                    index=0,
+                    key="select_compra_delete",
+                )
                 
-                if salvar_historico_no_github(st.session_state.df_compras, "Exclusão de item do histórico de compras"):
-                    st.cache_data.clear()
-                    st.rerun()
+                original_idx_selecionado = opcoes_compra.get(compra_selecionada_str)
+                
+                if st.button(f"🗑️ Excluir permanentemente: {compra_selecionada_str}", type="primary", use_container_width=True):
+                    # Exclui a linha do DF original da sessão (usando o índice original mapeado)
+                    st.session_state.df_compras = st.session_state.df_compras.drop(original_idx_selecionado, errors='ignore')
+                    
+                    if salvar_historico_no_github(st.session_state.df_compras, "Exclusão de item do histórico de compras"):
+                        st.cache_data.clear()
+                        st.rerun()
 
 # ==============================================================================
 # FUNÇÃO DA PÁGINA: LIVRO CAIXA COMPLETO (BASEADO EM ff.py)
