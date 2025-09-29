@@ -142,13 +142,17 @@ st.markdown("""
         font-weight: bold;
         font-size: 1.2em;
     }
-    .buy-button > button {
-        background-color: #E91E63; /* Cor Pink de Destaque */
+    /* CORREÇÃO: CSS para o botão em HTML */
+    .buy-button {
+        background-color: #E91E63;
         color: white;
         font-weight: bold;
         border-radius: 20px;
         border: none;
         padding: 8px 15px;
+        cursor: pointer;
+        width: 100%;
+        margin-top: 10px; /* Adiciona margem para separação */
     }
     
     /* --- Estilo da Seção de Ofertas (Fundo Rosa) --- */
@@ -184,12 +188,11 @@ st.markdown("""
     .product-wrapper {
         display: flex; /* FORÇA OS CARDS A FICAREM LADO A LADO */
         flex-direction: row;
-        justify-content: flex-start; /* Alinhamento ao início */
+        justify-content: flex-start; 
         gap: 15px;
         padding: 0 50px; 
-        /* Centralização Avançada (garante centralização quando o conteúdo é menor que a largura) */
         min-width: fit-content; 
-        margin: 0 auto; /* Centraliza o wrapper dentro do outer-container */
+        margin: 0 auto; 
     }
     
     /* Classe para controlar o tamanho das imagens de título */
@@ -680,6 +683,7 @@ def get_most_sold_products(df_movimentacoes):
     # 2. Desempacota o JSON de Produtos Vendidos
     for produtos_json in df_vendas["Produtos Vendidos"]:
         try:
+            # Usando json.loads e ast.literal_eval para tentar desserializar
             try:
                 produtos = json.loads(produtos_json)
             except json.JSONDecodeError:
@@ -718,7 +722,7 @@ def homepage():
     df_movimentacoes = carregar_livro_caixa()
     
     # Produtos novos (últimos N cadastrados com estoque > 0)
-    produtos_novos = produtos_df[produtos_df['Quantidade'] > 0].sort_values(by='ID', ascending=False).head(10) # Aumentei para 10 para testar o carrossel
+    produtos_novos = produtos_df[produtos_df['Quantidade'] > 0].sort_values(by='ID', ascending=False).head(10) 
     
     # Produtos mais vendidos (Top N)
     df_mais_vendidos_id = get_most_sold_products(df_movimentacoes)
@@ -771,7 +775,7 @@ def homepage():
             preco_exibido = preco_cartao
             foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/F48FB1/880E4F?text={row['Nome'].replace(' ', '+')}"
 
-            # Constrói o Card
+            # Constrói o Card (usando ASPAS DUPLAS internas para evitar conflito na f-string)
             html_cards += f'''
                 <div class="product-card">
                     <img src="{foto_url}" alt="{nome_produto}">
@@ -779,7 +783,7 @@ def homepage():
                     <p style="margin: 5px 0 15px;">
                         <span class="price-promo">R$ {preco_exibido:,.2f}</span>
                     </p>
-                    <button onclick="window.alert('Compra simulada: {nome_produto}')" style="width: 100%;" class="buy-button">COMPRAR</button>
+                    <button onclick="window.alert('Compra simulada: {nome_produto}')" class="buy-button">COMPRAR</button>
                     <p style="font-size: 0.7em; color: #888; margin-top: 5px;">Vendas: {int(vendas_count)}</p>
                 </div>
             '''
@@ -829,7 +833,7 @@ def homepage():
                         <span class="price-promo">R$ {preco_cartao_promo:,.2f}</span>
                     </p>
                     <p style="color: #E91E63; font-weight: bold; font-size: 0.8em; margin-top: 5px; margin-bottom: 10px;">{desconto_percent}% OFF</p>
-                    <button onclick="window.alert('Compra simulada: {nome_produto}')" style="width: 100%;" class="buy-button">COMPRAR</button>
+                    <button onclick="window.alert('Compra simulada: {nome_produto}')" class="buy-button">COMPRAR</button>
                 </div>
             '''
         
@@ -869,7 +873,7 @@ def homepage():
                     <p style="font-weight: bold; margin-top: 10px; height: 30px; white-space: normal;">{row['Nome']} ({row['Marca']})</p>
                     <p style="font-size: 0.9em;">✨ Estoque: {row['Quantidade']}</p>
                     <p style="font-weight: bold; color: #E91E63; margin-top: 5px;">💸 {descricao}</p>
-                    <button onclick="window.alert('Compra simulada: {row['Nome']}')" style="width: 100%; margin-top: 10px;" class="buy-button">COMPRAR</button>
+                    <button onclick="window.alert('Compra simulada: {row['Nome']}')" class="buy-button">COMPRAR</button>
                 </div>
             '''
         
@@ -2712,7 +2716,7 @@ def livro_caixa():
                 st.markdown("##### ✅ Concluir Dívida Pendente")
                 
                 opcoes_pendentes = {
-                    f"ID {row['ID Visível']} | {row['Tipo']} | R$ {row['Valor'] if row['Tipo'] == 'Entrada' else abs(row['Valor']):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%m') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
+                    f"ID {row['ID Visível']} | {row['Tipo']} | R$ {row['Valor'] if row['Tipo'] == 'Entrada' else abs(row['Valor']):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
                     for index, row in df_pendentes_ordenado.iterrows()
                 }
                 opcoes_keys = [""] + list(opcoes_pendentes.keys())
