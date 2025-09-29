@@ -25,10 +25,9 @@ st.set_page_config(
 )
 
 # Caminho para o logo carregado. 
-# CORREÇÃO: Voltamos para uma URL de placeholder para evitar o MediaFileStorageError
-# em ambientes que não montam o asset de forma padrão.
+# CORREÇÃO: Utiliza URL pública fornecida pelo usuário para maior estabilidade.
 LOGO_DOCEBELLA_FILENAME = "logo_docebella.jpg"
-LOGO_DOCEBELLA_URL = "https://placehold.co/150x50/F0F8FF/E91E63?text=Doce%26Bella"
+LOGO_DOCEBELLA_URL = "https://i.imgur.com/7b4E4rJ.jpg"
 
 
 # Adiciona CSS para simular a navegação no topo e o tema pink/magenta
@@ -2853,5 +2852,6 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
 
 
