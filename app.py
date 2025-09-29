@@ -790,9 +790,15 @@ def gestao_promocoes():
         try:
             items = ast.literal_eval(produtos_json)
             for item in items:
-                vendas_list.append({"Data": vendas[vendas["Produtos Vendidos"] == produtos_json]["Data"].iloc[0], "IDProduto": str(item.get("Produto_ID"))})
+                # O valor da coluna "Data" no Livro Caixa é um objeto date (string formatada em YYYY-MM-DD),
+                # precisamos garantir que ele se torne um objeto date/datetime aqui.
+                vendas_list.append({
+                    "Data": parse_date_yyyy_mm_dd(vendas[vendas["Produtos Vendidos"] == produtos_json]["Data"].iloc[0]), 
+                    "IDProduto": str(item.get("Produto_ID"))
+                })
         except:
             continue
+            
     vendas_flat = pd.DataFrame(vendas_list).dropna(subset=["IDProduto"])
     
 
@@ -855,8 +861,8 @@ def gestao_promocoes():
     )
 
     if not vendas_flat.empty:
-        # Garante que a coluna de data seja convertida para date/datetime antes de agrupar
-        vendas_flat["Data"] = pd.to_datetime(vendas_flat["Data"], errors="coerce").dt.date
+        # Garante que a coluna de data seja pd.Series de datetime para o max() funcionar
+        vendas_flat["Data"] = pd.to_datetime(vendas_flat["Data"], errors="coerce")
         ultima_venda = vendas_flat.groupby("IDProduto")["Data"].max().reset_index()
         ultima_venda.columns = ["IDProduto", "UltimaVenda"]
     else:
@@ -864,18 +870,21 @@ def gestao_promocoes():
 
     produtos_parados = produtos.merge(ultima_venda, left_on="ID", right_on="IDProduto", how="left")
     
-    # CORREÇÃO: Converte explicitamente UltimaVenda para tipo date (ou NaT) e depois para date
-    produtos_parados["UltimaVenda"] = pd.to_datetime(produtos_parados["UltimaVenda"], errors='coerce').dt.date
-
-    limite = date.today() - timedelta(days=int(dias_sem_venda))
+    # CORREÇÃO CRÍTICA: Converte UltimaVenda para datetime para comparação,
+    # caso contrário a comparação entre dtype=datetime64[ns] (merge default) e date (limite) falha.
+    produtos_parados["UltimaVenda"] = pd.to_datetime(produtos_parados["UltimaVenda"], errors='coerce')
     
+    limite_dt = datetime.combine(date.today() - timedelta(days=int(dias_sem_venda)), datetime.min.time())
+
     # Filtra produtos com estoque e que a última venda foi antes do limite (ou nunca vendeu)
-    # Garante que a comparação seja feita apenas com objetos date ou pd.NaT.
     produtos_parados_sugeridos = produtos_parados[
         (produtos_parados["Quantidade"] > 0) &
-        # Verifica se é nulo (nunca vendeu) OU se a data é anterior ao limite
-        (produtos_parados["UltimaVenda"].isna() | (produtos_parados["UltimaVenda"] < limite))
+        # Compara a Série de Timestamps (UltimaVenda) com o Timestamp do limite_dt
+        (produtos_parados["UltimaVenda"].isna() | (produtos_parados["UltimaVenda"] < limite_dt))
     ].copy()
+    
+    # Prepara para exibição
+    produtos_parados_sugeridos['UltimaVenda'] = produtos_parados_sugeridos['UltimaVenda'].dt.date.fillna(pd.NaT) # Converte de volta para date para exibição
 
     if produtos_parados_sugeridos.empty:
         st.info("Nenhum produto parado encontrado com estoque e fora de promoção.")
