@@ -605,7 +605,6 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             st.session_state.cad_preco_vista = "0,00"
             st.session_state.cad_validade = date.today()
             st.session_state.cad_foto_url = ""
-            st.session_state.cad_cb = ""
             if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
             return True
         return False
@@ -2700,11 +2699,11 @@ def main():
             <img src="{LOGO_DOCEBELLA_URL}" alt="Doce&Bella Logo" style="height: 50px; margin-left: 20px; border-radius: 5px;">
             <div class="nav-button-group">
                 <!-- Links de navegação serão simulados por estados de sessão -->
-                <button onclick="window.parent.postMessage('{"page": "home"}', '*')" style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">HOME</button>
-                <button onclick="window.parent.postMessage('{"page": "livro_caixa"}', '*')" style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">LIVRO CAIXA</button>
-                <button onclick="window.parent.postMessage('{"page": "produtos"}', '*')" style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">ESTOQUE/PRODUTOS</button>
-                <button onclick="window.parent.postMessage('{"page": "compras"}', '*')" style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">HISTÓRICO COMPRAS</button>
-                <button onclick="window.parent.postMessage('{"page": "promocoes"}', '*')" style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">PROMOÇÕES</button>
+                <button onclick='window.parent.postMessage({{"page": "home"}}, "*")' style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">HOME</button>
+                <button onclick='window.parent.postMessage({{"page": "livro_caixa"}}, "*")' style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">LIVRO CAIXA</button>
+                <button onclick='window.parent.postMessage({{"page": "produtos"}}, "*")' style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">ESTOQUE/PRODUTOS</button>
+                <button onclick='window.parent.postMessage({{"page": "compras"}}, "*")' style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">HISTÓRICO COMPRAS</button>
+                <button onclick='window.parent.postMessage({{"page": "promocoes"}}, "*")' style="background-color: transparent; border: none; color: white; font-weight: bold; cursor: pointer;">PROMOÇÕES</button>
             </div>
         </div>
     ''', unsafe_allow_html=True)
