@@ -2156,7 +2156,9 @@ def livro_caixa():
                     
                     # Tenta encontrar a opção do produto pelo código de barras lido
                     index_selecionado = 0
-                    if st.session_state.cb_lido_livro_ca:
+                    
+                    # CORREÇÃO CRÍTICA: Acesso a st.session_state.cb_lido_livro_caixa
+                    if st.session_state.cb_lido_livro_caixa: 
                         opcao_encontrada = encontrar_opcao_por_cb(st.session_state.cb_lido_livro_caixa, produtos_para_venda, opcoes_produtos)
                         if opcao_encontrada:
                             index_selecionado = opcoes_produtos.index(opcao_encontrada)
@@ -2165,8 +2167,9 @@ def livro_caixa():
                             st.warning(f"Código '{st.session_state.cb_lido_livro_caixa}' lido, mas nenhum produto com esse CB encontrado no estoque.")
                             # Limpa o CB lido para não atrapalhar buscas futuras
                             st.session_state.cb_lido_livro_caixa = ""
+                    # FIM DA CORREÇÃO
 
-
+                    
                     st.markdown("---")
                     produto_selecionado = st.selectbox(
                         "Selecione o Produto (ID | Nome)", 
