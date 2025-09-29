@@ -114,6 +114,13 @@ URL_PRODUTOS = URL_BASE_REPOS + ARQ_PRODUTOS
 ARQ_LOCAL = "livro_caixa.csv"
 PATH_DIVIDAS = CSV_PATH # Caminho do livro caixa
 
+# >>> INÍCIO ADIÇÃO: CONSTANTES DO HISTÓRICO DE COMPRAS <<<
+ARQ_COMPRAS = "historico_compras.csv" # Novo arquivo para o histórico
+COMMIT_MESSAGE_COMPRAS = "Atualiza histórico de compras via Streamlit"
+COLUNAS_COMPRAS = ["Data", "Produto", "Quantidade", "Valor Total", "Cor"] # Colunas padrão para o histórico
+# >>> FIM ADIÇÃO: CONSTANTES DO HISTÓRICO DE COMPRAS <<<
+
+
 # Mensagens de Commit (do ff.py)
 COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit (com produtos/categorias)"
 COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa"
@@ -184,6 +191,68 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
         return df
     except Exception:
         return None
+
+# ========================================================
+# FUNÇÕES DE PERSISTÊNCIA: HISTÓRICO DE COMPRAS (ADIÇÃO)
+# ========================================================
+
+@st.cache_data(show_spinner="Carregando histórico de compras...")
+def carregar_historico_compras():
+    """Orquestra o carregamento do Histórico de Compras."""
+    df = None
+    
+    # 1. Tenta carregar do GitHub
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_COMPRAS}"
+    df = load_csv_github(url_raw)
+
+    if df is None or df.empty:
+        # 2. Fallback para DF vazio
+        df = pd.DataFrame(columns=COLUNAS_COMPRAS)
+
+    # Garante que as colunas padrão existam
+    for col in COLUNAS_COMPRAS:
+        if col not in df.columns:
+            df[col] = "" 
+            
+    return df[COLUNAS_COMPRAS] # Retorna apenas as colunas necessárias
+
+def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
+    """Salva o DataFrame CSV de Histórico de Compras no GitHub e localmente."""
+    
+    # 1. Backup local (Tenta salvar, ignora se falhar)
+    try:
+        df.to_csv(ARQ_COMPRAS.replace(".csv", "_local.csv"), index=False)
+    except Exception:
+        pass
+
+    df_temp = df.copy()
+    
+    try:
+        g = Github(TOKEN)
+        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
+        csv_string = df_temp.to_csv(index=False)
+
+        try:
+            # Tenta obter o SHA do conteúdo atual
+            contents = repo.get_contents(ARQ_COMPRAS, ref=BRANCH)
+            # Atualiza o arquivo
+            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
+            st.success("📁 Histórico de Compras salvo (atualizado) no GitHub!")
+        except Exception:
+            # Cria o arquivo 
+            repo.create_file(ARQ_COMPRAS, commit_message, csv_string, branch=BRANCH)
+            st.success("📁 Histórico de Compras salvo (criado) no GitHub!")
+
+        return True
+
+    except Exception as e:
+        st.error(f"❌ Erro ao salvar no GitHub: {e}")
+        st.error("Verifique se seu 'GITHUB_TOKEN' tem permissões e se o repositório existe.")
+        return False
+# ========================================================
+# FIM DAS FUNÇÕES DE PERSISTÊNCIA: HISTÓRICO DE COMPRAS
+# ========================================================
+
 
 @st.cache_data(show_spinner="Carregando dados...")
 def carregar_livro_caixa():
@@ -944,10 +1013,10 @@ def gestao_produtos():
 
                                 if c_var[6].button("🗑️", key=f"del_filho_{index_var}_{eid_var}", help="Excluir variação"):
                                     products = produtos[produtos["ID"] != str(eid_var)]
-                                    st.session_state["produtos"] = produtos
+                                    st.session_state["produtos"] = products
                                     
                                     nome_var = str(var.get('Nome', 'Variação Desconhecida'))
-                                    if salvar_produtos_no_github(produtos, f"Exclusão da variação {nome_var}"):
+                                    if salvar_produtos_no_github(products, f"Exclusão da variação {nome_var}"):
                                         inicializar_produtos.clear() 
                                     st.rerun()
 
@@ -1024,6 +1093,151 @@ def gestao_produtos():
                         if st.button("❌ Cancelar", key=f"cancel_{eid}", use_container_width=True, help="Cancelar Edição"):
                             del st.session_state["edit_prod"]
                             st.rerun()
+
+
+# ==============================================================================
+# FUNÇÃO DA PÁGINA: HISTÓRICO DE COMPRAS (NOVA ADIÇÃO)
+# ==============================================================================
+
+def historico_compras():
+    st.title("🛒 Histórico de Compras do Mês")
+    st.info("Utilize esta página para registrar produtos (insumos, materiais, estoque) comprados durante o mês. Estes dados são **separados** da Gestão de Produtos e do Livro Caixa.")
+
+    # --- Inicialização e Carregamento ---
+    if "df_compras" not in st.session_state:
+        st.session_state.df_compras = carregar_historico_compras()
+
+    df_compras = st.session_state.df_compras.copy()
+    
+    # Processamento para exibição e persistência interna (simplificado)
+    if not df_compras.empty:
+        # Tenta converter para tipos, se for string vazia, retorna None/0
+        df_compras['Data'] = pd.to_datetime(df_compras['Data'], errors='coerce').dt.date
+        df_compras['Quantidade'] = pd.to_numeric(df_compras['Quantidade'], errors='coerce').fillna(0).astype(int)
+        df_compras['Valor Total'] = pd.to_numeric(df_compras['Valor Total'], errors='coerce').fillna(0.0)
+        
+    # Prepara o DF para manipulação de índice (exibição e remoção)
+    df_exibicao = df_compras.sort_values(by='Data', ascending=False).reset_index(drop=False)
+    df_exibicao.rename(columns={'index': 'original_index'}, inplace=True)
+    df_exibicao.insert(0, 'ID', df_exibicao.index + 1)
+    
+    
+    # --- Formulário de Cadastro ---
+    with st.expander("➕ Registrar Nova Compra", expanded=True):
+        with st.form("form_nova_compra", clear_on_submit=True):
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                data = st.date_input("Data da Compra", value=date.today(), key="compra_data")
+                nome_produto = st.text_input("Produto/Material Comprado", key="compra_nome")
+                
+            with col2:
+                quantidade = st.number_input("Quantidade", min_value=1, value=1, step=1, key="compra_qtd")
+                valor_total_input = st.number_input("Valor Total (R$)", min_value=0.01, format="%.2f", value=10.00, key="compra_valor")
+                
+            with col3:
+                cor_selecionada = st.color_picker("Cor para Destaque", value="#007bff", key="compra_cor")
+                
+            
+            salvar_compra = st.form_submit_button("💾 Adicionar Compra", type="primary", use_container_width=True)
+
+            if salvar_compra:
+                if not nome_produto or valor_total_input <= 0:
+                    st.error("Nome do produto e Valor Total são obrigatórios e devem ser válidos.")
+                elif quantidade <= 0:
+                    st.error("A quantidade deve ser maior que zero.")
+                else:
+                    nova_linha = {
+                        "Data": data.strftime('%Y-%m-%d'), # Formata para string para persistência
+                        "Produto": nome_produto.strip(),
+                        "Quantidade": int(quantidade),
+                        "Valor Total": float(valor_total_input),
+                        "Cor": cor_selecionada,
+                    }
+                    
+                    # Concatena com o DF original da sessão
+                    df_novo = pd.concat([st.session_state.df_compras.iloc[:, :len(COLUNAS_COMPRAS)], pd.DataFrame([nova_linha])], ignore_index=True)
+                    st.session_state.df_compras = df_novo
+                    
+                    # Salva e recarrega
+                    if salvar_historico_no_github(st.session_state.df_compras, COMMIT_MESSAGE_COMPRAS):
+                        st.cache_data.clear()
+                        st.rerun()
+
+
+    # --- Tabela de Exibição e Remoção ---
+    st.markdown("---")
+    st.subheader("Lista de Compras Registradas")
+    
+    if df_exibicao.empty:
+        st.info("Nenhuma compra registrada ainda.")
+    else:
+        # Estilização condicional (usando CSS para cor de fundo)
+        def highlight_color_compras(row):
+            """Função para aplicar o destaque de cor na linha."""
+            # Cor está no formato hex (ex: #007bff)
+            color = row['Cor']
+            # Aplica a cor na linha toda com 30% de opacidade
+            return [f'background-color: {color}30' for col in row.index]
+        
+        # Prepara o DF para exibição
+        df_para_mostrar = df_exibicao.copy()
+        
+        # Cria uma coluna de data formatada para a UI (mas mantém a data original para a função de destaque)
+        df_para_mostrar['Data Formatada'] = df_para_mostrar['Data'].apply(lambda x: x.strftime('%d/%m/%Y') if pd.notna(x) else '')
+        
+        # Estiliza e exibe
+        styled_df = df_para_mostrar[['ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'Cor', 'original_index']].style.apply(highlight_color_compras, axis=1)
+        # Oculta a coluna de cor e o índice original
+        styled_df = styled_df.hide(subset=['Cor', 'original_index'], axis=1)
+
+        # 4. Exibe o DataFrame estilizado
+        st.dataframe(
+            styled_df,
+            use_container_width=True,
+            column_config={
+                "Data Formatada": st.column_config.TextColumn("Data da Compra"),
+                "Valor Total": st.column_config.NumberColumn(
+                    "Valor Total (R$)",
+                    format="R$ %.2f",
+                ),
+            },
+            column_order=('ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total'),
+            height=400,
+            selection_mode='single-row', 
+            key='compras_table_styled'
+        )
+        
+        
+        # --- Lógica de Exclusão ---
+        st.markdown("---")
+        st.markdown("### 🗑️ Excluir Compra")
+        
+        # Cria um dicionário de opções para o selectbox
+        opcoes_compra = {
+            f"ID {row['ID']} | {row['Data Formatada']} | {row['Produto']} | R$ {row['Valor Total']:,.2f}": row['original_index'] 
+            for index, row in df_exibicao.iterrows()
+        }
+        opcoes_keys = list(opcoes_compra.keys())
+        
+        if opcoes_keys:
+            compra_selecionada_str = st.selectbox(
+                "Selecione a compra para exclusão:",
+                options=opcoes_keys,
+                index=0,
+                key="select_compra_delete",
+            )
+            
+            original_idx_selecionado = opcoes_compra.get(compra_selecionada_str)
+            
+            if st.button(f"🗑️ Excluir permanentemente: {compra_selecionada_str}", type="primary", use_container_width=True):
+                # Exclui a linha do DF original da sessão
+                st.session_state.df_compras = st.session_state.df_compras.drop(original_idx_selecionado, errors='ignore')
+                
+                if salvar_historico_no_github(st.session_state.df_compras, "Exclusão de item do histórico de compras"):
+                    st.cache_data.clear()
+                    st.rerun()
 
 # ==============================================================================
 # FUNÇÃO DA PÁGINA: LIVRO CAIXA COMPLETO (BASEADO EM ff.py)
@@ -2256,7 +2470,7 @@ if "produtos_papelaria" in st.session_state: del st.session_state["produtos_pape
 
 main_tab_select = st.sidebar.radio(
     "Escolha a página:",
-    ["Livro Caixa", "Produtos"],
+    ["Livro Caixa", "Produtos", "Histórico de Compras"], # ADIÇÃO: Nova opção no menu
     key='main_page_select_widget'
 )
 
@@ -2264,3 +2478,5 @@ if main_tab_select == "Livro Caixa":
     livro_caixa()
 elif main_tab_select == "Produtos":
     gestao_produtos()
+elif main_tab_select == "Histórico de Compras": # ADIÇÃO: Roteamento para a nova página
+    historico_compras()
