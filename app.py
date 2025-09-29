@@ -248,11 +248,13 @@ def ler_codigo_barras_api(image_bytes):
                 if codigo and not codigo.startswith("Erro na decodificação"):
                     codigos.append(codigo)
 
-        if 'streamlit' in globals():
-            st.write("Debug API ZXing:", codigos)
+        # Retirado o st.write de debug para produção
+        # if 'streamlit' in globals():
+        #     st.write("Debug API ZXing:", codigos)
 
         if not codigos and 'streamlit' in globals():
-            st.warning("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
+            # Alterado para toast para menos intrusão, caso a leitura falhe
+            st.toast("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
 
         return codigos
 
@@ -705,7 +707,6 @@ def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_di
         st.session_state.input_produto_selecionado = ""
     else:
         st.warning("A quantidade excede o estoque ou é inválida.")
-
 
 # ==============================================================================
 # FUNÇÕES AUXILIARES PARA HOME E ANÁLISE DE PRODUTOS
@@ -1989,6 +1990,9 @@ def livro_caixa():
     if "lista_produtos" not in st.session_state: st.session_state.lista_produtos = []
     if "edit_id" not in st.session_state: st.session_state.edit_id = None
     if "operacao_selecionada" not in st.session_state: st.session_state.operacao_selecionada = "Editar" 
+    # Adiciona variável de estado para o código de barras lido no Livro Caixa
+    if "cb_lido_livro_caixa" not in st.session_state: st.session_state.cb_lido_livro_caixa = ""
+
 
     df_dividas = st.session_state.df
     df_exibicao = processar_dataframe(df_dividas)
@@ -2002,6 +2006,23 @@ def livro_caixa():
 
     def extrair_id_do_nome(opcoes_str):
         if ' | ' in opcoes_str: return opcoes_str.split(' | ')[0]
+        return None
+    
+    # Função auxiliar para encontrar a opção de produto pelo Código de Barras
+    def encontrar_opcao_por_cb(codigo_barras, produtos_df, opcoes_produtos_list):
+        if not codigo_barras: return None
+        
+        # Encontra o produto no DataFrame pelo código de barras
+        produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
+        
+        if not produto_encontrado.empty:
+            # Pega o primeiro ID encontrado (o CB deve ser único)
+            produto_id = produto_encontrado.iloc[0]["ID"]
+            
+            # Encontra a string completa no selectbox options (ID | Nome | Estoque)
+            for opcao in opcoes_produtos_list:
+                if opcao.startswith(f"{produto_id} |"):
+                    return opcao
         return None
         
     if "input_nome_prod_manual" not in st.session_state: st.session_state.input_nome_prod_manual = ""
@@ -2059,6 +2080,7 @@ def livro_caixa():
             elif default_tipo == "Saída":
                 st.session_state.lista_produtos = []
             
+            st.session_state.cb_lido_livro_caixa = "" # Limpa o código de barras lido ao entrar em modo edição
             st.sidebar.warning(f"Modo EDIÇÃO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
             
         else:
@@ -2109,13 +2131,55 @@ def livro_caixa():
                     else:
                         st.info("Lista de produtos vazia.")
 
+                    # --- NOVO: Upload de imagem para leitura do Código de Barras ---
+                    st.markdown("---")
+                    
+                    foto_cb_upload_caixa = st.file_uploader(
+                        "📤 Upload de imagem do código de barras", 
+                        type=["png", "jpg", "jpeg"], 
+                        key="cb_upload_caixa"
+                    )
+                    
+                    if foto_cb_upload_caixa is not None:
+                        # Processa a imagem e tenta ler o código
+                        imagem_bytes = foto_cb_upload_caixa.getvalue() 
+                        codigos_lidos = ler_codigo_barras_api(imagem_bytes)
+                        
+                        if codigos_lidos:
+                            # Se um código foi lido, salva na sessão
+                            st.session_state.cb_lido_livro_caixa = codigos_lidos[0]
+                            st.toast(f"Código de barras lido: {codigos_lidos[0]}")
+                            # Nota: Não forçamos o st.rerun() aqui, a leitura será usada no selectbox abaixo
+                        else:
+                            st.session_state.cb_lido_livro_caixa = ""
+                            st.error("❌ Não foi possível ler nenhum código na imagem enviada.")
+                    
+                    # Tenta encontrar a opção do produto pelo código de barras lido
+                    index_selecionado = 0
+                    if st.session_state.cb_lido_livro_ca:
+                        opcao_encontrada = encontrar_opcao_por_cb(st.session_state.cb_lido_livro_caixa, produtos_para_venda, opcoes_produtos)
+                        if opcao_encontrada:
+                            index_selecionado = opcoes_produtos.index(opcao_encontrada)
+                            st.toast(f"Produto correspondente ao CB encontrado! Selecionado: {opcao_encontrada}")
+                        else:
+                            st.warning(f"Código '{st.session_state.cb_lido_livro_caixa}' lido, mas nenhum produto com esse CB encontrado no estoque.")
+                            # Limpa o CB lido para não atrapalhar buscas futuras
+                            st.session_state.cb_lido_livro_caixa = ""
+
+
+                    st.markdown("---")
                     produto_selecionado = st.selectbox(
                         "Selecione o Produto (ID | Nome)", 
                         opcoes_produtos, 
                         key="input_produto_selecionado",
-                        index=opcoes_produtos.index(st.session_state.input_produto_selecionado) if st.session_state.input_produto_selecionado in opcoes_produtos else 0
+                        # Usa o index calculado, se houver, ou o valor anterior da sessão, ou 0
+                        index=index_selecionado if index_selecionado != 0 else (opcoes_produtos.index(st.session_state.input_produto_selecionado) if st.session_state.input_produto_selecionado in opcoes_produtos else 0)
                     )
                     
+                    # Garante que o estado de CB lido seja limpo se o usuário selecionar manualmente outra opção
+                    if produto_selecionado != opcoes_produtos[index_selecionado]:
+                         st.session_state.cb_lido_livro_caixa = ""
+
                     
                     if produto_selecionado == OPCAO_MANUAL:
                         nome_produto_manual = st.text_input(
@@ -2321,7 +2385,7 @@ def livro_caixa():
             else:
                 data_pagamento_final = None
         
-        elif status_selecionado == "Pendente" and is_recorrente and not edit_mode:
+        elif status_selecionado == "Pendente" and is_recorrente:
             data_pagamento_final = data_primeira_parcela
             st.markdown(f"##### 🗓️ 1ª Parcela Vence em: **{data_pagamento_final.strftime('%d/%m/%Y')}**")
 
@@ -2866,10 +2930,3 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
-
-
-
-
-
-
-
