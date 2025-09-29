@@ -471,6 +471,106 @@ def salvar_produtos_no_github(dataframe, commit_message):
 def save_data_github_produtos(df, path, commit_message):
     return False 
 
+def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações):
+    if not nome:
+        st.error("O nome do produto é obrigatório.")
+        return False
+        
+    def add_product_row(df, p_id, p_nome, p_marca, p_categoria, p_qtd, p_custo, p_vista, p_cartao, p_validade, p_foto, p_cb, p_pai_id=None):
+        novo_id = prox_id(df, "ID")
+        
+        novo = {
+            "ID": novo_id,
+            "Nome": p_nome.strip(),
+            "Marca": p_marca.strip(),
+            "Categoria": p_categoria.strip(),
+            "Quantidade": int(p_qtd),
+            "PrecoCusto": to_float(p_custo),
+            "PrecoVista": to_float(p_vista),
+            "PrecoCartao": to_float(p_cartao),
+            "Validade": str(p_validade),
+            "FotoURL": p_foto.strip(),
+            "CodigoBarras": str(p_cb).strip(),
+            "PaiID": str(p_pai_id).strip() if p_pai_id else ""
+        }
+        return pd.concat([df, pd.DataFrame([novo])], ignore_index=True), novo_id
+    
+    if tipo_produto == "Produto simples":
+        produtos, new_id = add_product_row(
+            produtos,
+            None,
+            nome, marca, categoria,
+            qtd, preco_custo, preco_vista, 
+            round(to_float(preco_vista) / FATOR_CARTAO, 2) if to_float(preco_vista) > 0 else 0.0,
+            validade, foto_url, codigo_barras
+        )
+        if save_csv_github(produtos, ARQ_PRODUTOS, f"Novo produto simples: {nome} (ID {new_id})"):
+            st.session_state.produtos = produtos
+            inicializar_produtos.clear()
+            st.success(f"Produto '{nome}' cadastrado com sucesso!")
+            # Limpa campos do formulário simples
+            st.session_state.cad_nome = ""
+            st.session_state.cad_marca = ""
+            st.session_state.cad_categoria = ""
+            st.session_state.cad_qtd = 0
+            st.session_state.cad_preco_custo = "0,00"
+            st.session_state.cad_preco_vista = "0,00"
+            st.session_state.cad_validade = date.today()
+            st.session_state.cad_foto_url = ""
+            st.session_state.cad_cb = ""
+            if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
+            return True
+        return False
+    
+    elif tipo_produto == "Produto com variações (grade)":
+        
+        # 1. Cria o Produto Pai (sem estoque)
+        produtos, pai_id = add_product_row(
+            produtos,
+            None,
+            nome, marca, categoria,
+            0, 0.0, 0.0, 0.0,
+            validade, foto_url, codigo_barras,
+            p_pai_id=None # Este é o pai
+        )
+        
+        # 2. Cria as Variações (Filhos)
+        cont_variacoes = 0
+        for var in variações:
+            if var["Nome"] and var["Quantidade"] > 0:
+                produtos, _ = add_product_row(
+                    produtos,
+                    None,
+                    f"{nome} ({var['Nome']})", marca, categoria,
+                    var["Quantidade"], var["PrecoCusto"], var["PrecoVista"], var["PrecoCartao"],
+                    validade, foto_url, var["CodigoBarras"],
+                    p_pai_id=pai_id # Referência ao Pai
+                )
+                cont_variacoes += 1
+                
+        if cont_variacoes > 0:
+            if save_csv_github(produtos, ARQ_PRODUTOS, f"Novo produto com grade: {nome} ({cont_variacoes} variações)"):
+                st.session_state.produtos = produtos
+                inicializar_produtos.clear()
+                st.success(f"Produto '{nome}' com {cont_variacoes} variações cadastrado com sucesso!")
+                # Limpa campos do formulário complexo
+                st.session_state.cad_nome = ""
+                st.session_state.cad_marca = ""
+                st.session_state.cad_categoria = ""
+                st.session_state.cad_validade = date.today()
+                st.session_state.cad_foto_url = ""
+                if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
+                st.session_state.cb_grade_lidos = {}
+                return True
+            return False
+        else:
+            # Se não adicionou variações, exclui o pai criado (ou avisa)
+            produtos = produtos[produtos["ID"] != pai_id]
+            st.session_state.produtos = produtos
+            st.error("Nenhuma variação válida foi fornecida. O produto principal não foi salvo.")
+            return False
+    return False
+
 def callback_adicionar_manual(nome, qtd, preco, custo):
     if nome and qtd > 0:
         st.session_state.lista_produtos.append({
@@ -951,10 +1051,15 @@ def gestao_promocoes():
     if produtos_validade_sugeridos.empty:
         st.info("Nenhum produto com estoque e próximo da validade encontrado.")
     else:
-        # Calcula dias restantes usando a coluna Validade (que está em formato date)
-        produtos_validade_sugeridos['Dias Restantes'] = produtos_validade_sugeridos['Validade'].apply(
-            lambda x: (x - date.today()).days if x is not None and pd.notna(x) else float('inf')
-        )
+        # CORREÇÃO AQUI: Garante que a coluna Validade seja um objeto date (como foi inicializada)
+        # e que a subtração só ocorra se não for nulo, usando um tratamento try/except mais robusto.
+        def calcular_dias_restantes(x):
+            if pd.notna(x) and isinstance(x, date):
+                return (x - date.today()).days
+            return float('inf')
+
+        produtos_validade_sugeridos['Dias Restantes'] = produtos_validade_sugeridos['Validade'].apply(calcular_dias_restantes)
+        
         st.dataframe(
             produtos_validade_sugeridos[["ID", "Nome", "Quantidade", "Validade", "Dias Restantes"]].sort_values("Dias Restantes"), 
             use_container_width=True, hide_index=True
