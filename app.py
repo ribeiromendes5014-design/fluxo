@@ -182,12 +182,14 @@ st.markdown("""
     
     /* Wrapper interno que força o alinhamento horizontal e permite centralização */
     .product-wrapper {
-        display: flex; /* Força os cards a ficarem lado a lado */
+        display: flex; /* FORÇA OS CARDS A FICAREM LADO A LADO */
         flex-direction: row;
+        justify-content: flex-start; /* Alinhamento ao início */
         gap: 15px;
-        padding: 0 50px; /* Adiciona padding nas laterais */
-        justify-content: center; /* Centraliza o conteúdo (cards) quando há espaço */
-        width: fit-content; /* Permite que o flex container se estenda para forçar o scroll */
+        padding: 0 50px; 
+        /* Centralização Avançada (garante centralização quando o conteúdo é menor que a largura) */
+        min-width: fit-content; 
+        margin: 0 auto; /* Centraliza o wrapper dentro do outer-container */
     }
     
     /* Classe para controlar o tamanho das imagens de título */
