@@ -660,7 +660,6 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             st.session_state.cad_preco_vista = "0,00"
             st.session_state.cad_validade = date.today()
             st.session_state.cad_foto_url = ""
-            st.session_state.cad_cb = ""
             if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
             return True
         return False
@@ -930,7 +929,7 @@ def homepage():
             </div>
         ''', unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)  # Fecha offer-section
+    st.markdown('</div>', unsafe_allow_html=True)  # Feche offer-section
     st.markdown("---")
 
     # ==================================================
@@ -1061,6 +1060,7 @@ def gestao_promocoes():
                             "DataFim": str(data_fim),
                         }
                         st.session_state.promocoes = pd.concat([promocoes_df, pd.DataFrame([novo])], ignore_index=True)
+
                         if save_csv_github(st.session_state.promocoes, ARQ_PROMOCOES, "Atualizando promoções"):
                             carregar_promocoes.clear()
                             st.success("Promoção cadastrada!")
@@ -2642,7 +2642,8 @@ def livro_caixa():
         ]
 
         contas_a_receber_vencidas = df_vencidas[df_vencidas["Tipo"] == "Entrada"]["Valor"].abs().sum()
-        contas_a_pagar_vencidas = df_vencidas[df_vendas["Tipo"] == "Saída"]["Valor"].abs().sum()
+        # CORREÇÃO: df_vendas não existe, deve ser df_vencidas
+        contas_a_pagar_vencidas = df_vencidas[df_vencidas["Tipo"] == "Saída"]["Valor"].abs().sum()
         
         num_receber = df_vencidas[df_vencidas["Tipo"] == "Entrada"].shape[0]
         num_pagar = df_vencidas[df_vencidas["Tipo"] == "Saída"].shape[0] 
