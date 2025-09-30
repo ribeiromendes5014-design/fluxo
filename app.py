@@ -2045,8 +2045,7 @@ def livro_caixa():
 
     produtos = inicializar_produtos() 
 
-    # 🚨 INICIALIZAÇÃO CORRETA: O carregar_livro_caixa() JÁ LIMPA O CACHE
-    # SE O salvamento foi bem sucedido.
+    # 🚨 PONTO DE RECARGA CRÍTICO: Se `st.session_state.df` for limpo na sessão anterior, ele recarrega.
     if "df" not in st.session_state: 
         st.session_state.df = carregar_livro_caixa()
         
@@ -2596,10 +2595,13 @@ def livro_caixa():
                             st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
                             commit_msg = COMMIT_MESSAGE
                     
-                    # CORREÇÃO CRÍTICA: CHAMADA REAL DE SALVAMENTO (agora limpa o cache)
+                    # CORREÇÃO CRÍTICA: CHAMADA REAL DE SALVAMENTO
                     if salvar_dados_no_github(st.session_state.df, commit_msg):
                         st.session_state.edit_id = None
                         st.session_state.lista_produtos = [] 
+                        # 🚨 NOVA CORREÇÃO: Limpa explicitamente o DataFrame da sessão
+                        if "df" in st.session_state:
+                            del st.session_state.df 
                         st.cache_data.clear()
                         st.rerun()
 
