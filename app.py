@@ -1513,6 +1513,7 @@ def gestao_produtos():
                         st.warning("Digite um número válido para buscar por valor.")
                         produtos_filtrados = produtos.copy()
             else:
+                # SE NENHUM TERMO FOR DIGITADO, EXIBE TODOS OS PRODUTOS
                 produtos_filtrados = produtos.copy()
 
             if "PaiID" not in produtos_filtrados.columns:
@@ -1525,8 +1526,11 @@ def gestao_produtos():
             st.info("Nenhum produto encontrado.")
         else:
             produtos_filtrados["Quantidade"] = pd.to_numeric(produtos_filtrados["Quantidade"], errors='coerce').fillna(0).astype(int)
-            produtos_pai = produtos_filtrados[produtos_filtrados["PaiID"].isnull()]
-            produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull()]
+            
+            # CORREÇÃO CRÍTICA: Filtra apenas os produtos que NÃO são variações (PaiID é nulo ou vazio/NaN)
+            # Produtos que têm PaiID preenchido são listados *dentro* do expander do produto Pai.
+            produtos_pai = produtos_filtrados[produtos_filtrados["PaiID"].isnull() | (produtos_filtrados["PaiID"] == '')]
+            produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull() & (produtos_filtrados["PaiID"] != '')]
             
             st.markdown("""
                 <style>
@@ -1573,6 +1577,7 @@ def gestao_produtos():
 
 
             for index, pai in produtos_pai.iterrows():
+                # A partir daqui, a lógica de listagem funciona como o esperado, usando apenas os "produtos_pai" (que incluem produtos simples).
                 with st.container(border=True):
                     c = st.columns([1, 3, 1, 1, 1.5, 0.5, 0.5]) 
                     
@@ -1590,6 +1595,7 @@ def gestao_produtos():
                     estoque_total = pai['Quantidade']
                     filhos_do_pai = produtos_filho[produtos_filho["PaiID"] == str(pai["ID"])]
                     if not filhos_do_pai.empty:
+                        # Se houver filhos, o estoque total é a soma dos filhos.
                         estoque_total = filhos_do_pai['Quantidade'].sum()
                     
                     c[2].markdown(f"**{estoque_total}**")
@@ -2910,10 +2916,6 @@ def livro_caixa():
                 if concluir and original_idx_concluir is not None:
                     # Encontra o índice no DataFrame de sessão (df_dividas, que é st.session_state.df)
                     # CORREÇÃO: Usa 'original_index' para encontrar a linha correta no DF original.
-                    df_session_indices = st.session_state.df.index[st.session_state.df.index == original_idx_concluir].tolist()
-                    
-                    # Se o índice original não estiver diretamente no index do DF (após merges e reindexação),
-                    # Tentamos o fallback, mas mantemos o uso do índice correto para loc.
                     
                     if original_idx_concluir in st.session_state.df.index:
                         idx_original = original_idx_concluir
