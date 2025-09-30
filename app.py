@@ -439,7 +439,13 @@ def carregar_livro_caixa():
     return df[[col for col in cols_to_return if col in df.columns]]
 
 def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
-    return True
+    try:
+        df.to_csv("livro_caixa.csv", index=False, encoding="utf-8-sig")
+        return True
+    except Exception as e:
+        print(f"Erro ao salvar dados no CSV: {e}")
+        return False
+
 
 @st.cache_data(show_spinner=False)
 def processar_dataframe(df):
@@ -2933,3 +2939,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
