@@ -861,41 +861,70 @@ TELEGRAM_CHAT_ID = "-1003030758192"
 TOPICO_ID = 28 # ID do tópico (thread) no grupo Telegram
 
 
+import locale
+
 # --- NOVA FUNÇÃO: FORMATACAO BRL ---
 def formatar_brl(valor, decimais=2, prefixo=True):
-    """Formata um valor float para a string de moeda BRL (R$ X.XXX,XX/XXXX) de forma simplificada."""
-    try:
-        valor = float(valor)
-    except (ValueError, TypeError):
-        return "R$ 0,00" if prefixo else "0,00"
+    """Formata um valor float para a string de moeda BRL (R$ X.XXX,XX/XXXX) de forma simplificada.
+    
+    Esta função utiliza a biblioteca 'locale' do Python para garantir a correta
+    formatação de separador de milhar (ponto) e decimal (vírgula) padrão brasileiro,
+    evitando a necessidade de loops manuais.
+    """
+    
+    # Define o locale para Português do Brasil para formatação de moeda
+    # Tenta usar 'pt_BR.UTF-8' primeiro, ou 'Portuguese_Brazil' (Windows) como fallback
+    try:
+        locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+    except locale.Error:
+        try:
+            locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil')
+        except locale.Error:
+            # Caso não encontre nenhum locale BRL, usa o padrão interno
+            # Mas o formato de moeda pode não ser 100% garantido.
+            pass
+            
+    try:
+        valor = float(valor)
+    except (ValueError, TypeError):
+        # Trata valores inválidos
+        return "R$ 0,00" if prefixo else "0,00"
 
-    # 1. Formata para o número correto de decimais (usando ponto como separador decimal temporário)
-    s = f"{valor:.{decimais}f}"
-    
-    # 2. Divide em parte inteira e decimal
-    if '.' in s:
-        inteira, decimal = s.split('.')
-    else:
-        inteira = s
-        decimal = '0' * decimais
+    # Usa locale.currency para formatação BRL segura.
+    # grouping=True garante o separador de milhar (ponto)
+    # symbol=True inclui "R$", mas é tratado no passo seguinte
+    
+    # 1. Formata o valor com o símbolo de moeda (R$) e separadores corretos
+    resultado_formatado = locale.currency(valor, symbol=True, grouping=True)
 
-    # 3. Formata a parte inteira para separador de milhar (ponto)
-    inteira_formatada = ''
-    for i, digito in enumerate(reversed(inteira)):
-        # Adiciona ponto a cada 3 dígitos (exceto no primeiro)
-        if i > 0 and i % 3 == 0 and digito.isdigit():
-            inteira_formatada += '.'
-        inteira_formatada += digito
-    
-    # Inverte a string e remove o prefixo de ponto extra (se houver)
-    inteira_formatada = inteira_formatada[::-1].lstrip('.')
+    # 2. Ajuste de Decimais
+    # A formatação do 'locale' já cuida da vírgula decimal e ponto de milhar.
+    
+    # O locale padrão inclui 2 decimais. Se for necessário um número diferente:
+    if decimais != 2:
+        # Pega a parte inteira (antes da vírgula) e a parte decimal
+        partes = resultado_formatado.rsplit(',', 1)
+        inteira = partes[0]
+        decimal_existente = partes[1] if len(partes) > 1 else '00'
+        
+        # Garante o número correto de decimais (pode truncar ou preencher com zeros)
+        novo_decimal = decimal_existente.ljust(decimais, '0')[:decimais]
+        
+        resultado_formatado = f"{inteira},{novo_decimal}"
+    
+    # Remove o símbolo de moeda (R$ ) se prefixo=False
+    if not prefixo:
+        # A função locale.currency adiciona "R$ " no início.
+        # Procuramos e removemos "R$ " ou "R$" (dependendo do sistema/locale)
+        if resultado_formatado.startswith('R$ '):
+            return resultado_formatado[3:]
+        elif resultado_formatado.startswith('R$'):
+            return resultado_formatado[2:]
+        
+    return resultado_formatado
 
-    # 4. Junta tudo com a vírgula como separador decimal
-    resultado = f"{inteira_formatada},{decimal}"
-    if prefixo:
-        return f"R$ {resultado}"
-    return resultado
 # --- FIM NOVA FUNÇÃO ---
+
 
 
 def gerar_pdf(df: pd.DataFrame) -> BytesIO:
@@ -3072,3 +3101,4 @@ def livro_caixa():
         
         # Encontra o produto no DataFrame pelo código de barras
         produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
+
