@@ -1094,78 +1094,89 @@ def exibir_resultados(df: pd.DataFrame, imagens_dict: dict):
 
 
 
+
+# FATOR_CARTAO é uma constante que você usa no código principal
+FATOR_CARTAO = 0.8872
+
 def processar_dataframe_precificacao(df: pd.DataFrame, frete_total: float, custos_extras: float,
                                      modo_margem: str, margem_fixa: float) -> pd.DataFrame:
     """Processa o DataFrame, aplica rateio, margem e calcula os preços finais."""
+    
+    # Lista de colunas esperadas no DataFrame final
+    COLUNAS_ESPERADAS_ENTRADA = [
+        "Produto", "Qtd", "Custo Unitário", "Custos Extras Produto",
+        "Margem (%)", "Cor", "Marca", "Data_Cadastro", "Imagem", "Imagem_URL"
+    ]
+
     if df.empty:
-        # Garante que o DataFrame tem as colunas mínimas esperadas para evitar erros de índice/coluna
-        return pd.DataFrame(columns=[
-            "Produto", "Qtd", "Custo Unitário", "Custos Extras Produto",
-            "Custo Total Unitário", "Margem (%)", "Preço à Vista", "Preço no Cartão",
-            "Rateio Global Unitário", "Cor", "Marca", "Data_Cadastro" # ADDED NEW COLUMNS
-        ])
+        # Garante que o DataFrame tem as colunas mínimas esperadas (incluindo as de cálculo)
+        COLUNAS_VAZIO = COLUNAS_ESPERADAS_ENTRADA + [
+            "Custo Total Unitário", "Preço à Vista", "Preço no Cartão", "Rateio Global Unitário"
+        ]
+        return pd.DataFrame(columns=COLUNAS_VAZIO)
 
     df = df.copy()
 
-    # --- Início da lógica de processamento virá aqui ---
-
-    # Exemplo de lógica (Substitua pela sua implementação completa):
-    # df['Rateio Global Unitário'] = (frete_total + custos_extras) / df['Qtd'].sum()
-    # ... (cálculos de margem e preço)
+    # --- Etapa 1: Limpeza e Garantia de Colunas Numéricas/Texto (LINHAS 1118+) ---
+    # Garante que as colunas de custo e quantidade são numéricas e cria as colunas se ausentes.
+    for col in ["Qtd", "Custo Unitário", "Margem (%)", "Custos Extras Produto"]:
+        if col in df.columns:
+            # Tenta converter, falhando para 0.0 se não for possível
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+        else:
+            # Adiciona colunas ausentes com valor 0.0
+            df[col] = 0.0
     
-    return df
+    # Garante as novas colunas de texto/data
+    for col in ["Cor", "Marca", "Data_Cadastro", "Imagem_URL", "Imagem"]:
+        if col not in df.columns:
+            df[col] = "" if col != "Imagem" else None # Imagem é inicializada como None
 
-    # Garante que as colunas de custo e quantidade são numéricas
-    for col in ["Qtd", "Custo Unitário", "Margem (%)", "Custos Extras Produto"]:
-        if col in df.columns:
-            # Tenta converter, falhando para 0.0 se não for possível
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
-        elif col not in df.columns:
-            # Adiciona colunas ausentes com valor 0.0 se for necessário para o cálculo
-            df[col] = 0.0
-    
-    # Garante as novas colunas de texto/data
-    for col in ["Cor", "Marca", "Data_Cadastro"]:
-         if col not in df.columns:
-            df[col] = "" # Inicializa como string vazia
+    # --- Etapa 2: Cálculo do Rateio Global ---
+    qtd_total = df["Qtd"].sum()
+    rateio_unitario = 0.0
+    
+    if qtd_total > 0:
+        rateio_unitario = (frete_total + custos_extras) / qtd_total
 
-    # --- Cálculo do Rateio Global ---
-    # NOTA: O cálculo do rateio é sempre baseado nos totais para consistência.
-    qtd_total = df["Qtd"].sum()
-    rateio_unitario = 0.0
-    if qtd_total > 0:
-        rateio_unitario = (frete_total + custos_extras) / qtd_total
+    # Salva o rateio global unitário
+    df["Rateio Global Unitário"] = rateio_unitario
+    
+    # O Custo Total Unitário é a soma do Custo Unitário Base + Custos Específicos + Rateio Global.
+    df["Custo Total Unitário"] = df["Custo Unitário"] + df["Custos Extras Produto"] + df["Rateio Global Unitário"]
 
-    # Salva o rateio global unitário na coluna que será persistida e usada no cálculo total
-    df["Rateio Global Unitário"] = rateio_unitario 
-    
-    # O Custo Total Unitário é a soma do Custo Unitário Base + Custos Específicos + Rateio Global.
-    df["Custo Total Unitário"] = df["Custo Unitário"] + df["Custos Extras Produto"] + df["Rateio Global Unitário"]
+    # --- Etapa 3: Processar Margens ---
+    # Aplica a margem fixa inicial apenas se o modo for "Margem fixa" ou se a coluna estiver NaN.
+    # O modo_margem está sendo ignorado aqui, pois a margem editável é usada do DF.
+    
+    # Garante que a coluna Margem (%) utilize margem_fixa como fallback.
+    df["Margem (%)"] = df["Margem (%)"].apply(lambda x: x if pd.notna(x) and x > 0 else margem_fixa)
+    
+    # Garante que a margem esteja sempre em % (divisível por 100 no cálculo)
+    df["Margem (%)"] = pd.to_numeric(df["Margem (%)"], errors='coerce').fillna(margem_fixa)
 
-    # Processar margens conforme o modo selecionado
-    if "Margem (%)" not in df.columns:
-        df["Margem (%)"] = margem_fixa
-    
-    df["Margem (%)"] = df["Margem (%)"].apply(lambda x: x if pd.notna(x) else margem_fixa)
+    # --- Etapa 4: Calcular os Preços Finais ---
+    
+    # O cálculo do Preço à Vista é baseado no Custo Total Unitário + Margem (%)
+    df["Preço à Vista"] = df["Custo Total Unitário"] * (1 + df["Margem (%)"] / 100)
+    
+    # O cálculo do Preço no Cartão usa o FATOR_CARTAO (que simula a taxa do cartão)
+    # Taxa de cartão de 11.28% (para chegar a 0.8872 do preço de venda)
+    df["Preço no Cartão"] = df["Preço à Vista"] / FATOR_CARTAO
 
+    # Seleciona as colunas relevantes para o DataFrame final de exibição
+    cols_to_keep = [
+        "Produto", "Qtd", "Custo Unitário", "Custos Extras Produto",
+        "Custo Total Unitário", "Margem (%)", "Preço à Vista", "Preço no Cartão",
+        "Imagem", "Imagem_URL", "Rateio Global Unitário",
+        "Cor", "Marca", "Data_Cadastro"
+    ]
+    
+    # Mantém apenas as colunas que existem no DF (todas as anteriores devem existir agora)
+    df_final = df[[col for col in cols_to_keep if col in df.columns]]
 
-    # Calcular os preços finais
-    df["Preço à Vista"] = df["Custo Total Unitário"] * (1 + df["Margem (%)"] / 100)
-    # Taxa de cartão de 11.28% (para chegar a 0.8872 do preço de venda)
-    df["Preço no Cartão"] = df["Preço à Vista"] / 0.8872
+    return df_final
 
-    # Seleciona as colunas relevantes para o DataFrame final de exibição
-    cols_to_keep = [
-        "Produto", "Qtd", "Custo Unitário", "Custos Extras Produto", 
-        "Custo Total Unitário", "Margem (%)", "Preço à Vista", "Preço no Cartão", 
-        "Imagem", "Imagem_URL", "Rateio Global Unitário", 
-        "Cor", "Marca", "Data_Cadastro" # ADDED NEW COLUMNS
-    ]
-    
-    # Mantém apenas as colunas que existem no DF
-    df_final = df[[col for col in cols_to_keep if col in df.columns]]
-
-    return df_final
 
 
 def salvar_csv_no_github(token, repo, path, dataframe, branch="main", mensagem="Atualização via app"):
@@ -3038,6 +3049,7 @@ def livro_caixa():
         
         # Encontra o produto no DataFrame pelo código de barras
         produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
+
 
 
 
