@@ -1,1 +1,4 @@
-Data,Cliente,Valor,Forma de Pagamento,Tipo
+Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Status,Data Pagamento,RecorrenciaID
+2025-09-30,Doce&bella,rr,100.0,Dinheiro,Entrada,,,Realizada,2025-09-30,
+2025-09-30,Doce&bella,teste,100.0,Dinheiro,Entrada,,,Realizada,2025-09-30,
+2025-09-30,Doce&bella,ff,100.0,Dinheiro,Entrada,,,Realizada,2025-09-30,
