@@ -368,10 +368,19 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
     except Exception:
         return None
 
-def save_csv_github(df: pd.DataFrame, file_path: str, commit_message: str):
-    """Função dummy para simular o salvamento no GitHub."""
-    # A implementação real foi omitida para simplificar o código
-    return True
+PATH_LIVRO_CAIXA = "livro_caixa.csv"
+
+def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
+    try:
+        csv_buffer = df.to_csv(index=False, encoding="utf-8-sig")
+        repo = g.get_repo(REPO_NAME)
+        contents = repo.get_contents(PATH_LIVRO_CAIXA)
+        repo.update_file(contents.path, commit_message, csv_buffer, contents.sha, branch="main")
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar dados no GitHub: {e}")
+        return False
+
 
 def parse_date_yyyy_mm_dd(date_str):
     """Tenta converter uma string para objeto date."""
@@ -2939,4 +2948,5 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
 
