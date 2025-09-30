@@ -861,61 +861,45 @@ TELEGRAM_CHAT_ID = "-1003030758192"
 TOPICO_ID = 28 # ID do tópico (thread) no grupo Telegram
 
 
-import locale
 
-# --- NOVA FUNÇÃO: FORMATACAO BRL ---
+# --- FUNÇÃO DE FORMATAÇÃO DE MOEDA BRL (Integrada para auto-suficiência) ---
 def formatar_brl(valor, decimais=2, prefixo=True):
     """Formata um valor float para a string de moeda BRL (R$ X.XXX,XX/XXXX) de forma simplificada.
     
     Esta função utiliza a biblioteca 'locale' do Python para garantir a correta
-    formatação de separador de milhar (ponto) e decimal (vírgula) padrão brasileiro,
-    evitando a necessidade de loops manuais.
+    formatação de separador de milhar (ponto) e decimal (vírgula) padrão brasileiro.
     """
     
     # Define o locale para Português do Brasil para formatação de moeda
-    # Tenta usar 'pt_BR.UTF-8' primeiro, ou 'Portuguese_Brazil' (Windows) como fallback
     try:
         locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
     except locale.Error:
         try:
             locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil')
         except locale.Error:
-            # Caso não encontre nenhum locale BRL, usa o padrão interno
-            # Mas o formato de moeda pode não ser 100% garantido.
+            # Fallback seguro caso o sistema não encontre o locale
             pass
             
     try:
         valor = float(valor)
     except (ValueError, TypeError):
-        # Trata valores inválidos
         return "R$ 0,00" if prefixo else "0,00"
 
     # Usa locale.currency para formatação BRL segura.
-    # grouping=True garante o separador de milhar (ponto)
-    # symbol=True inclui "R$", mas é tratado no passo seguinte
-    
-    # 1. Formata o valor com o símbolo de moeda (R$) e separadores corretos
     resultado_formatado = locale.currency(valor, symbol=True, grouping=True)
 
-    # 2. Ajuste de Decimais
-    # A formatação do 'locale' já cuida da vírgula decimal e ponto de milhar.
-    
-    # O locale padrão inclui 2 decimais. Se for necessário um número diferente:
+    # Ajuste de Decimais (Se necessário)
     if decimais != 2:
-        # Pega a parte inteira (antes da vírgula) e a parte decimal
         partes = resultado_formatado.rsplit(',', 1)
         inteira = partes[0]
         decimal_existente = partes[1] if len(partes) > 1 else '00'
         
         # Garante o número correto de decimais (pode truncar ou preencher com zeros)
         novo_decimal = decimal_existente.ljust(decimais, '0')[:decimais]
-        
         resultado_formatado = f"{inteira},{novo_decimal}"
     
     # Remove o símbolo de moeda (R$ ) se prefixo=False
     if not prefixo:
-        # A função locale.currency adiciona "R$ " no início.
-        # Procuramos e removemos "R$ " ou "R$" (dependendo do sistema/locale)
         if resultado_formatado.startswith('R$ '):
             return resultado_formatado[3:]
         elif resultado_formatado.startswith('R$'):
@@ -923,78 +907,81 @@ def formatar_brl(valor, decimais=2, prefixo=True):
         
     return resultado_formatado
 
-# --- FIM NOVA FUNÇÃO ---
 
-
-
+# --- FUNÇÃO DE GERAÇÃO DE PDF (COMPLETA E CORRIGIDA) ---
 def gerar_pdf(df: pd.DataFrame) -> BytesIO:
-    """Gera um PDF formatado a partir do DataFrame de precificação, incluindo a URL da imagem."""
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "Relatório de Precificação", 0, 1, "C")
-    pdf.ln(5)
+    """Gera um PDF formatado a partir do DataFrame de precificação, incluindo a URL da imagem."""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, "Relatório de Precificação", 0, 1, "C")
+    pdf.ln(5)
 
-    # Configurações de fonte para tabela
-    pdf.set_font("Arial", "B", 10) # Fonte menor para caber mais dados
+    # Configurações de fonte e larguras
+    pdf.set_font("Arial", "B", 10) 
 
-    # Definindo largura das colunas (em mm)
-    col_widths = {
-        "Produto": 40,
-        "Qtd": 15,
-        "Custo Unitário": 25,
-        "Margem (%)": 20,
-        "Preço à Vista": 25,
-        "Preço no Cartão": 25,
-        "URL da Imagem": 40 # Nova coluna para a URL
-    }
-    
-    # Define as colunas a serem exibidas no PDF
-    pdf_cols = [col for col in col_widths.keys() if col in df.columns or col == "Custo Unitário"]
-    current_widths = [col_widths[col] for col in pdf_cols]
+    # Definindo largura das colunas (em mm)
+    col_widths = {
+        "Produto": 40,
+        "Qtd": 15,
+        "Custo Unitário": 25,
+        "Margem (%)": 20,
+        "Preço à Vista": 25,
+        "Preço no Cartão": 25,
+        "URL da Imagem": 40 # Nova coluna para a URL
+    }
+    
+    pdf_cols = [col for col in col_widths.keys()]
+    current_widths = [col_widths[col] for col in pdf_cols]
 
-    # Cabeçalho da tabela
-    for col_name, width in zip(pdf_cols, current_widths):
-        pdf.cell(width, 10, col_name, border=1, align='C')
-    pdf.ln()
+    # Cabeçalho da tabela
+    pdf.set_fill_color(200, 220, 255)
+    for col_name, width in zip(pdf_cols, current_widths):
+        pdf.cell(width, 10, col_name, border=1, align='C', fill=True)
+    pdf.ln()
 
-    # Fonte para corpo da tabela
-    pdf.set_font("Arial", "", 8) # Fonte ainda menor para caber a URL
+    # Fonte para corpo da tabela
+    pdf.set_font("Arial", "", 8) 
+    
+    # Adicionando linhas de dados
+    for index, row in df.iterrows():
+        
+        # Produto
+        pdf.cell(col_widths["Produto"], 6, str(row.get("Produto", "N/A")), border=1, align='L')
+        
+        # Qtd
+        pdf.cell(col_widths["Qtd"], 6, str(row.get("Qtd", 0)), border=1, align='C')
+        
+        # Custo Unitário (Formatado com a função BRL)
+        custo = row.get("Custo Unitário", 0.0)
+        pdf.cell(col_widths["Custo Unitário"], 6, formatar_brl(custo), border=1, align='R')
+        
+        # Margem (%)
+        margem = row.get("Margem (%)", 0.0)
+        pdf.cell(col_widths["Margem (%)"], 6, f"{margem:.2f}%", border=1, align='R')
+        
+        # Preço à Vista (Formatado com a função BRL)
+        preco_vista = row.get("Preço à Vista", 0.0)
+        pdf.cell(col_widths["Preço à Vista"], 6, formatar_brl(preco_vista), border=1, align='R')
+        
+        # Preço no Cartão (Formatado com a função BRL)
+        preco_cartao = row.get("Preço no Cartão", 0.0)
+        pdf.cell(col_widths["Preço no Cartão"], 6, formatar_brl(preco_cartao), border=1, align='R')
+        
+        # URL da Imagem (Trunca o texto para caber na célula)
+        url = str(row.get("URL da Imagem", ""))
+        # Calcula um limite de caracteres baseado na largura da coluna (aprox. 2.5 chars/mm)
+        char_limit = int(col_widths["URL da Imagem"] * 2.5) 
+        display_url = url[:char_limit] + '...' if len(url) > char_limit else url
+        
+        pdf.cell(col_widths["URL da Imagem"], 6, display_url, border=1, align='L')
+        
+        pdf.ln() # Nova linha para a próxima linha de dados
 
-    if df.empty:
-        pdf.cell(sum(current_widths), 10, "Nenhum produto cadastrado.", border=1, align="C")
-        pdf.ln()
-    else:
-        # Itera pelas linhas e escreve na tabela
-        for idx, row in df.iterrows():
-            if "Produto" in pdf_cols:
-                pdf.cell(col_widths["Produto"], 10, str(row.get("Produto", "")), border=1)
-            if "Qtd" in pdf_cols:
-                pdf.cell(col_widths["Qtd"], 10, str(row.get("Qtd", 0)), border=1, align="C")
-            if "Custo Unitário" in pdf_cols:
-                # Usa o Custo Total Unitário para o relatório, se disponível
-                custo_unit_val = row.get("Custo Total Unitário", row.get("Custo Unitário", 0.0))
-                pdf.cell(col_widths["Custo Unitário"], 10, formatar_brl(custo_unit_val), border=1, align="R")
-            if "Margem (%)" in pdf_cols:
-                pdf.cell(col_widths["Margem (%)"], 10, f"{row.get('Margem (%)', 0.0):.2f}%", border=1, align="R")
-            if "Preço à Vista" in pdf_cols:
-                pdf.cell(col_widths["Preço à Vista"], 10, formatar_brl(row.get('Preço à Vista', 0.0)), border=1, align="R")
-            if "Preço no Cartão" in pdf_cols:
-                pdf.cell(col_widths["Preço no Cartão"], 10, formatar_brl(row.get('Preço no Cartão', 0.0)), border=1, align="R")
-            
-            # --- NOVO: URL da Imagem no PDF ---
-            if "URL da Imagem" in pdf_cols:
-                url_display = str(row.get("Imagem_URL", ""))
-                # Limita o tamanho da URL para não quebrar o layout
-                if len(url_display) > 35:
-                    url_display = url_display[:32] + "..."
-                pdf.cell(col_widths["URL da Imagem"], 10, url_display, border=1, align="L", link=str(row.get("Imagem_URL", "")))
-            # --- FIM NOVO ---
-                
-            pdf.ln()
+    # Retorna o PDF como BytesIO
+    # O output 'S' retorna bytes, que são envolvidos pelo BytesIO
+    return BytesIO(pdf.output(dest='S').encode('latin-1'))
 
-    pdf_bytes = pdf.output(dest='S').encode('latin1')
-    return BytesIO(pdf_bytes)
 
 
 def enviar_pdf_telegram(pdf_bytesio, df_produtos: pd.DataFrame, thread_id=None):
@@ -3101,4 +3088,5 @@ def livro_caixa():
         
         # Encontra o produto no DataFrame pelo código de barras
         produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
+
 
