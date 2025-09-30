@@ -878,7 +878,7 @@ TELEGRAM_CHAT_ID = "-1003030758192"
 TOPICO_ID = 28 # ID do tópico (thread) no grupo Telegram
 
 
-# Funcao formatar_brl (necessária para exibir_resultados) - MOCK simplificado
+# Funcao formatar_brl (necessária para exibir_resultados) - MOCK simplificada
 def formatar_brl(valor, decimais=2, prefixo=True):
     """Formata um valor float para a string de moeda BRL (R$ X.XXX,XX/XXXX) de forma simplificada."""
     try:
@@ -2620,7 +2620,7 @@ def livro_caixa():
     
     # Função auxiliar para encontrar a opção de produto pelo Código de Barras
     def encontrar_opcao_por_cb(codigo_barras, produtos_df, opcoes_produtos_list):
-        if not codigo_barras: return None
+        if not codigo_barras: None
         
         # Encontra o produto no DataFrame pelo código de barras
         produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
@@ -3381,7 +3381,7 @@ def livro_caixa():
 
         if not df_anual.empty:
             df_resumo_anual = df_anual.groupby('Ano')['Valor'].agg(['sum', lambda x: x[x >= 0].sum(), lambda x: abs(x[x < 0].sum())]).reset_index()
-            df_resumo_anual.columns = ['Loja', 'Saldo', 'Entradas', 'Saídas']
+            df_resumo_anual.columns = ['Ano', 'Saldo', 'Entradas', 'Saídas']
             df_resumo_anual.sort_values(by='Ano', ascending=False, inplace=True)
 
             st.markdown("##### Resumo Anual (Realizado)")
@@ -3492,107 +3492,84 @@ def livro_caixa():
 
 
 # ==============================================================================
-# ESTRUTURA PRINCIPAL E NAVEGAÇÃO SUPERIOR
+# NOVA PÁGINA: PRECIFICAÇÃO COMPLETA
 # ==============================================================================
 
-# Definição final das páginas do aplicativo
-PAGINAS = {
-    "Home": homepage,
-    "Produtos": gestao_produtos,
-    "Precificação": precificacao_completa, # Adicionada a função de precificação
-    "Caixa": livro_caixa,
-    "Compras": historico_compras,
-    "Promoções": gestao_promocoes,
-}
-
-if "page" not in st.session_state:
-    st.session_state.page = 'Home'
-
-# Callback para mudar o estado da sessão e forçar o rerun
-def set_page(page_name):
-    st.session_state.page = page_name
-
-# --- Renderiza o Header e a Navegação no Topo ---
-
-def render_header():
-    """Renderiza o header customizado com a navegação em botões."""
+def precificacao_completa():
+    st.title("📊 Gestão de Precificação e Produtos")
     
-    # Usa um container horizontal para alinhamento e fundo
-    header_container = st.container()
+    # --- Configurações do GitHub para SALVAR ---
+    # Usando st.secrets.get para garantir que o TOKEN seja uma string, mesmo que não configurado
+    GITHUB_TOKEN = st.secrets.get("github_token", "TOKEN_FICTICIO")
+    GITHUB_REPO = f"{OWNER}/{REPO_NAME}" # Usando as variáveis globais do app
+    GITHUB_BRANCH = BRANCH
+    imagens_dict = {}
     
-    with header_container:
-        # A primeira coluna é para o logo
-        col_logo, col_nav = st.columns([1, 4])
+    # ----------------------------------------------------
+    # Inicialização e Configurações de Estado
+    # ----------------------------------------------------
+    
+    # Inicialização de variáveis de estado da Precificação
+    if "produtos_manuais" not in st.session_state:
+        st.session_state.produtos_manuais = pd.DataFrame(columns=[
+            "Produto", "Qtd", "Custo Unitário", "Custos Extras Produto", "Margem (%)", "Imagem", "Imagem_URL",
+            "Cor", "Marca", "Data_Cadastro" # NOVAS COLUNAS
+        ])
+    
+    # Inicializa o rateio global unitário que será usado na exibição e cálculo
+    if "rateio_global_unitario_atual" not in st.session_state:
+        st.session_state["rateio_global_unitario_atual"] = 0.0
+
+    # === Lógica de Carregamento AUTOMÁTICO do CSV do GitHub (Correção de Persistência) ===
+    # O carregamento automático ocorre APENAS na primeira vez que a sessão é iniciada
+    if "produtos_manuais_loaded" not in st.session_state:
+        df_loaded = load_csv_github(ARQ_CAIXAS)
         
-        with col_logo:
-            # Imagem do logo
-            st.image(LOGO_DOCEBELLA_URL, width=150)
+        # Define as colunas de ENTRADA (apenas dados brutos)
+        cols_entrada = ["Produto", "Qtd", "Custo Unitário", "Margem (%)", "Custos Extras Produto", "Imagem", "Imagem_URL", "Cor", "Marca", "Data_Cadastro"]
+        df_base_loaded = df_loaded[[col for col in cols_entrada if col in df_loaded.columns]].copy() if df_loaded is not None else pd.DataFrame(columns=cols_entrada)
+        
+        # Garante que as colunas de ENTRADA existam, mesmo que vazias
+        if "Custos Extras Produto" not in df_base_loaded.columns: df_base_loaded["Custos Extras Produto"] = 0.0
+        if "Imagem" not in df_base_loaded.columns: df_base_loaded["Imagem"] = None
+        if "Imagem_URL" not in df_base_loaded.columns: df_base_loaded["Imagem_URL"] = ""
+        # NOVAS COLUNAS
+        if "Cor" not in df_base_loaded.columns: df_base_loaded["Cor"] = ""
+        if "Marca" not in df_base_loaded.columns: df_base_loaded["Marca"] = ""
+        # Garante que Data_Cadastro é string para evitar problemas de tipo no Streamlit
+        if "Data_Cadastro" not in df_base_loaded.columns: df_base_loaded["Data_Cadastro"] = pd.to_datetime('today').normalize().strftime('%Y-%m-%d')
+        
+
+        if not df_base_loaded.empty:
+            st.session_state.produtos_manuais = df_base_loaded.copy()
+            st.success(f"✅ {len(df_base_loaded)} produtos carregados do GitHub.")
+        else:
+            # Caso não consiga carregar do GitHub, usa dados de exemplo
+            st.info("⚠️ Não foi possível carregar dados persistidos. Usando dados de exemplo.")
+            exemplo_data = [
+                {"Produto": "Produto A", "Qtd": 10, "Custo Unitário": 5.0, "Margem (%)": 20, "Cor": "Azul", "Marca": "Genérica", "Data_Cadastro": pd.to_datetime('2024-01-01').strftime('%Y-%m-%d')},
+                {"Produto": "Produto B", "Qtd": 5, "Custo Unitário": 3.0, "Margem (%)": 15, "Cor": "Vermelho", "Marca": "XYZ", "Data_Cadastro": pd.to_datetime('2024-02-15').strftime('%Y-%m-%d')},
+            ]
+            df_base = pd.DataFrame(exemplo_data)
+            df_base["Custos Extras Produto"] = 0.0
+            df_base["Imagem"] = None
+            df_base["Imagem_URL"] = ""
+            # Garante que as novas colunas estejam presentes no DF de exemplo
+            for col in ["Cor", "Marca", "Data_Cadastro"]:
+                 if col not in df_base.columns: df_base[col] = "" 
             
-        with col_nav:
-            # Cria colunas para os botões de navegação
-            # Removido o +1 do logo, pois o logo está em uma coluna separada (col_logo)
-            col_nav_buttons = st.columns(len(PAGINAS.keys()))
+            st.session_state.produtos_manuais = df_base.copy()
             
-            # Lista das páginas na ordem correta
-            paginas_ordenadas = ["Home", "Produtos", "Precificação", "Caixa", "Compras", "Promoções"]
-            
-            # Mapeamento dos nomes de página para as chaves de coluna
-            for i, nome in enumerate(paginas_ordenadas):
-                if nome in PAGINAS:
-                    is_active = st.session_state.page == nome
-                    
-                    with col_nav_buttons[i]: 
-                        # Injetamos um atributo HTML customizado 'data-current-page' para o CSS poder estilizá-lo
-                        # O st.button precisa do key para a lógica de sessão
-                        if st.button(
-                            nome,
-                            key=f"nav_btn_{nome}",
-                            on_click=set_page,
-                            args=[nome],
-                            help=f"Ir para {nome}",
-                            use_container_width=True
-                        ):
-                             # O callback set_page já faz o trabalho e o st.rerun
-                            pass 
+        # Inicializa o df_produtos_geral após o carregamento/criação
+        st.session_state.df_produtos_geral = processar_dataframe_precificacao(
+            st.session_state.produtos_manuais, 
+            st.session_state.get("frete_manual", 0.0), 
+            st.session_state.get("extras_manual", 0.0), 
+            st.session_state.get("modo_margem", "Margem fixa"), 
+            st.session_state.get("margem_fixa", 30.0)
+        )
+        st.session_state.produtos_manuais_loaded = True
+    # === FIM da Lógica de Carregamento Automático ===
 
-                        # Este Markdown injeta o CSS específico para o botão ativo/inativo
-                        if is_active:
-                             # Código JavaScript para injetar o atributo customizado no botão ativo
-                             # Isso é crucial para que o CSS do header-container estilize a aba correta
-                            st.markdown(
-                                f"""
-                                <script>
-                                    const btn = document.querySelector('[data-testid="stButton"] button[key="nav_btn_{nome}"]');
-                                    if (btn) {{
-                                        btn.setAttribute('data-current-page', 'true');
-                                    }}
-                                </script>
-                                """, 
-                                unsafe_allow_html=True
-                            )
 
-    # Re-aplica a cor magenta ao container do header (não é ideal, mas funciona)
-    st.markdown("""
-    <style>
-    /* Estiliza o container que envolve a navegação para ter o fundo magenta */
-    div[data-testid="stVerticalBlock"] > div > div > div > div[data-testid="stHorizontalBlock"] {
-        background-color: #E91E63;
-        padding: 10px 0;
-        margin-top: -10px; /* Tenta cobrir a margem superior padrão do Streamlit */
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- RENDERIZAÇÃO DO CONTEÚDO DA PÁGINA ---
-
-# O roteamento deve usar a chave 'page' (corrigida)
-if st.session_state.page in PAGINAS:
-    PAGINAS[st.session_state.page]()
-else:
-    # Fallback para Home
-    PAGINAS["Home"]()
-
-# --- Exibe/Oculta o Sidebar do Formulário ---
-# A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
-if st.session_state.page != "Caixa":
-    st.sidebar.empty()
+    if "fre
