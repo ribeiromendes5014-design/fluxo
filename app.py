@@ -3457,4 +3457,79 @@ def historico_compras():
         if df_filtrado.empty:
             st.info("Nenhuma compra encontrada com os filtros aplicados.")
         else:
-            df_filtrado['Data Formatada'] = df_filtrado['Data'].apply(lambda
+            df_filtrado['Data Formatada'] = df_filtrado['Data'].apply(lambda x: x.strftime('%d/%m/%Y') if pd.notna(x) else '') # <-- LINHA CORRIGIDA
+            
+            # Formata as colunas de valor para exibição
+            df_filtrado['Valor Unitário (R$)'] = df_filtrado.apply(
+                lambda row: row['Valor Total'] / row['Quantidade'] if row['Quantidade'] > 0 else row['Valor Total'], axis=1
+            ).apply(lambda x: f"R$ {x:,.2f}")
+            df_filtrado['Valor Total (R$)'] = df_filtrado['Valor Total'].apply(lambda x: f"R$ {x:,.2f}")
+            
+            # Colunas a serem exibidas na tabela
+            colunas_tabela = ['ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Unitário (R$)', 'Valor Total (R$)', 'Cor', 'FotoURL']
+
+            st.dataframe(
+                df_filtrado[colunas_tabela],
+                column_config={
+                    "Data Formatada": "Data",
+                    "Valor Total (R$)": "Valor Total",
+                    "Cor": st.column_config.ColorColumn("Cor", width="small"),
+                    "FotoURL": st.column_config.ImageColumn("Foto", width="small")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # --- Opções de Edição/Exclusão ---
+            st.markdown("#### Operações de Edição e Exclusão")
+            
+            operacao_cols = st.columns([1, 1])
+            
+            with operacao_cols[0]:
+                
+                opcoes_compra = {
+                    f"ID {row['ID']} | {row['Produto']} | {row['Data Formatada']}": row['original_index'] 
+                    for index, row in df_filtrado.iterrows()
+                }
+                opcoes_keys = ["Selecione uma compra..."] + list(opcoes_compra.keys())
+                
+                compra_selecionada_str = st.selectbox(
+                    "Selecione o item para Editar ou Excluir:",
+                    options=opcoes_keys,
+                    index=0, 
+                    key="select_compra_operacao"
+                )
+                
+                compra_idx_selecionado = opcoes_compra.get(compra_selecionada_str)
+
+            with operacao_cols[1]:
+                if compra_idx_selecionado is not None:
+                    acao = st.radio(
+                        "Ação:",
+                        ["Nenhuma", "Editar", "Excluir"],
+                        horizontal=True,
+                        key="acao_compra_radio"
+                    )
+
+                    if acao == "Editar":
+                        st.session_state.edit_compra_idx = compra_idx_selecionado
+                        st.rerun()
+
+                    elif acao == "Excluir":
+                        if st.button("🗑️ Confirmar Exclusão", type="primary"):
+                            produto_excluido = df_filtrado[df_filtrado['original_index'] == compra_idx_selecionado].iloc[0]['Produto']
+                            # Remove do DataFrame original
+                            st.session_state.df_compras = st.session_state.df_compras.drop(compra_idx_selecionado).reset_index(drop=True)
+                            
+                            if salvar_historico_no_github(st.session_state.df_compras, f"Exclusão da compra {produto_excluido}"):
+                                st.cache_data.clear()
+                                st.success("✅ Compra excluída com sucesso!")
+                                st.rerun()
+                                
+            # Garante que o estado de edição está limpo se a edição não está ativa
+            if not edit_mode_compra and "edit_compra_idx" in st.session_state:
+                del st.session_state["edit_compra_idx"]
+
+        # Botão de download CSV
+        baixar_csv_aba(df_exibicao.drop(columns=['ID', 'original_index', 'Data Formatada']), "historico_compras.csv", key_suffix="historico_compras_final")
+
