@@ -1029,7 +1029,14 @@ def gestao_promocoes():
             except Exception:
                 continue
             
-    vendas_flat = pd.DataFrame(vendas_list).dropna(subset=["IDProduto"])
+    # CORREÇÃO: Adiciona a verificação de lista vazia antes de criar o DataFrame e chamar dropna
+    if vendas_list:
+        vendas_flat = pd.DataFrame(vendas_list)
+        # O dropna é seguro aqui porque a lista não está vazia e 'IDProduto' é garantido no for loop.
+        vendas_flat = vendas_flat.dropna(subset=["IDProduto"])
+    else:
+        # Retorna um DataFrame vazio, mas com a coluna esperada, para evitar KeyErrors
+        vendas_flat = pd.DataFrame(columns=["Data", "IDProduto"])
     
 
     st.header("🏷️ Promoções")
@@ -2902,9 +2909,22 @@ def livro_caixa():
 
                 if concluir and original_idx_concluir is not None:
                     # Encontra o índice no DataFrame de sessão (df_dividas, que é st.session_state.df)
+                    # CORREÇÃO: Usa 'original_index' para encontrar a linha correta no DF original.
                     df_session_indices = st.session_state.df.index[st.session_state.df.index == original_idx_concluir].tolist()
-                    if df_session_indices:
-                        idx_original = df_session_indices[0]
+                    
+                    # Se o índice original não estiver diretamente no index do DF (após merges e reindexação),
+                    # Tentamos o fallback, mas mantemos o uso do índice correto para loc.
+                    
+                    if original_idx_concluir in st.session_state.df.index:
+                        idx_original = original_idx_concluir
+                    else:
+                         # Tenta mapear o original_index de volta, caso o index tenha sido alterado
+                         df_original_index = st.session_state.df.reset_index()
+                         match = df_original_index[df_original_index['index'] == original_idx_concluir].index
+                         idx_original = match[0] if not match.empty else None
+
+
+                    if idx_original is not None:
                         row_data = st.session_state.df.loc[idx_original].copy()
                         
                         st.session_state.df.loc[idx_original, 'Status'] = 'Realizada'
