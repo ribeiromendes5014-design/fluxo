@@ -368,17 +368,26 @@ def hash_df(df):
 def load_csv_github(url: str) -> pd.DataFrame | None:
     try:
         response = requests.get(url)
-        response.raise_for_status()
+        # Se a resposta for 404 (arquivo não existe), retorna None
+        if response.status_code == 404:
+            return None
+            
+        response.raise_for_status() # Levanta exceção para outros erros HTTP
+        
+        # Tenta ler o CSV, garantindo que a codificação seja UTF-8
         df = pd.read_csv(StringIO(response.text), dtype=str)
+        
         if df.empty or len(df.columns) < 2:
+            # Se o arquivo for encontrado mas estiver vazio (só cabeçalho), trata como None
             return None
         return df
-    except Exception:
+    except Exception as e:
+        # st.error(f"Erro ao carregar CSV do GitHub: {e}") # Comentado para evitar quebra no ambiente
         return None
 
 def save_csv_github(df: pd.DataFrame, file_path: str, commit_message: str):
     """
-    Função REAL para salvar o DataFrame como CSV no GitHub, substituindo o dummy.
+    Função REAL para salvar o DataFrame como CSV no GitHub.
     Retorna True em caso de sucesso, False em caso de falha.
     """
     if GITHUB_TOKEN == "TOKEN_FICTICIO":
@@ -391,6 +400,7 @@ def save_csv_github(df: pd.DataFrame, file_path: str, commit_message: str):
         repo = g.get_repo(GITHUB_REPO)
         
         # 2. Converte o DataFrame para CSV e depois para Base64
+        # Garante que o CSV seja gerado de forma robusta
         csv_content = df.to_csv(index=False, sep=',', encoding='utf-8')
         encoded_content = base64.b64encode(csv_content.encode('utf-8')).decode('utf-8')
 
@@ -399,8 +409,8 @@ def save_csv_github(df: pd.DataFrame, file_path: str, commit_message: str):
         try:
             contents = repo.get_contents(file_path, ref=GITHUB_BRANCH)
             sha = contents.sha
-        except Exception as e:
-            # st.info(f"Arquivo não existe ou erro ao obter SHA: {e}. Será criado.")
+        except Exception:
+            # Arquivo não existe. SHA permanece None, o que disparará a criação.
             pass
 
         # 4. Cria ou atualiza o arquivo
@@ -472,19 +482,25 @@ def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
 def carregar_livro_caixa():
     url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{PATH_DIVIDAS}"
     df = load_csv_github(url_raw)
+    
+    # Se o load falhar ou retornar vazio, cria um DataFrame com as colunas certas
     if df is None or df.empty:
-        try:
-            df = pd.read_csv(ARQ_LOCAL, dtype=str)
-        except Exception:
-            df = pd.DataFrame(columns=COLUNAS_PADRAO)
-    if df.empty:
+        # Garante que a primeira linha do DataFrame tenha as colunas padronizadas
         df = pd.DataFrame(columns=COLUNAS_PADRAO)
+        
     for col in COLUNAS_PADRAO:
         if col not in df.columns:
             df[col] = "Realizada" if col == "Status" else "" 
+            
     if 'RecorrenciaID' not in df.columns:
         df['RecorrenciaID'] = ''
+        
     cols_to_return = COLUNAS_PADRAO + ["RecorrenciaID"]
+    
+    # 🚨 CORREÇÃO DE ESTRUTURA: Se o DF estiver vazio, retorna um DF vazio mas com as colunas corretas.
+    if df.empty:
+        return pd.DataFrame(columns=cols_to_return)
+        
     return df[[col for col in cols_to_return if col in df.columns]]
 
 def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
@@ -494,7 +510,7 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
     """
     success = save_csv_github(df, PATH_DIVIDAS, commit_message)
     
-    # 🚨 CORREÇÃO: Limpa o cache da função que carrega o livro caixa
+    # 🚨 Limpa o cache da função que carrega o livro caixa
     if success:
         carregar_livro_caixa.clear()
         
@@ -559,7 +575,7 @@ def format_produtos_resumo(produtos_json):
                     except ValueError: continue
                 lucro = total_venda - total_custo
                 lucro_str = f"| Lucro R$ {lucro:,.2f}" if lucro != 0 else ""
-                return f"{count} item(s): {primeiro}... {lucro_str}"
+                return f"{count} item(s): **{primeiro}**... {lucro_str}"
         except:
             return "Erro na formatação/JSON Inválido"
     return ""
@@ -951,7 +967,7 @@ def homepage():
     else:
         html_cards_novidades = []
         for _, row in produtos_novos.iterrows():
-            foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/400x400/FFC1E3/E91E63?text={row['Nome'].replace(' ', '+')}"
+            foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/FFC1E3/E91E63?text={row['Nome'].replace(' ', '+')}"
             preco_vista = to_float(row.get('PrecoVista', 0))
             preco_formatado = f"R$ {preco_vista:,.2f}" if preco_vista > 0 else "Preço não disponível"
             nome = row.get("Nome", "")
