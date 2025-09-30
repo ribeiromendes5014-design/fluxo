@@ -3247,7 +3247,7 @@ st.markdown(f'''
         </div>
         <div class="nav-button-group">
             <h5 style="color: white; margin: 0; padding: 0 10px;">Página Atual: {st.session_state.page}</h5>
-            <!-- Botões de navegação -->
+            <!-- Botões de navegação. NOTA: No Streamlit real, use st.button com on_click para mudar st.session_state.page -->
             <button onclick="window.parent.postMessage({{streamlit: {{page: 'Home'}}}}, '*')" style="color: {'yellow' if st.session_state.page == 'Home' else 'white'}; background: none; border: none; font-weight: bold; cursor: pointer;">Home</button>
             <button onclick="window.parent.postMessage({{streamlit: {{page: 'Produtos'}}}}, '*')" style="color: {'yellow' if st.session_state.page == 'Produtos' else 'white'}; background: none; border: none; font-weight: bold; cursor: pointer;">Produtos</button>
             <button onclick="window.parent.postMessage({{streamlit: {{page: 'Precificação'}}}}, '*')" style="color: {'yellow' if st.session_state.page == 'Precificação' else 'white'}; background: none; border: none; font-weight: bold; cursor: pointer;">Precificação</button>
@@ -3257,43 +3257,13 @@ st.markdown(f'''
         </div>
     </div>
     <script>
-        // Script para interceptar eventos de clique nos botões customizados
-        function updatePage(pageName) {{
-            // Isso simula o Streamlit's on_click/session_state update
-            var currentPage = window.parent.document.querySelector('h5').innerText.split(': ')[1];
-            if (currentPage !== pageName) {{
-                // Esta é uma simulação de como o Streamlit lida com o rerunning após a mudança de estado
-                // Na implementação real, o Streamlit lida com isso através do on_click, 
-                // mas no ambiente de visualização, usamos o mecanismo de sessão.
-                
-                // Em um ambiente Streamlit embutido (como o que está sendo simulado), 
-                // o Streamlit já lida com o postMessage automaticamente através do 
-                // on_click/callback se o elemento for um st.button.
-                // Como estamos usando HTML/JS puro, confiamos que o Streamlit 
-                // irá detectar a mudança do estado de navegação abaixo:
-                
-                // O código Python precisa ser executado novamente para ler a nova st.session_state.page
-                
-                // Força um re-run após um pequeno atraso
-                setTimeout(function(){{
-                    // Streamlit não permite alterar st.session_state de JavaScript diretamente no preview.
-                    // A melhor prática é usar st.button com um callback.
-                    // Para fins de visualização de código, o usuário deve substituir 
-                    // o HTML/JS acima por botões Streamlit nativos.
-                    // No entanto, para fins de demonstração do design, manteremos a simulação.
-                }}, 50);
-            }}
-        }}
-
-        // Monitora a mudança na URL/Estado para atualizar o st.session_state.page
-        // (Isso é uma simplificação, o Streamlit trata isso nativamente).
-        // Em um ambiente normal, o código Streamlit lê o estado.
-        // O código abaixo é apenas para fins de simulação de clique no preview:
+        // Este script é necessário para simular a mudança de estado em um ambiente de preview.
         document.querySelectorAll('.nav-button-group button').forEach(button => {{
             const pageName = button.innerText;
             button.onclick = function() {{
-                 // Simula a mudança de página
-                 window.parent.postMessage({{type: 'SET_SESSION_STATE', key: 'page', value: pageName}}, '*');
+                 // Simula a mudança de página através da query params
+                 // Isso é uma solução alternativa para ambientes de preview/iframe
+                 window.parent.postMessage({{type: 'SET_QUERY_PARAM', key: 'page', value: pageName}}, '*');
             }};
         }});
     </script>
@@ -3301,18 +3271,15 @@ st.markdown(f'''
 # --- FIM HEADER CUSTOMIZADO ---
 
 
-# Lógica de navegação real (usando o estado que seria atualizado por st.button/callback)
-# Para fins de emulação em um ambiente onde o st.button não está sendo usado,
-# assumimos que o estado é lido e a página é renderizada.
-
-# Lógica para interceptar a mensagem da simulação de clique (apenas para ambiente de preview)
-try:
-    if st.experimental_get_query_params().get('page'):
-         # Se a página vier como parâmetro de consulta (como alguns previews fazem)
-        st.session_state.page = st.experimental_get_query_params().get('page')[0]
-except Exception:
-    # Caso não esteja no modo que usa query params
-    pass
+# Lógica de navegação real (usando st.query_params)
+# 1. Tenta ler o parâmetro 'page' da URL usando a nova API
+query_params = st.query_params
+if 'page' in query_params:
+    page_from_query = query_params['page'][0] if isinstance(query_params['page'], list) else query_params['page']
+    
+    # 2. Atualiza o estado da sessão
+    if page_from_query in ["Home", "Produtos", "Precificação", "Caixa", "Compras", "Promocoes"]:
+        st.session_state.page = page_from_query
 
 
 # Lógica principal de roteamento
@@ -3329,5 +3296,5 @@ elif st.session_state.page == 'Compras':
 elif st.session_state.page == 'Promocoes':
     gestao_promocoes()
 else:
-    # Fallback
+    # Fallback (caso 'page' tenha um valor inválido, volta para Home)
     homepage()
