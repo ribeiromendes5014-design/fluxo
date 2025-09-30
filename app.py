@@ -444,9 +444,6 @@ def carregar_livro_caixa():
     return df[[col for col in cols_to_return if col in df.columns]]
 
 
-# ==============================================================================
-# 💡 CORREÇÃO CRÍTICA AQUI: A FUNÇÃO QUE SALVA NO GITHUB AGORA ESTÁ COMPLETA
-# ==============================================================================
 def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
     """
     Salva o DataFrame CSV do Livro Caixa no GitHub usando a API e também localmente (backup).
@@ -493,9 +490,6 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
         st.error(f"❌ Erro ao salvar no GitHub: {e}")
         st.error("Verifique se seu 'GITHUB_TOKEN' tem permissões e se o repositório existe.")
         return False
-# ==============================================================================
-# FIM DA CORREÇÃO
-# ==============================================================================
 
 
 @st.cache_data(show_spinner=False)
@@ -608,8 +602,6 @@ def ajustar_estoque(id_produto, quantidade, operacao="debitar"):
             return True
     return False
 
-# A função salvar_produtos_no_github foi mantida como placeholder,
-# já que a lógica completa de salvar produtos exige a PyGithub e o Streamlit secrets.
 def salvar_produtos_no_github(dataframe, commit_message):
     return True
 
@@ -775,7 +767,10 @@ def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_di
 
 @st.cache_data(show_spinner="Calculando mais vendidos...")
 def get_most_sold_products(df_movimentacoes):
-    """Calcula os produtos mais vendidos (por quantidade de itens vendidos)."""
+    """
+    Calcula os produtos mais vendidos (por quantidade de itens vendidos).
+    CORRIGIDO: Tratamento de erro robusto para garantir a chave 'Produto_ID'.
+    """
     
     # 1. Filtra apenas as transações de Entrada (vendas) que foram Realizadas
     df_vendas = df_movimentacoes[
@@ -786,6 +781,7 @@ def get_most_sold_products(df_movimentacoes):
     ].copy()
 
     if df_vendas.empty:
+        # Garante que o DataFrame de saída tenha as colunas esperadas para o merge
         return pd.DataFrame(columns=["Produto_ID", "Quantidade Total Vendida"])
 
     vendas_list = []
@@ -793,25 +789,30 @@ def get_most_sold_products(df_movimentacoes):
     # 2. Desempacota o JSON de Produtos Vendidos
     for produtos_json in df_vendas["Produtos Vendidos"]:
         try:
-            # Usando json.loads e ast.literal_eval para tentar desserializar
+            # Tenta usar json.loads, mas usa ast.literal_eval como fallback
             try:
                 produtos = json.loads(produtos_json)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, TypeError):
                 produtos = ast.literal_eval(produtos_json)
             
             if isinstance(produtos, list):
                 for item in produtos:
-                    if item.get("Produto_ID"):
+                    # CORREÇÃO: Garante que 'Produto_ID' existe antes de tentar acessá-lo.
+                    # Se não existir (dados antigos), pula o item.
+                    produto_id = str(item.get("Produto_ID"))
+                    if produto_id and produto_id != "None":
                          vendas_list.append({
-                            "Produto_ID": str(item["Produto_ID"]),
+                            "Produto_ID": produto_id,
                             "Quantidade": to_float(item.get("Quantidade", 0))
                         })
-        except:
+        except Exception:
+            # Ignora linhas com JSON de produto totalmente malformado
             continue
             
     df_vendas_detalhada = pd.DataFrame(vendas_list)
     
     if df_vendas_detalhada.empty:
+        # Garante a coluna Produto_ID mesmo que vazia para o merge na homepage
         return pd.DataFrame(columns=["Produto_ID", "Quantidade Total Vendida"])
 
     # 3. Soma as quantidades por Produto_ID
@@ -981,16 +982,13 @@ def homepage():
         """, unsafe_allow_html=True)
 
 
-
-
-
         
 # ==============================================================================
 # 2. PÁGINAS DE GESTÃO (LIVRO CAIXA, PRODUTOS, COMPRAS, PROMOÇÕES)
 # ==============================================================================
 
 def gestao_promocoes():
-    """Página de gerenciamento de promoções (Bloco inserido pelo usuário)."""
+    """Página de gerenciamento de promoções."""
     
     # Inicializa ou carrega o estado de produtos e promoções
     produtos = inicializar_produtos()
@@ -1004,7 +1002,6 @@ def gestao_promocoes():
     promocoes = norm_promocoes(promocoes_df.copy())
     
     # Recarrega as vendas para a lógica de produtos parados
-    # Nota: Em um ambiente real, 'vendas' viria do Livro Caixa (Entradas Realizadas)
     df_movimentacoes = carregar_livro_caixa()
     vendas = df_movimentacoes[df_movimentacoes["Tipo"] == "Entrada"].copy()
     
@@ -1014,13 +1011,22 @@ def gestao_promocoes():
         produtos_json = row["Produtos Vendidos"]
         if pd.notna(produtos_json) and produtos_json:
             try:
-                items = ast.literal_eval(produtos_json)
-                for item in items:
-                    vendas_list.append({
-                        "Data": parse_date_yyyy_mm_dd(row["Data"]), 
-                        "IDProduto": str(item.get("Produto_ID"))
-                    })
-            except:
+                # Tenta usar json.loads, mas usa ast.literal_eval como fallback
+                try:
+                    items = json.loads(produtos_json)
+                except (json.JSONDecodeError, TypeError):
+                    items = ast.literal_eval(produtos_json)
+                
+                # CORREÇÃO: Garante que 'items' é uma lista e itera com segurança
+                if isinstance(items, list):
+                    for item in items:
+                         produto_id = str(item.get("Produto_ID"))
+                         if produto_id and produto_id != "None":
+                            vendas_list.append({
+                                "Data": parse_date_yyyy_mm_dd(row["Data"]), 
+                                "IDProduto": produto_id
+                            })
+            except Exception:
                 continue
             
     vendas_flat = pd.DataFrame(vendas_list).dropna(subset=["IDProduto"])
@@ -2995,4 +3001,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # --- Exibe/Oculta o Sidebar do Formulário ---
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
-    st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+    st.sidebar.empty()
