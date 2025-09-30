@@ -1095,17 +1095,25 @@ def exibir_resultados(df: pd.DataFrame, imagens_dict: dict):
 
 
 def processar_dataframe_precificacao(df: pd.DataFrame, frete_total: float, custos_extras: float,
-                        modo_margem: str, margem_fixa: float) -> pd.DataFrame:
-    """Processa o DataFrame, aplica rateio, margem e calcula os preços finais."""
-    if df.empty:
-        # Garante que o DataFrame tem as colunas mínimas esperadas para evitar erros de índice/coluna
-        return pd.DataFrame(columns=[
-            "Produto", "Qtd", "Custo Unitário", "Custos Extras Produto", 
-            "Custo Total Unitário", "Margem (%)", "Preço à Vista", "Preço no Cartão", 
-            "Rateio Global Unitário", "Cor", "Marca", "Data_Cadastro" # ADDED NEW COLUMNS
-        ])
+                                     modo_margem: str, margem_fixa: float) -> pd.DataFrame:
+    """Processa o DataFrame, aplica rateio, margem e calcula os preços finais."""
+    if df.empty:
+        # Garante que o DataFrame tem as colunas mínimas esperadas para evitar erros de índice/coluna
+        return pd.DataFrame(columns=[
+            "Produto", "Qtd", "Custo Unitário", "Custos Extras Produto",
+            "Custo Total Unitário", "Margem (%)", "Preço à Vista", "Preço no Cartão",
+            "Rateio Global Unitário", "Cor", "Marca", "Data_Cadastro" # ADDED NEW COLUMNS
+        ])
 
-    df = df.copy()
+    df = df.copy()
+
+    # --- Início da lógica de processamento virá aqui ---
+
+    # Exemplo de lógica (Substitua pela sua implementação completa):
+    # df['Rateio Global Unitário'] = (frete_total + custos_extras) / df['Qtd'].sum()
+    # ... (cálculos de margem e preço)
+    
+    return df
 
     # Garante que as colunas de custo e quantidade são numéricas
     for col in ["Qtd", "Custo Unitário", "Margem (%)", "Custos Extras Produto"]:
@@ -3030,6 +3038,7 @@ def livro_caixa():
         
         # Encontra o produto no DataFrame pelo código de barras
         produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
+
 
 
 
