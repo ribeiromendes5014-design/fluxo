@@ -913,7 +913,7 @@ def exibir_resultados_precificacao(df: pd.DataFrame, imagens_dict: dict):
     if df is None or df.empty:
         st.info("⚠️ Nenhum produto disponível para exibir.")
         return
-    st.subheader("📊 Resultados Detalhados da Precificação")
+    st.subheader("Resultados Detalhados da Precificação")
     for _, row in df.iterrows():
         with st.container(border=True):
             cols = st.columns([1, 3])
@@ -3122,10 +3122,6 @@ def gestao_precificacao():
     st.title("📊 Precificador de Produtos")
     
     # --- Configurações do GitHub para SALVAR ---
-    # Usa as mesmas configurações globais do app.py
-    # GITHUB_TOKEN já definido globalmente
-    # GITHUB_REPO já definido globalmente
-    # GITHUB_BRANCH já definido globalmente
     PATH_PRECFICACAO = "precificacao.csv"
     ARQ_CAIXAS_URL = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{PATH_PRECFICACAO}"
     
@@ -3151,7 +3147,6 @@ def gestao_precificacao():
         st.session_state.precificacao_carregada = True
         st.rerun()
 
-
     # Lógica de Salvamento Automático
     df_to_hash = st.session_state.produtos_manuais.drop(columns=["Imagem"], errors='ignore')
     if "hash_precificacao" not in st.session_state:
@@ -3166,12 +3161,11 @@ def gestao_precificacao():
         st.session_state.hash_precificacao = novo_hash
         st.toast("Salvamento automático da precificação realizado.")
 
-
     # --- INÍCIO DA INTERFACE DA PÁGINA ---
 
     st.header("1. Cadastro e Custos")
 
-    tab_manual, tab_rateio, tab_github = st.tabs(["✍️ Adicionar Produto", "🔢 Rateio Global", "📥 Carregar do GitHub"])
+    tab_manual, tab_rateio = st.tabs(["✍️ Adicionar Produto", "🔢 Rateio Global"])
 
     with tab_rateio:
         st.subheader("Cálculo de Rateio Unitário (Frete + Custos Extras)")
@@ -3218,79 +3212,59 @@ def gestao_precificacao():
                     st.rerun()
                 else:
                     st.warning("⚠️ Preencha o nome e a quantidade do produto.")
-
-    with tab_github:
-        st.info("Esta opção recarrega e substitui a lista de precificação atual pelos dados do arquivo `precificacao.csv` no GitHub.")
-        if st.button("🔄 Recarregar e Substituir do GitHub"):
-            df_git = load_csv_github(ARQ_CAIXAS_URL)
-            if df_git is not None:
-                if "Imagem" not in df_git.columns: df_git["Imagem"] = None
-                if "Imagem_URL" not in df_git.columns: df_git["Imagem_URL"] = ""
-                st.session_state.produtos_manuais = df_git
-                st.success("✅ CSV do GitHub carregado com sucesso!")
-                st.rerun()
-            else:
-                st.error("Falha ao carregar CSV. Pode estar vazio ou inacessível.")
-    
-    st.markdown("---")
-    st.header("2. Resultados e Ações")
-
-    margem_fixa_geral = st.slider("Margem de Lucro Padrão (%)", 0, 200, 30, key="margem_fixa_prec")
-    
-    # Processa o DF final para exibição
-    df_final = processar_dataframe_precificacao(
-        st.session_state.produtos_manuais,
-        st.session_state.get("frete_manual", 0.0),
-        st.session_state.get("extras_manual", 0.0),
-        margem_fixa_geral
-    )
-
-    if df_final.empty:
-        st.info("Adicione ou carregue produtos para ver os resultados da precificação.")
-    else:
-        st.subheader("Tabela de Precificação Final")
         
-        # Oculta colunas de imagem para o data_editor
-        cols_editor = [c for c in df_final.columns if c not in ["Imagem", "Imagem_URL"]]
-        df_para_editar = df_final[cols_editor].copy()
-
-        df_editado = st.data_editor(
-            df_para_editar,
-            num_rows="dynamic",
-            use_container_width=True,
-            key="editor_precificacao"
-        )
-        
-        # Lógica de Sincronização e Exclusão
-        if not df_editado.equals(df_para_editar):
-            # Encontra as linhas que foram excluídas
-            produtos_removidos = set(df_para_editar['Produto']) - set(df_editado['Produto'])
-            
-            if produtos_removidos:
-                # Se algo foi removido, filtra o DF manual original
-                st.session_state.produtos_manuais = st.session_state.produtos_manuais[
-                    ~st.session_state.produtos_manuais['Produto'].isin(produtos_removidos)
-                ].reset_index(drop=True)
-            else:
-                # Se foi editado, atualiza o DF manual
-                df_editado_full = df_editado.merge(
-                    st.session_state.produtos_manuais[['Produto', 'Imagem', 'Imagem_URL']],
-                    on='Produto',
-                    how='left'
-                )
-                st.session_state.produtos_manuais = df_editado_full
-            
-            st.success("Tabela sincronizada. Recalculando...")
-            st.rerun()
-
-        # Exibição dos resultados com imagens
-        exibir_resultados_precificacao(df_final, imagens_dict)
-
+        # --- SEÇÃO DE RESULTADOS E AÇÕES (MOVIDA PARA DENTRO DESTA ABA) ---
         st.markdown("---")
-        st.subheader("Ações")
-        if st.button("📤 Gerar PDF e Enviar para Telegram", use_container_width=True, type="primary"):
-            pdf_io = gerar_pdf(df_final)
-            enviar_pdf_telegram(pdf_io, df_final, thread_id=28) # ID do tópico do precificador
+        st.header("2. Resultados e Ações")
+
+        margem_fixa_geral = st.slider("Margem de Lucro Padrão (%)", 0, 200, 30, key="margem_fixa_prec")
+        
+        df_final = processar_dataframe_precificacao(
+            st.session_state.produtos_manuais,
+            st.session_state.get("frete_manual", 0.0),
+            st.session_state.get("extras_manual", 0.0),
+            margem_fixa_geral
+        )
+
+        if df_final.empty:
+            st.info("Adicione produtos na seção acima para ver os resultados da precificação.")
+        else:
+            st.subheader("Tabela de Precificação Final")
+            cols_editor = [c for c in df_final.columns if c not in ["Imagem", "Imagem_URL"]]
+            df_para_editar = df_final[cols_editor].copy()
+
+            df_editado = st.data_editor(
+                df_para_editar,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="editor_precificacao"
+            )
+            
+            if not df_editado.equals(df_para_editar):
+                produtos_removidos = set(df_para_editar['Produto']) - set(df_editado['Produto'])
+                if produtos_removidos:
+                    st.session_state.produtos_manuais = st.session_state.produtos_manuais[
+                        ~st.session_state.produtos_manuais['Produto'].isin(produtos_removidos)
+                    ].reset_index(drop=True)
+                else:
+                    df_editado_full = df_editado.merge(
+                        st.session_state.produtos_manuais[['Produto', 'Imagem', 'Imagem_URL']],
+                        on='Produto',
+                        how='left'
+                    )
+                    st.session_state.produtos_manuais = df_editado_full
+                
+                st.success("Tabela sincronizada. Recalculando...")
+                st.rerun()
+
+            exibir_resultados_precificacao(df_final, imagens_dict)
+
+            st.markdown("---")
+            st.subheader("Ações")
+            if st.button("📤 Gerar PDF e Enviar para Telegram", use_container_width=True, type="primary"):
+                pdf_io = gerar_pdf(df_final)
+                enviar_pdf_telegram(pdf_io, df_final, thread_id=28)
+
 
 # ==============================================================================
 # ESTRUTURA PRINCIPAL E NAVEGAÇÃO SUPERIOR
@@ -3348,3 +3322,4 @@ if st.session_state.pagina_atual in PAGINAS:
 # A sidebar só é necessária para o formulário do Livro Caixa
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
