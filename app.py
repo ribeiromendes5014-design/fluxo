@@ -862,294 +862,236 @@ TOPICO_ID = 28 # ID do tópico (thread) no grupo Telegram
 
 
 
-# --- FUNÇÃO DE FORMATAÇÃO DE MOEDA BRL (Integrada para auto-suficiência) ---
+# Funcao formatar_brl (necessária para exibir_resultados) - MOCK simplificado
 def formatar_brl(valor, decimais=2, prefixo=True):
-    """Formata um valor float para a string de moeda BRL (R$ X.XXX,XX/XXXX) de forma simplificada.
-    
-    Esta função utiliza a biblioteca 'locale' do Python para garantir a correta
-    formatação de separador de milhar (ponto) e decimal (vírgula) padrão brasileiro.
-    """
-    
-    # Define o locale para Português do Brasil para formatação de moeda
+    """Simulação de formatacao BRL para fins de teste."""
     try:
-        locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
-    except locale.Error:
-        try:
-            locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil')
-        except locale.Error:
-            # Fallback seguro caso o sistema não encontre o locale
-            pass
-            
-    try:
-        valor = float(valor)
+        val = float(valor)
     except (ValueError, TypeError):
-        return "R$ 0,00" if prefixo else "0,00"
-
-    # Usa locale.currency para formatação BRL segura.
-    resultado_formatado = locale.currency(valor, symbol=True, grouping=True)
-
-    # Ajuste de Decimais (Se necessário)
-    if decimais != 2:
-        partes = resultado_formatado.rsplit(',', 1)
-        inteira = partes[0]
-        decimal_existente = partes[1] if len(partes) > 1 else '00'
-        
-        # Garante o número correto de decimais (pode truncar ou preencher com zeros)
-        novo_decimal = decimal_existente.ljust(decimais, '0')[:decimais]
-        resultado_formatado = f"{inteira},{novo_decimal}"
+        val = 0.0
     
-    # Remove o símbolo de moeda (R$ ) se prefixo=False
-    if not prefixo:
-        if resultado_formatado.startswith('R$ '):
-            return resultado_formatado[3:]
-        elif resultado_formatado.startswith('R$'):
-            return resultado_formatado[2:]
-        
-    return resultado_formatado
-
-
-# --- FUNÇÃO DE GERAÇÃO DE PDF (COMPLETA E CORRIGIDA) ---
-def gerar_pdf(df: pd.DataFrame) -> BytesIO:
-    """Gera um PDF formatado a partir do DataFrame de precificação, incluindo a URL da imagem."""
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "Relatório de Precificação", 0, 1, "C")
-    pdf.ln(5)
-
-    # Configurações de fonte e larguras
-    pdf.set_font("Arial", "B", 10) 
-
-    # Definindo largura das colunas (em mm)
-    col_widths = {
-        "Produto": 40,
-        "Qtd": 15,
-        "Custo Unitário": 25,
-        "Margem (%)": 20,
-        "Preço à Vista": 25,
-        "Preço no Cartão": 25,
-        "URL da Imagem": 40 # Nova coluna para a URL
-    }
+    inteira = int(val)
+    decimal = int((val - inteira) * (10 ** decimais))
     
-    pdf_cols = [col for col in col_widths.keys()]
-    current_widths = [col_widths[col] for col in pdf_cols]
-
-    # Cabeçalho da tabela
-    pdf.set_fill_color(200, 220, 255)
-    for col_name, width in zip(pdf_cols, current_widths):
-        pdf.cell(width, 10, col_name, border=1, align='C', fill=True)
-    pdf.ln()
-
-    # Fonte para corpo da tabela
-    pdf.set_font("Arial", "", 8) 
+    # Formatação de milhar simplificada (não usa locale, apenas mock)
+    inteira_formatada = "{:,}".format(inteira).replace(',', '.')
     
-    # Adicionando linhas de dados
-    for index, row in df.iterrows():
+    resultado = f"{inteira_formatada},{decimal:0{decimais}d}"
+    return f"R$ {resultado}" if prefixo else resultado
+
+# ----------------------------------------------------------------------
+# --- FUNÇÃO CORRIGIDA 1: ENVIAR PDF TELEGRAM ---
+# ----------------------------------------------------------------------
+
+def enviar_pdf_telegram(pdf_bytesio: BytesIO, df_produtos: pd.DataFrame, thread_id: int = None):
+    """Envia o arquivo PDF e a primeira imagem (se existir) em mensagens separadas para o Telegram."""
+    
+    # Obtém o token do Telegram
+    # Acessando st.secrets.get() conforme o código original (corrigindo o .get)
+    token = st.secrets.get("telegram_token", HARDCODED_TELEGRAM_TOKEN)
+    
+    image_url = None
+    # Caption principal (usado se não houver imagem)
+    caption_doc = "Relatório de Precificação"
+    
+    # Lógica para construir o caption baseado no primeiro produto
+    if not df_produtos.empty and "Imagem_URL" in df_produtos.columns:
+        # Tenta encontrar a primeira linha com um produto para usar a imagem e dados
+        first_valid_row = df_produtos.iloc[0]
+        url = first_valid_row.get("Imagem_URL")
+        produto = first_valid_row.get("Produto", "Produto")
         
-        # Produto
-        pdf.cell(col_widths["Produto"], 6, str(row.get("Produto", "N/A")), border=1, align='L')
+        if isinstance(url, str) and url.startswith("http"):
+            image_url = url
+            
+            # --- Montagem do Caption ---
+            date_info = ""
+            
+            # Tenta extrair informações de data
+            if "Data_Cadastro" in df_produtos.columns and not df_produtos['Data_Cadastro'].empty:
+                try:
+                    # Converte para datetime, tratando erros e removendo valores inválidos
+                    valid_dates = pd.to_datetime(df_produtos['Data_Cadastro'], errors='coerce').dropna()
+                    
+                    if not valid_dates.empty:
+                        # Extrai a data mais antiga e mais recente para o range
+                        min_date = valid_dates.min().strftime('%d/%m/%Y')
+                        max_date = valid_dates.max().strftime('%d/%m/%Y')
+                        
+                        if min_date == max_date:
+                            date_info = f"\n🗓️ Cadastro em: {min_date}"
+                        else:
+                            date_info = f"\n🗓️ Período: {min_date} a {max_date}"
+                except Exception:
+                    pass # Ignora erros de formatação
+            
+            # Contagem de produtos no relatório
+            count_info = f"\n📦 Total de Produtos: {df_produtos.shape[0]}"
+
+            # Caption para a imagem (que será usada como legenda do PDF se não houver imagem separada)
+            caption_doc = f"📦 Produto Principal: {produto}{count_info}{date_info}"
+            
+        # O caption do documento principal é sempre o completo (se houver imagem) ou o simples (se não houver)
+        caption_doc_final = caption_doc + "\n\n[Relatório de Precificação em anexo]"
+    else:
+        # Caption simples se não houver DataFrame ou URL
+        caption_doc_final = "Relatório de Precificação em anexo (sem detalhes de imagem)."
+
+    # 1. Envia o PDF (mensagem principal)
+    try:
+        # Volta o ponteiro para o início
+        pdf_bytesio.seek(0)
         
-        # Qtd
-        pdf.cell(col_widths["Qtd"], 6, str(row.get("Qtd", 0)), border=1, align='C')
+        url_doc = f"https://api.telegram.org/bot{token}/sendDocument"
+        files_doc = {'document': ('precificacao.pdf', pdf_bytesio, 'application/pdf')}
+        data_doc = {"chat_id": TELEGRAM_CHAT_ID, "caption": caption_doc_final}
         
-        # Custo Unitário (Formatado com a função BRL)
-        custo = row.get("Custo Unitário", 0.0)
-        pdf.cell(col_widths["Custo Unitário"], 6, formatar_brl(custo), border=1, align='R')
+        if thread_id is not None:
+            data_doc["message_thread_id"] = thread_id
         
-        # Margem (%)
-        margem = row.get("Margem (%)", 0.0)
-        pdf.cell(col_widths["Margem (%)"], 6, f"{margem:.2f}%", border=1, align='R')
+        resp_doc = requests.post(url_doc, data=data_doc, files=files_doc)
+        resp_doc.raise_for_status() # Lança exceção para status HTTP 4xx/5xx
+        resp_doc_json = resp_doc.json()
         
-        # Preço à Vista (Formatado com a função BRL)
-        preco_vista = row.get("Preço à Vista", 0.0)
-        pdf.cell(col_widths["Preço à Vista"], 6, formatar_brl(preco_vista), border=1, align='R')
+        if not resp_doc_json.get("ok"):
+            st.error(f"❌ Erro ao enviar PDF: {resp_doc_json.get('description')}")
+            return
+
+        st.success("✅ PDF enviado para o Telegram.")
         
-        # Preço no Cartão (Formatado com a função BRL)
-        preco_cartao = row.get("Preço no Cartão", 0.0)
-        pdf.cell(col_widths["Preço no Cartão"], 6, formatar_brl(preco_cartao), border=1, align='R')
-        
-        # URL da Imagem (Trunca o texto para caber na célula)
-        url = str(row.get("URL da Imagem", ""))
-        # Calcula um limite de caracteres baseado na largura da coluna (aprox. 2.5 chars/mm)
-        char_limit = int(col_widths["URL da Imagem"] * 2.5) 
-        display_url = url[:char_limit] + '...' if len(url) > char_limit else url
-        
-        pdf.cell(col_widths["URL da Imagem"], 6, display_url, border=1, align='L')
-        
-        pdf.ln() # Nova linha para a próxima linha de dados
+    except requests.exceptions.RequestException as req_err:
+        st.error(f"❌ Erro de conexão/HTTP ao enviar PDF: {req_err}")
+        return
+    except Exception as e:
+        st.error(f"❌ Erro inesperado ao enviar PDF: {e}")
+        return
 
-    # Retorna o PDF como BytesIO
-    # O output 'S' retorna bytes, que são envolvidos pelo BytesIO
-    return BytesIO(pdf.output(dest='S').encode('latin-1'))
+    # 2. Envia a foto (se existir) em uma mensagem separada
+    if image_url:
+        try:
+            url_photo = f"https://api.telegram.org/bot{token}/sendPhoto"
+            
+            # Pega o nome do produto principal para o caption da foto
+            produto_nome = df_produtos.iloc[0].get("Produto", "Produto Principal")
+            
+            # Faz o Telegram buscar a foto diretamente da URL
+            data_photo = {
+                "chat_id": TELEGRAM_CHAT_ID, 
+                "photo": image_url,
+                "caption": f"🖼️ Foto do Produto Principal: {produto_nome}"
+            }
+            if thread_id is not None:
+                data_photo["message_thread_id"] = thread_id
 
+            resp_photo = requests.post(url_photo, data=data_photo)
+            resp_photo.raise_for_status()
+            resp_photo_json = resp_photo.json()
 
-
-def enviar_pdf_telegram(pdf_bytesio, df_produtos: pd.DataFrame, thread_id=None):
-    """Envia o arquivo PDF e a primeira imagem (se existir) em mensagens separadas para o Telegram."""
-    
-    token = st.secrets.get("telegram_token", HARDCODED_TELEGRAM_TOKEN)
-    
-    image_url = None
-    image_caption = "Relatório de Precificação"
-    
-    if not df_produtos.empty and "Imagem_URL" in df_produtos.columns:
-        # Tenta encontrar a primeira linha com um produto para usar a imagem e dados
-        first_valid_row = df_produtos.iloc[0]
-        url = first_valid_row.get("Imagem_URL")
-        produto = first_valid_row.get("Produto", "Produto")
-        
-        if isinstance(url, str) and url.startswith("http"):
-            image_url = url
-            # Adiciona informações de filtro ao caption, se aplicável
-            date_info = ""
-            if "Data_Cadastro" in df_produtos.columns and not df_produtos['Data_Cadastro'].empty:
-                try:
-                    # Converte para datetime e remove NaN/NaT
-                    valid_dates = pd.to_datetime(df_produtos['Data_Cadastro'], errors='coerce').dropna()
-                    if not valid_dates.empty:
-                        min_date = valid_dates.min().strftime('%d/%m/%Y')
-                        max_date = valid_dates.max().strftime('%d/%m/%Y')
-                        if min_date == max_date:
-                            date_info = f"\n🗓️ Cadastro em: {min_date}"
-                        else:
-                            date_info = f"\n🗓️ Período: {min_date} a {max_date}"
-                except Exception:
-                    pass # Ignora erros de formatação
-            
-            # Use df_produtos.shape[0] para obter a contagem de produtos no relatório
-            count_info = f"\n📦 Total de Produtos: {df_produtos.shape[0]}"
-
-            image_caption = f"📦 Produto Principal: {produto}{count_info}{date_info}\n\n[Relatório de Precificação em anexo]"
-
-    # Se não houver URL de imagem, usa um caption simples
-    caption_doc = image_caption if not image_url else "[Relatório de Precificação em anexo]"
-
-    # 1. Envia o PDF (mensagem principal)
-    
-    url_doc = f"https://api.telegram.org/bot{token}/sendDocument"
-    files_doc = {'document': ('precificacao.pdf', pdf_bytesio, 'application/pdf')}
-    data_doc = {"chat_id": TELEGRAM_CHAT_ID, "caption": caption_doc}
-    if thread_id is not None:
-        data_doc["message_thread_id"] = thread_id
-    
-    resp_doc = requests.post(url_doc, data=data_doc, files=files_doc)
-    resp_doc_json = resp_doc.json()
-    
-    if not resp_doc_json.get("ok"):
-         st.error(f"❌ Erro ao enviar PDF: {resp_doc_json.get('description')}")
-         return
-
-    st.success("✅ PDF enviado para o Telegram.")
-    
-    # 2. Envia a foto (se existir) em uma mensagem separada
-    if image_url:
-        try:
-            url_photo = f"https://api.telegram.org/bot{token}/sendPhoto"
-            
-            # Faz o Telegram buscar a foto diretamente da URL
-            data_photo = {
-                "chat_id": TELEGRAM_CHAT_ID, 
-                "photo": image_url,
-                "caption": f"🖼️ Foto do Produto Principal: {produto}"
-            }
-            if thread_id is not None:
-                data_photo["message_thread_id"] = thread_id
-
-            resp_photo = requests.post(url_photo, data=data_photo)
-            resp_photo_json = resp_photo.json()
-
-            if resp_photo_json.get("ok"):
-                st.success("✅ Foto do produto principal enviada com sucesso!")
-            else:
-                 st.warning(f"❌ Erro ao enviar a foto do produto: {resp_photo_json.get('description')}")
-                 
-        except Exception as e:
-            st.warning(f"⚠️ Erro ao tentar enviar a imagem. Erro: {e}")
-            
+            if resp_photo_json.get("ok"):
+                st.success("✅ Foto do produto principal enviada com sucesso!")
+            else:
+                st.warning(f"❌ Erro ao enviar a foto do produto: {resp_photo_json.get('description')}")
+                
+        except requests.exceptions.RequestException as req_err:
+            st.warning(f"⚠️ Erro de conexão/HTTP ao tentar enviar a imagem: {req_err}")
+        except Exception as e:
+            st.warning(f"⚠️ Erro ao tentar enviar a imagem. Erro: {e}")
+            
+# ----------------------------------------------------------------------
+# --- FUNÇÃO CORRIGIDA 2: EXIBIR RESULTADOS ---
+# ----------------------------------------------------------------------
 
 def exibir_resultados(df: pd.DataFrame, imagens_dict: dict):
-    """Exibe os resultados de precificação com tabela e imagens dos produtos."""
-    if df is None or df.empty:
-        st.info("⚠️ Nenhum produto disponível para exibir.")
-        return
+    """Exibe os resultados de precificação com tabela e imagens dos produtos."""
+    
+    # Assegura que formatar_brl está disponível (usando a versão mock/simplificada aqui)
+    global formatar_brl 
+    
+    if df is None or df.empty:
+        st.info("⚠️ Nenhum produto disponível para exibir.")
+        return
 
-    st.subheader("📊 Resultados Detalhados da Precificação")
+    st.subheader("📊 Resultados Detalhados da Precificação")
 
-    for idx, row in df.iterrows():
-        with st.container():
-            cols = st.columns([1, 3])
-            with cols[0]:
-                img_to_display = None
-                
-                # 1. Tenta carregar imagem do dicionário (upload manual)
-                img_to_display = imagens_dict.get(row.get("Produto"))
+    for idx, row in df.iterrows():
+        with st.container():
+            cols = st.columns([1, 3])
+            
+            # --- COLUNA 1: IMAGEM ---
+            with cols[0]:
+                img_to_display = None
+                
+                # 1. Tenta carregar imagem do dicionário (upload manual)
+                img_to_display = imagens_dict.get(row.get("Produto"))
 
-                # 2. Tenta carregar imagem dos bytes (se persistido)
-                if img_to_display is None and row.get("Imagem") is not None and isinstance(row.get("Imagem"), bytes):
-                    try:
-                        img_to_display = row.get("Imagem")
-                    except Exception:
-                        pass # Continua tentando a URL
+                # 2. Tenta carregar imagem dos bytes (se persistido)
+                if img_to_display is None and row.get("Imagem") is not None and isinstance(row.get("Imagem"), bytes):
+                    try:
+                        img_to_display = row.get("Imagem")
+                    except Exception:
+                        pass # Continua tentando a URL
 
-                # 3. Tenta carregar imagem da URL (se persistido)
-                img_url = row.get("Imagem_URL")
-                if img_to_display is None and img_url and isinstance(img_url, str) and img_url.startswith("http"):
-                    st.image(img_url, width=100, caption="URL")
-                elif img_to_display:
-                    st.image(img_to_display, width=100, caption="Arquivo")
-                else:
-                    st.write("🖼️ N/A")
-                    
-            with cols[1]:
-                st.markdown(f"**{row.get('Produto', '—')}**")
-                st.write(f"📦 Quantidade: {row.get('Qtd', '—')}")
-                
-                # Exibição dos novos campos, se existirem
-                cor = row.get('Cor', 'N/A')
-                marca = row.get('Marca', 'N/A')
-                data_cadastro = row.get('Data_Cadastro', 'N/A')
-                if data_cadastro != 'N/A':
-                    try:
-                        # Formata a data para dd/mm/yyyy para exibição
-                        date_dt = pd.to_datetime(data_cadastro, errors='coerce')
-                        if pd.notna(date_dt):
-                            data_cadastro = date_dt.strftime('%d/%m/%Y')
-                        else:
-                            data_cadastro = 'Data Inválida'
-                    except Exception:
-                        pass # Mantém o valor original se a formatação falhar
+                # 3. Tenta carregar imagem da URL (se persistido)
+                img_url = row.get("Imagem_URL")
+                if img_to_display is None and img_url and isinstance(img_url, str) and img_url.startswith("http"):
+                    st.image(img_url, width=100, caption="URL")
+                elif img_to_display:
+                    st.image(img_to_display, width=100, caption="Arquivo")
+                else:
+                    st.write("🖼️ N/A")
+                    
+            # --- COLUNA 2: DETALHES DO PRODUTO ---
+            with cols[1]:
+                st.markdown(f"**{row.get('Produto', '—')}**")
+                st.write(f"📦 Quantidade: {row.get('Qtd', '—')}")
+                
+                # Exibição dos novos campos, se existirem
+                cor = row.get('Cor', 'N/A')
+                marca = row.get('Marca', 'N/A')
+                data_cadastro = row.get('Data_Cadastro', 'N/A')
+                
+                if data_cadastro != 'N/A':
+                    try:
+                        # Formata a data para dd/mm/yyyy para exibição
+                        date_dt = pd.to_datetime(data_cadastro, errors='coerce')
+                        if pd.notna(date_dt):
+                            data_cadastro = date_dt.strftime('%d/%m/%Y')
+                        else:
+                            data_cadastro = 'Data Inválida'
+                    except Exception:
+                        pass # Mantém o valor original se a formatação falhar
 
-                st.write(f"🎨 Cor: {cor} | 🏭 Marca: {marca} | 📅 Cadastro: {data_cadastro}")
+                st.write(f"🎨 Cor: {cor} | 🏭 Marca: {marca} | 📅 Cadastro: {data_cadastro}")
 
-                custo_base = row.get('Custo Unitário', 0.0)
-                custo_total_unitario = row.get('Custo Total Unitário', custo_base)
+                custo_base = row.get('Custo Unitário', 0.0)
+                custo_total_unitario = row.get('Custo Total Unitário', custo_base)
 
-                st.write(f"💰 Custo Base: {formatar_brl(custo_base)}")
+                st.write(f"💰 Custo Base: {formatar_brl(custo_base)}")
 
-                custos_extras_prod = row.get('Custos Extras Produto', 0.0)
-                # Puxa o rateio global unitário calculado na função processar_dataframe
-                rateio_global_unitario = row.get('Rateio Global Unitário', 0.0) 
-                
-                # Exibe a soma dos custos extras específicos (se houver) e o rateio global por unidade
-                # NOTA: O Custos Extras Produto é o valor ESPECÍFICO do produto (digitado pelo usuário ou 0.0)
-                rateio_e_extras_display = custos_extras_prod + rateio_global_unitario
-                st.write(f"🛠 Rateio/Extras (Total/Un.): {formatar_brl(rateio_e_extras_display, decimais=4)}") # Exibição com mais decimais para rateio
-                
-                if 'Custo Total Unitário' in df.columns:
-                    st.write(f"💸 Custo Total/Un: **{formatar_brl(custo_total_unitario)}**")
+                custos_extras_prod = row.get('Custos Extras Produto', 0.0)
+                # Puxa o rateio global unitário calculado na função processar_dataframe
+                rateio_global_unitario = row.get('Rateio Global Unitário', 0.0)
+                
+                # Exibe a soma dos custos extras específicos e o rateio global por unidade
+                rateio_e_extras_display = custos_extras_prod + rateio_global_unitario
+                st.write(f"🛠 Rateio/Extras (Total/Un.): {formatar_brl(rateio_e_extras_display, decimais=4)}") 
 
-                if "Margem (%)" in df.columns:
-                    margem_val = row.get("Margem (%)", 0)
-                    try:
-                        margem_float = float(margem_val)
-                    except Exception:
-                        margem_float = 0
-                    st.write(f"📈 Margem: **{margem_float:.2f}%**")
-                
-                if "Preço à Vista" in df.columns:
-                    st.write(f"💰 Preço à Vista: **{formatar_brl(row.get('Preço à Vista', 0))}**")
-                if "Preço no Cartão" in df.columns:
-                    st.write(f"💳 Preço no Cartão: **{formatar_brl(row.get('Preço no Cartão', 0))}**")
+                if 'Custo Total Unitário' in df.columns:
+                    st.write(f"💸 Custo Total/Un: **{formatar_brl(custo_total_unitario)}**")
+
+                if "Margem (%)" in df.columns:
+                    margem_val = row.get("Margem (%)", 0)
+                    try:
+                        margem_float = float(margem_val)
+                    except Exception:
+                        margem_float = 0
+                    st.write(f"📈 Margem: **{margem_float:.2f}%**")
+                
+                if "Preço à Vista" in df.columns:
+                    st.write(f"💰 Preço à Vista: **{formatar_brl(row.get('Preço à Vista', 0))}**")
+                if "Preço no Cartão" in df.columns:
+                    st.write(f"💳 Preço no Cartão: **{formatar_brl(row.get('Preço no Cartão', 0))}**")
+
 
 
 def processar_dataframe_precificacao(df: pd.DataFrame, frete_total: float, custos_extras: float,
@@ -3088,5 +3030,6 @@ def livro_caixa():
         
         # Encontra o produto no DataFrame pelo código de barras
         produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
+
 
 
