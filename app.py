@@ -1936,10 +1936,12 @@ def historico_compras():
                         st.session_state.df_compras = pd.concat([df_original, pd.DataFrame([nova_linha])], ignore_index=True)
                         commit_msg = f"Nova compra registrada: {nome_produto}"
 
-                    if salvar_historico_no_github(st.session_state.df_compras, commit_msg):
+                    if salvar_historico_no_github(st.session_state.df, f"Nova movimentação registrada: {cliente}"):
                         st.session_state.edit_compra_idx = None
                         st.cache_data.clear()
                         st.rerun()
+                    else:
+                        st.error("❌ Erro ao salvar no CSV do Livro Caixa!")
 
             if cancelar_edicao:
                 st.session_state.edit_compra_idx = None
@@ -3020,3 +3022,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
