@@ -64,7 +64,7 @@ st.markdown("""
         background-color: #f7f7f7; /* Fundo mais claro */
     }
     
-    /* 3. Container customizado do Header (cor Magenta da Loja) */
+    /* 3. Container customizado do Header (cor Magenta da Loja) - AGORA USADO PRINCIPALMENTE PARA ESTILIZAÇÃO DO FUNDO */
     div.header-container {
         padding: 10px 0;
         background-color: #E91E63; /* Cor Magenta Forte */
@@ -77,11 +77,27 @@ st.markdown("""
     }
     
     /* 4. Estilo dos botões/abas de Navegação (dentro do header) */
-    .nav-button-group {
-        display: flex;
-        gap: 20px;
-        align-items: center;
-        padding-right: 20px;
+    /* Removido o nav-button-group pois usamos o layout de colunas do Streamlit */
+    
+    /* Estilo dos botões Streamlit nativos no header */
+    div[data-testid="stHorizontalBlock"] button {
+        background-color: #C2185B !important; /* Cor mais escura para fundo */
+        color: white !important;
+        border: none !important;
+        border-radius: 5px !important;
+        padding: 8px 15px !important;
+        transition: background-color 0.3s;
+    }
+    div[data-testid="stHorizontalBlock"] button:hover {
+        background-color: #AD1457 !important; /* Mais escuro no hover */
+    }
+    
+    /* Estilo para o botão ativo (página atual) */
+    div[data-testid="stHorizontalBlock"] button[data-current-page="true"] {
+        background-color: white !important; /* Fundo branco */
+        color: #E91E63 !important; /* Texto magenta */
+        font-weight: bold !important;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
     }
     
     /* Remove a Sidebar do Streamlit padrão, pois usaremos a navegação customizada no topo */
@@ -3225,50 +3241,76 @@ def livro_caixa():
 if 'page' not in st.session_state:
     st.session_state.page = 'Home'
 
-# Lógica de navegação baseada no botão de rádio na sidebar (substituído pela navegação customizada)
-# Vamos simular a navegação usando botões de sessão no topo
+# Callback para mudar o estado da sessão e forçar o rerun
+def set_page(page_name):
+    st.session_state.page = page_name
 
-# --- HEADER CUSTOMIZADO ---
+# --- HEADER CUSTOMIZADO COM BOTÕES STREAMLIT NATIVOS ---
+
 # Define as opções de navegação
 nav_options = {
     "Home": "Home",
-    "Gestão de Produtos": "Produtos",
+    "Produtos": "Produtos",
     "Precificação": "Precificação",
-    "Livro Caixa": "Caixa",
-    "Compras/Insumos": "Compras",
+    "Caixa": "Caixa",
+    "Compras": "Compras",
     "Promoções": "Promocoes"
 }
 
-# Cria o container do header
+# 1. Container Magenta Forte para o Header
 st.markdown(f'''
     <div class="header-container">
         <div style="padding-left: 20px;">
             <img src="{LOGO_DOCEBELLA_URL}" alt="Logo Doce&Bella" style="height: 50px;">
         </div>
-        <div class="nav-button-group">
-            <h5 style="color: white; margin: 0; padding: 0 10px;">Página Atual: {st.session_state.page}</h5>
-            <!-- Botões de navegação. NOTA: No Streamlit real, use st.button com on_click para mudar st.session_state.page -->
-            <button onclick="window.parent.postMessage({{streamlit: {{page: 'Home'}}}}, '*')" style="color: {'yellow' if st.session_state.page == 'Home' else 'white'}; background: none; border: none; font-weight: bold; cursor: pointer;">Home</button>
-            <button onclick="window.parent.postMessage({{streamlit: {{page: 'Produtos'}}}}, '*')" style="color: {'yellow' if st.session_state.page == 'Produtos' else 'white'}; background: none; border: none; font-weight: bold; cursor: pointer;">Produtos</button>
-            <button onclick="window.parent.postMessage({{streamlit: {{page: 'Precificação'}}}}, '*')" style="color: {'yellow' if st.session_state.page == 'Precificação' else 'white'}; background: none; border: none; font-weight: bold; cursor: pointer;">Precificação</button>
-            <button onclick="window.parent.postMessage({{streamlit: {{page: 'Caixa'}}}}, '*')" style="color: {'yellow' if st.session_state.page == 'Caixa' else 'white'}; background: none; border: none; font-weight: bold; cursor: pointer;">Caixa</button>
-            <button onclick="window.parent.postMessage({{streamlit: {{page: 'Compras'}}}}, '*')" style="color: {'yellow' if st.session_state.page == 'Compras' else 'white'}; background: none; border: none; font-weight: bold; cursor: pointer;">Compras</button>
-            <button onclick="window.parent.postMessage({{streamlit: {{page: 'Promocoes'}}}}, '*')" style="color: {'yellow' if st.session_state.page == 'Promocoes' else 'white'}; background: none; border: none; font-weight: bold; cursor: pointer;">Promoções</button>
+        <div style="padding-right: 20px; color: white;">
+            Página Atual: {st.session_state.page}
         </div>
     </div>
-    <script>
-        // Este script é necessário para simular a mudança de estado em um ambiente de preview.
-        document.querySelectorAll('.nav-button-group button').forEach(button => {{
-            const pageName = button.innerText;
-            button.onclick = function() {{
-                 // Simula a mudança de página através da query params
-                 // Isso é uma solução alternativa para ambientes de preview/iframe
-                 window.parent.postMessage({{type: 'SET_QUERY_PARAM', key: 'page', value: pageName}}, '*');
-            }};
-        }});
-    </script>
 ''', unsafe_allow_html=True)
-# --- FIM HEADER CUSTOMIZADO ---
+
+# 2. Área dos Botões (abaixo do header)
+# Cria colunas para os botões (espaçamento ajustado para 7 colunas, com 1 coluna vazia para alinhar)
+cols = st.columns([1, 1, 1, 1, 1, 1, 1]) 
+
+# Mapeamento para as chaves de coluna Streamlit
+col_keys = ["Home", "Produtos", "Precificação", "Caixa", "Compras", "Promoções"] 
+
+with st.container():
+    col_nav = st.columns(len(col_keys) + 1) # Adiciona uma coluna extra para o logo/espaçamento
+    
+    # Adiciona os botões nativos em um loop
+    for i, page_name in enumerate(col_keys):
+        # A página atual está no estado da sessão
+        is_current = st.session_state.page == page_name
+        
+        # Coloca o botão na coluna correta
+        with col_nav[i + 1]: 
+            # Injetamos um atributo HTML customizado 'data-current-page' para o CSS poder estilizá-lo
+            # O st.button precisa de um wrapper para injetar o CSS customizado via markdown/html,
+            # mas vamos simplificar usando a chave para o Streamlit manter a identidade do widget.
+            st.button(
+                page_name,
+                key=f"nav_btn_{page_name}",
+                on_click=set_page,
+                args=[page_name],
+                # Usa CSS para destacar o botão ativo (baseado no CSS que injetamos)
+                help=f"Navegar para {page_name}",
+            )
+            # Este Markdown injeta o CSS específico para o botão ativo/inativo
+            if is_current:
+                st.markdown(
+                    f"""
+                    <script>
+                        // Encontra o botão (widget) pelo seu ID único e aplica o atributo customizado
+                        const btn = document.querySelector('[data-testid="stButton"] button[key="nav_btn_{page_name}"]');
+                        if (btn) {{
+                            btn.setAttribute('data-current-page', 'true');
+                        }}
+                    </script>
+                    """, 
+                    unsafe_allow_html=True
+                )
 
 
 # Lógica de navegação real (usando st.query_params)
@@ -3278,7 +3320,7 @@ if 'page' in query_params:
     page_from_query = query_params['page'][0] if isinstance(query_params['page'], list) else query_params['page']
     
     # 2. Atualiza o estado da sessão
-    if page_from_query in ["Home", "Produtos", "Precificação", "Caixa", "Compras", "Promocoes"]:
+    if page_from_query in nav_options.keys():
         st.session_state.page = page_from_query
 
 
@@ -3293,8 +3335,8 @@ elif st.session_state.page == 'Caixa':
     livro_caixa()
 elif st.session_state.page == 'Compras':
     historico_compras()
-elif st.session_state.page == 'Promocoes':
+elif st.session_state.page == 'Promoções': # Mudado de 'Promocoes' para 'Promoções' para consistência no nav_options
     gestao_promocoes()
 else:
-    # Fallback (caso 'page' tenha um valor inválido, volta para Home)
+    # Fallback
     homepage()
