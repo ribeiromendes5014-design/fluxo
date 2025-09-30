@@ -370,11 +370,13 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
 
 PATH_LIVRO_CAIXA = "livro_caixa.csv"
 
+PATH_LIVRO_CAIXA = "livro_caixa.csv"
+
 def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
     try:
         csv_buffer = df.to_csv(index=False, encoding="utf-8-sig")
         repo = g.get_repo(REPO_NAME)
-        contents = repo.get_contents(PATH_LIVRO_CAIXA)
+        contents = repo.get_contents(PATH_LIVRO_CAIXA, ref="main")
         repo.update_file(contents.path, commit_message, csv_buffer, contents.sha, branch="main")
         return True
     except Exception as e:
@@ -2948,5 +2950,6 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty() # Remove o conteúdo do sidebar se não for Livro Caixa
+
 
 
