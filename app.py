@@ -490,9 +490,15 @@ def carregar_livro_caixa():
 def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
     """
     Função wrapper para salvar o Livro Caixa (PATH_DIVIDAS).
-    Substitui a função dummy pela chamada à implementação real.
+    Substitui a função dummy pela chamada à implementação real e limpa o cache.
     """
-    return save_csv_github(df, PATH_DIVIDAS, commit_message)
+    success = save_csv_github(df, PATH_DIVIDAS, commit_message)
+    
+    # 🚨 CORREÇÃO: Limpa o cache da função que carrega o livro caixa
+    if success:
+        carregar_livro_caixa.clear()
+        
+    return success
 
 @st.cache_data(show_spinner=False)
 def processar_dataframe(df):
@@ -2039,7 +2045,11 @@ def livro_caixa():
 
     produtos = inicializar_produtos() 
 
-    if "df" not in st.session_state: st.session_state.df = carregar_livro_caixa()
+    # 🚨 INICIALIZAÇÃO CORRETA: O carregar_livro_caixa() JÁ LIMPA O CACHE
+    # SE O salvamento foi bem sucedido.
+    if "df" not in st.session_state: 
+        st.session_state.df = carregar_livro_caixa()
+        
     if 'RecorrenciaID' not in st.session_state.df.columns: st.session_state.df['RecorrenciaID'] = ''
     if "produtos" not in st.session_state: st.session_state.produtos = produtos
     if "lista_produtos" not in st.session_state: st.session_state.lista_produtos = []
@@ -2586,7 +2596,7 @@ def livro_caixa():
                             st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
                             commit_msg = COMMIT_MESSAGE
                     
-                    # CORREÇÃO CRÍTICA: CHAMADA REAL DE SALVAMENTO
+                    # CORREÇÃO CRÍTICA: CHAMADA REAL DE SALVAMENTO (agora limpa o cache)
                     if salvar_dados_no_github(st.session_state.df, commit_msg):
                         st.session_state.edit_id = None
                         st.session_state.lista_produtos = [] 
