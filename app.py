@@ -2638,15 +2638,24 @@ def livro_caixa():
             (df_exibicao["Status"] == "Realizada")
         ]
         
-        st.subheader(f"📊 Resumo Financeiro Geral - Mês de {primeiro_dia_mes.strftime('%m/%Y')}")
+        st.subheader(f"📊 Resumo Financeiro Geral")
 
-        total_entradas, total_saidas, saldo = calcular_resumo(df_mes_atual_realizado)
+        # --- ALTERAÇÃO AQUI ---
+        # 1. Cálculo para o mês atual (o que já existia)
+        total_entradas_mes, total_saidas_mes, saldo_mes = calcular_resumo(df_mes_atual_realizado)
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total de Entradas", f"R$ {total_entradas:,.2f}")
-        col2.metric("Total de Saídas", f"R$ {total_saidas:,.2f}")
-        delta_saldo = f"R$ {saldo:,.2f}"
-        col3.metric("💼 Saldo Final (Realizado)", f"R$ {saldo:,.2f}", delta=delta_saldo if saldo != 0 else None, delta_color="normal")
+        # 2. Cálculo para o saldo geral/total
+        df_geral_realizado = df_exibicao[df_exibicao['Status'] == 'Realizada']
+        _, _, saldo_geral_total = calcular_resumo(df_geral_realizado)
+        
+        # 3. Exibição com 4 colunas, incluindo o novo "Saldo Atual (Geral)"
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric(f"Entradas (Mês: {primeiro_dia_mes.strftime('%b')})", f"R$ {total_entradas_mes:,.2f}")
+        col2.metric(f"Saídas (Mês: {primeiro_dia_mes.strftime('%b')})", f"R$ {total_saidas_mes:,.2f}")
+        delta_saldo_mes = f"R$ {saldo_mes:,.2f}"
+        col3.metric("Saldo do Mês (Realizado)", f"R$ {saldo_mes:,.2f}", delta=delta_saldo_mes if saldo_mes != 0 else None, delta_color="normal")
+        col4.metric("Saldo Atual (Geral)", f"R$ {saldo_geral_total:,.2f}")
+        # --- FIM DA ALTERAÇÃO ---
 
         st.markdown("---")
         
