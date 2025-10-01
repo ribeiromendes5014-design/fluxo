@@ -1,9 +1,10 @@
+# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, date
 import requests
 from requests.exceptions import ConnectionError, RequestException 
-from io import StringIO, BytesIO
+from io import StringIO
 import io, os
 import json
 import hashlib
@@ -11,7 +12,6 @@ import ast
 import plotly.express as px
 import base64
 import calendar 
-from fpdf import FPDF # <-- Importação do precificador
 
 # ==============================================================================
 # CONFIGURAÇÃO GERAL E INÍCIO DO APP
@@ -350,14 +350,9 @@ def hash_df(df):
     for col in df_temp.select_dtypes(include=['datetime64[ns]']).columns:
         df_temp[col] = df_temp[col].astype(str)
     try:
-        # Tenta usar um método mais robusto primeiro
-        return hashlib.md5(pd.util.hash_pandas_object(df_temp, index=False).values).hexdigest()
+        return hashlib.md5(df_temp.to_json().encode('utf-8')).hexdigest()
     except Exception:
-        # Fallback para o método original se o novo falhar
-        try:
-            return hashlib.md5(df_temp.to_json().encode('utf-8')).hexdigest()
-        except Exception:
-            return "error"
+        return "error" 
 
 def load_csv_github(url: str) -> pd.DataFrame | None:
     try:
@@ -559,7 +554,7 @@ def format_produtos_resumo(produtos_json):
                 lucro_str = f"| Lucro R$ {lucro:,.2f}" if lucro != 0 else ""
                 return f"{count} item(s): {primeiro}... {lucro_str}"
         except:
-            return "Erro na formatação/JSON Inválido"
+            return "Erro na formatação/JSON InváLido"
     return ""
 
 def highlight_value(row):
@@ -827,154 +822,6 @@ def get_most_sold_products(df_movimentacoes):
     df_mais_vendidos.sort_values(by="Quantidade Total Vendida", ascending=False, inplace=True)
     
     return df_mais_vendidos
-
-# ==============================================================================
-# <<<<<<<<<<<<<<< INÍCIO DO CÓDIGO INTEGRADO DE PRECIFICAR.PY >>>>>>>>>>>>>>>
-# ==============================================================================
-
-# --- Funções Auxiliares do Precificador ---
-
-def gerar_pdf(df: pd.DataFrame) -> BytesIO:
-    """Gera um PDF formatado a partir do DataFrame de precificação, incluindo a URL da imagem."""
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "Relatório de Precificação", 0, 1, "C")
-    pdf.ln(5)
-
-    pdf.set_font("Arial", "B", 10)
-    col_widths = {
-        "Produto": 40, "Qtd": 15, "Custo Unitário": 25, "Margem (%)": 20,
-        "Preço à Vista": 25, "Preço no Cartão": 25, "URL da Imagem": 40
-    }
-    pdf_cols = [col for col in col_widths.keys() if col in df.columns or col == "Custo Unitário"]
-    current_widths = [col_widths[col] for col in pdf_cols]
-
-    for col_name, width in zip(pdf_cols, current_widths):
-        pdf.cell(width, 10, col_name, border=1, align='C')
-    pdf.ln()
-
-    pdf.set_font("Arial", "", 8)
-    if not df.empty:
-        for _, row in df.iterrows():
-            pdf.cell(col_widths["Produto"], 10, str(row.get("Produto", "")), border=1)
-            pdf.cell(col_widths["Qtd"], 10, str(row.get("Qtd", 0)), border=1, align="C")
-            custo_unit_val = row.get("Custo Total Unitário", row.get("Custo Unitário", 0.0))
-            pdf.cell(col_widths["Custo Unitário"], 10, f"R$ {custo_unit_val:.2f}", border=1, align="R")
-            pdf.cell(col_widths["Margem (%)"], 10, f"{row.get('Margem (%)', 0.0):.2f}%", border=1, align="R")
-            pdf.cell(col_widths["Preço à Vista"], 10, f"R$ {row.get('Preço à Vista', 0.0):.2f}", border=1, align="R")
-            pdf.cell(col_widths["Preço no Cartão"], 10, f"R$ {row.get('Preço no Cartão', 0.0):.2f}", border=1, align="R")
-            url_display = str(row.get("Imagem_URL", ""))
-            if len(url_display) > 35: url_display = url_display[:32] + "..."
-            pdf.cell(col_widths["URL da Imagem"], 10, url_display, border=1, align="L", link=str(row.get("Imagem_URL", "")))
-            pdf.ln()
-    else:
-        pdf.cell(sum(current_widths), 10, "Nenhum produto cadastrado.", border=1, align="C")
-        pdf.ln()
-
-    return BytesIO(pdf.output(dest='S').encode('latin1'))
-
-def enviar_pdf_telegram(pdf_bytesio, df_produtos: pd.DataFrame, thread_id=None):
-    """Envia o arquivo PDF e a primeira imagem para o Telegram."""
-    HARDCODED_TELEGRAM_TOKEN = "8412132908:AAG8N_vFzkpVNX-WN3bwT0Vl3H41Q-9Rfw4"
-    TELEGRAM_CHAT_ID = "-1003030758192"
-    token = st.secrets.get("telegram_token", HARDCODED_TELEGRAM_TOKEN)
-    
-    image_url, image_caption = None, "Relatório de Precificação"
-    if not df_produtos.empty and "Imagem_URL" in df_produtos.columns:
-        first_row = df_produtos.iloc[0]
-        url, produto = first_row.get("Imagem_URL"), first_row.get("Produto", "Produto")
-        if isinstance(url, str) and url.startswith("http"):
-            image_url, image_caption = url, f"📦 Produto Principal: {produto}\n\n[Relatório de Precificação em anexo]"
-
-    url_doc = f"https://api.telegram.org/bot{token}/sendDocument"
-    files_doc = {'document': ('precificacao.pdf', pdf_bytesio, 'application/pdf')}
-    data_doc = {"chat_id": TELEGRAM_CHAT_ID, "caption": image_caption if not image_url else "[Relatório de Precificação em anexo]"}
-    if thread_id: data_doc["message_thread_id"] = thread_id
-    
-    resp_doc = requests.post(url_doc, data=data_doc, files=files_doc).json()
-    if not resp_doc.get("ok"):
-        st.error(f"❌ Erro ao enviar PDF: {resp_doc.get('description')}")
-        return
-    st.success("✅ PDF enviado para o Telegram.")
-    
-    if image_url:
-        try:
-            url_photo = f"https://api.telegram.org/bot{token}/sendPhoto"
-            data_photo = {"chat_id": TELEGRAM_CHAT_ID, "photo": image_url, "caption": f"🖼️ Foto do Produto Principal: {produto}"}
-            if thread_id: data_photo["message_thread_id"] = thread_id
-            resp_photo = requests.post(url_photo, data=data_photo).json()
-            if resp_photo.get("ok"): st.success("✅ Foto do produto principal enviada!")
-            else: st.warning(f"❌ Erro ao enviar a foto: {resp_photo.get('description')}")
-        except Exception as e: st.warning(f"⚠️ Erro ao enviar a imagem: {e}")
-
-def exibir_resultados_precificacao(df: pd.DataFrame, imagens_dict: dict):
-    """Exibe os resultados de precificação com tabela e imagens dos produtos."""
-    if df is None or df.empty:
-        st.info("⚠️ Nenhum produto disponível para exibir.")
-        return
-    st.subheader("Resultados Detalhados da Precificação")
-    for _, row in df.iterrows():
-        with st.container(border=True):
-            cols = st.columns([1, 3])
-            img_to_display, img_url = imagens_dict.get(row.get("Produto")), row.get("Imagem_URL")
-            if img_to_display is None and row.get("Imagem") and isinstance(row.get("Imagem"), bytes):
-                img_to_display = row.get("Imagem")
-            
-            with cols[0]:
-                if img_url and isinstance(img_url, str) and img_url.startswith("http"): st.image(img_url, width=100)
-                elif img_to_display: st.image(img_to_display, width=100)
-                else: st.write("🖼️ N/A")
-            
-            with cols[1]:
-                st.markdown(f"**{row.get('Produto', '—')}** | Qtd: {row.get('Qtd', '—')}")
-                custo_base, custo_total = row.get('Custo Unitário', 0.0), row.get('Custo Total Unitário', 0.0)
-                st.markdown(f"""
-                - Custo Base: `R$ {custo_base:.2f}`
-                - Rateio/Extras: `R$ {row.get('Custos Extras Produto', 0.0):.2f}`
-                - **Custo Total/Un:** `R$ {custo_total:.2f}`
-                - **Margem:** `{row.get("Margem (%)", 0.0):.2f}%`
-                - **Preço à Vista:** `R$ {row.get('Preço à Vista', 0.0):.2f}`
-                - **Preço no Cartão:** `R$ {row.get('Preço no Cartão', 0.0):.2f}`
-                """)
-
-def processar_dataframe_precificacao(df: pd.DataFrame, frete_total: float, custos_extras: float, margem_fixa: float) -> pd.DataFrame:
-    """Processa o DataFrame, aplica rateio, margem e calcula os preços finais."""
-    if df.empty: return pd.DataFrame()
-    df = df.copy()
-    for col in ["Qtd", "Custo Unitário", "Margem (%)", "Custos Extras Produto"]:
-        if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
-        else: df[col] = 0.0
-    
-    df["Custo Total Unitário"] = df["Custo Unitário"] + df["Custos Extras Produto"]
-    if "Margem (%)" not in df.columns: df["Margem (%)"] = margem_fixa
-    df["Margem (%)"] = df["Margem (%)"].apply(lambda x: x if pd.notna(x) and x > 0 else margem_fixa)
-    df["Preço à Vista"] = df["Custo Total Unitário"] * (1 + df["Margem (%)"] / 100)
-    df["Preço no Cartão"] = df["Preço à Vista"] / FATOR_CARTAO # FATOR_CARTAO é global
-    
-    cols_to_keep = ["Produto", "Qtd", "Custo Unitário", "Custos Extras Produto", "Custo Total Unitário", 
-                    "Margem (%)", "Preço à Vista", "Preço no Cartão", "Imagem", "Imagem_URL"]
-    return df[[col for col in cols_to_keep if col in df.columns]]
-
-def salvar_csv_no_github_precificacao(token, repo, path, dataframe, branch="main", mensagem="Atualização via app"):
-    """Salva o DataFrame como CSV no GitHub via API."""
-    from requests import get, put
-    url = f"https://api.github.com/repos/{repo}/contents/{path}"
-    conteudo = dataframe.to_csv(index=False)
-    conteudo_b64 = base64.b64encode(conteudo.encode()).decode()
-    headers = {"Authorization": f"token {token}"}
-    r = get(url, headers=headers)
-    sha = r.json().get("sha") if r.status_code == 200 else None
-    payload = {"message": mensagem, "content": conteudo_b64, "branch": branch}
-    if sha: payload["sha"] = sha
-    r2 = put(url, headers=headers, json=payload)
-    if r2.status_code not in (200, 201):
-        st.error(f"❌ Erro ao salvar `{path}`: {r2.text}")
-
-# ==============================================================================
-# <<<<<<<<<<<<<<< FIM DO CÓDIGO INTEGRADO DE PRECIFICAR.PY >>>>>>>>>>>>>>>
-# ==============================================================================
-
 
 # ==============================================================================
 # 1. PÁGINA DE APRESENTAÇÃO (HOMEPAGE)
@@ -2997,27 +2844,128 @@ def livro_caixa():
 
 
     with tab_rel:
-        st.subheader("📈 Relatórios Anuais e Mensais")
-
-        df_anual = df_exibicao[df_exibicao['Status'] == 'Realizada'].copy()
-        df_anual['Ano'] = pd.to_datetime(df_anual['Data'], errors='coerce').dt.year.fillna(0).astype(int)
-        df_anual = df_anual[df_anual['Ano'] > 0]
-
-        if not df_anual.empty:
-            df_resumo_anual = df_anual.groupby('Ano')['Valor'].agg(['sum', lambda x: x[x >= 0].sum(), lambda x: abs(x[x < 0].sum())]).reset_index()
-            df_resumo_anual.columns = ['Ano', 'Saldo', 'Entradas', 'Saídas']
-            df_resumo_anual.sort_values(by='Ano', ascending=False, inplace=True)
-
-            st.markdown("##### Resumo Anual (Realizado)")
-            st.dataframe(df_resumo_anual, hide_index=True, use_container_width=True)
-
-            fig_anual = px.bar(df_resumo_anual, x='Ano', y=['Entradas', 'Saídas'], title="Entradas vs. Saídas por Ano", labels={'value': 'Valor (R$)', 'variable': 'Tipo'}, barmode='group')
-            st.plotly_chart(fig_anual, use_container_width=True)
+        st.subheader("📄 Relatório Detalhado e Comparativo")
+        
+        with st.container(border=True):
+            st.markdown("#### Filtros do Relatório")
             
-        else: st.info("Dados insuficientes para gerar relatório anual.")
+            # --- Filtros ---
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                lojas_selecionadas = st.multiselect(
+                    "Selecione uma ou mais lojas/empresas",
+                    options=LOJAS_DISPONIVEIS,
+                    default=LOJAS_DISPONIVEIS
+                )
+                
+                tipo_movimentacao = st.radio(
+                    "Tipo de Movimentação",
+                    ["Ambos", "Entrada", "Saída"],
+                    horizontal=True,
+                    key="rel_tipo"
+                )
+            
+            with col_f2:
+                # Lógica para definir datas padrão
+                min_date_geral = df_exibicao["Data"].min() if not df_exibicao.empty and pd.notna(df_exibicao["Data"].min()) else date.today()
+                max_date_geral = df_exibicao["Data"].max() if not df_exibicao.empty and pd.notna(df_exibicao["Data"].max()) else date.today()
+
+                data_inicio_rel = st.date_input("Data de Início", value=min_date_geral, min_value=min_date_geral, max_value=max_date_geral, key="rel_data_ini")
+                data_fim_rel = st.date_input("Data de Fim", value=max_date_geral, min_value=min_date_geral, max_value=max_date_geral, key="rel_data_fim")
+
+            if st.button("📊 Gerar Relatório Comparativo", use_container_width=True, type="primary"):
+                
+                # --- Lógica de Filtragem ---
+                df_relatorio = df_exibicao[
+                    (df_exibicao['Status'] == 'Realizada') &
+                    (df_exibicao['Loja'].isin(lojas_selecionadas)) &
+                    (df_exibicao['Data'] >= data_inicio_rel) &
+                    (df_exibicao['Data'] <= data_fim_rel)
+                ].copy()
+
+                if tipo_movimentacao != "Ambos":
+                    df_relatorio = df_relatorio[df_relatorio['Tipo'] == tipo_movimentacao]
+                
+                if df_relatorio.empty:
+                    st.warning("Nenhum dado encontrado com os filtros selecionados.")
+                else:
+                    # --- Processamento e Agrupamento Mensal ---
+                    df_relatorio['MesAno'] = df_relatorio['Data_dt'].dt.to_period('M').astype(str)
+                    
+                    # Agrupa por mês e calcula Entradas e Saídas
+                    df_agrupado = df_relatorio.groupby('MesAno').apply(lambda x: pd.Series({
+                        'Entradas': x[x['Valor'] > 0]['Valor'].sum(),
+                        'Saídas': abs(x[x['Valor'] < 0]['Valor'].sum())
+                    })).reset_index()
+
+                    df_agrupado['Saldo'] = df_agrupado['Entradas'] - df_agrupado['Saídas']
+                    
+                    # Calcula o crescimento percentual
+                    df_agrupado = df_agrupado.sort_values(by='MesAno').reset_index(drop=True)
+                    df_agrupado['Crescimento Entradas (%)'] = (df_agrupado['Entradas'].pct_change() * 100).fillna(0)
+                    df_agrupado['Crescimento Saídas (%)'] = (df_agrupado['Saídas'].pct_change() * 100).fillna(0)
+                    
+                    # --- Exibição dos Resultados ---
+                    st.markdown("---")
+                    st.subheader("Resultados do Relatório")
+
+                    # Tabela Comparativa
+                    st.markdown("##### 🗓️ Tabela Comparativa Mensal")
+                    st.dataframe(
+                        df_agrupado, 
+                        use_container_width=True,
+                        column_config={
+                            "MesAno": "Mês/Ano",
+                            "Entradas": st.column_config.NumberColumn("Entradas (R$)", format="R$ %.2f"),
+                            "Saídas": st.column_config.NumberColumn("Saídas (R$)", format="R$ %.2f"),
+                            "Saldo": st.column_config.NumberColumn("Saldo (R$)", format="R$ %.2f"),
+                            "Crescimento Entradas (%)": st.column_config.NumberColumn("Cresc. Entradas", format="%.2f%%"),
+                            "Crescimento Saídas (%)": st.column_config.NumberColumn("Cresc. Saídas", format="%.2f%%"),
+                        }
+                    )
+
+                    # Gráficos
+                    st.markdown("##### 📈 Gráficos de Evolução")
+                    
+                    # Gráfico 1: Entradas vs Saídas
+                    fig_comp = px.bar(
+                        df_agrupado, 
+                        x='MesAno', 
+                        y=['Entradas', 'Saídas'], 
+                        title="Comparativo de Entradas vs. Saídas por Mês",
+                        labels={'value': 'Valor (R$)', 'variable': 'Tipo', 'MesAno': 'Mês/Ano'},
+                        barmode='group',
+                        color_discrete_map={'Entradas': 'green', 'Saídas': 'red'}
+                    )
+                    st.plotly_chart(fig_comp, use_container_width=True)
+
+                    # Gráfico 2: Crescimento Percentual
+                    fig_cresc = px.line(
+                        df_agrupado,
+                        x='MesAno',
+                        y=['Crescimento Entradas (%)', 'Crescimento Saídas (%)'],
+                        title="Crescimento Percentual Mensal (Entradas e Saídas)",
+                        labels={'value': '% de Crescimento', 'variable': 'Métrica', 'MesAno': 'Mês/Ano'},
+                        markers=True
+                    )
+                    st.plotly_chart(fig_cresc, use_container_width=True)
+
+                    # Ranking de Vendas
+                    if 'Entradas' in df_agrupado.columns and not df_agrupado[df_agrupado['Entradas'] > 0].empty:
+                        st.markdown("##### 🏆 Ranking de Vendas (Entradas) por Mês")
+                        df_ranking = df_agrupado[['MesAno', 'Entradas']].sort_values(by='Entradas', ascending=False).reset_index(drop=True)
+                        df_ranking.index += 1 # Começa o ranking em 1
+                        st.dataframe(
+                            df_ranking,
+                            use_container_width=True,
+                            column_config={
+                                "MesAno": "Mês/Ano",
+                                "Entradas": st.column_config.NumberColumn("Total de Entradas (R$)", format="R$ %.2f")
+                            }
+                        )
 
         st.markdown("---")
-        
+
         st.subheader("🚩 Dívidas Pendentes (A Pagar e A Receber)")
         
         df_pendentes = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
@@ -3027,6 +2975,7 @@ def livro_caixa():
         else:
             df_pendentes["Data Pagamento"] = pd.to_datetime(df_pendentes["Data Pagamento"], errors='coerce').dt.date
             df_pendentes_ordenado = df_pendentes.sort_values(by=["Data Pagamento", "Tipo", "Data"], ascending=[True, True, True]).reset_index(drop=True)
+            hoje_date = date.today()
             df_pendentes_ordenado['Dias Até/Atraso'] = df_pendentes_ordenado['Data Pagamento'].apply(
                 lambda x: (x - hoje_date).days if pd.notna(x) else float('inf') 
             )
@@ -3114,157 +3063,6 @@ def livro_caixa():
 
             st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
 
-# ==============================================================================
-# PÁGINA DE PRECIFICAÇÃO (FUNÇÃO INTEGRADA)
-# ==============================================================================
-
-def gestao_precificacao():
-    st.title("📊 Precificador de Produtos")
-    
-    # --- Configurações do GitHub para SALVAR ---
-    PATH_PRECFICACAO = "precificacao.csv"
-    ARQ_CAIXAS_URL = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{PATH_PRECFICACAO}"
-    
-    imagens_dict = {}
-
-    # Inicialização de variáveis de estado da Precificação
-    if "produtos_manuais" not in st.session_state:
-        st.session_state.produtos_manuais = pd.DataFrame(columns=[
-            "Produto", "Qtd", "Custo Unitário", "Custos Extras Produto", "Margem (%)", "Imagem", "Imagem_URL"
-        ])
-    if "Imagem_URL" not in st.session_state.produtos_manuais.columns:
-        st.session_state.produtos_manuais["Imagem_URL"] = ""
-    if "df_produtos_geral" not in st.session_state:
-        st.session_state.df_produtos_geral = pd.DataFrame()
-
-    # Carrega dados do GitHub na primeira execução da página, se não houver dados manuais
-    if "precificacao_carregada" not in st.session_state:
-        df_carregado = load_csv_github(ARQ_CAIXAS_URL)
-        if df_carregado is not None and not df_carregado.empty:
-            if "Imagem" not in df_carregado.columns: df_carregado["Imagem"] = None
-            if "Imagem_URL" not in df_carregado.columns: df_carregado["Imagem_URL"] = ""
-            st.session_state.produtos_manuais = df_carregado
-        st.session_state.precificacao_carregada = True
-        st.rerun()
-
-    # Lógica de Salvamento Automático
-    df_to_hash = st.session_state.produtos_manuais.drop(columns=["Imagem"], errors='ignore')
-    if "hash_precificacao" not in st.session_state:
-        st.session_state.hash_precificacao = hash_df(df_to_hash)
-
-    novo_hash = hash_df(df_to_hash)
-    if novo_hash != st.session_state.hash_precificacao and novo_hash != "error":
-        salvar_csv_no_github_precificacao(
-            GITHUB_TOKEN, f"{OWNER}/{REPO_NAME}", PATH_PRECFICACAO, df_to_hash,
-            GITHUB_BRANCH, mensagem="♻️ Alteração automática na precificação"
-        )
-        st.session_state.hash_precificacao = novo_hash
-        st.toast("Salvamento automático da precificação realizado.")
-
-    # --- INÍCIO DA INTERFACE DA PÁGINA ---
-
-    st.header("1. Cadastro e Custos")
-
-    tab_manual, tab_rateio = st.tabs(["✍️ Adicionar Produto", "🔢 Rateio Global"])
-
-    with tab_rateio:
-        st.subheader("Cálculo de Rateio Unitário (Frete + Custos Extras)")
-        col_r1, col_r2, col_r3 = st.columns(3)
-        frete_manual = col_r1.number_input("🚚 Frete Total (R$)", min_value=0.0, step=0.01, key="frete_manual")
-        extras_manual = col_r2.number_input("🛠 Custos Extras (R$)", min_value=0.0, step=0.01, key="extras_manual")
-        
-        qtd_total_produtos = st.session_state.produtos_manuais["Qtd"].sum() if not st.session_state.produtos_manuais.empty else 0
-        qtd_total_manual = col_r3.number_input("📦 Qtd. Total para Rateio", min_value=1, step=1, value=int(qtd_total_produtos) or 1, key="qtd_total_manual_override")
-
-        rateio_calculado = (frete_manual + extras_manual) / qtd_total_manual if qtd_total_manual > 0 else 0.0
-        st.session_state["rateio_manual"] = round(rateio_calculado, 4)
-        st.metric("💰 Rateio por Unidade", f"R$ {rateio_calculado:,.4f}")
-
-    with tab_manual:
-        st.subheader("Adicionar Novo Produto")
-        with st.form("form_add_produto_manual", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            produto = col1.text_input("📝 Nome do Produto")
-            quantidade = col1.number_input("📦 Quantidade", min_value=1, step=1)
-            valor_pago = col1.number_input("💰 Custo Unitário Base (R$)", min_value=0.0, format="%.2f")
-            margem_manual = col1.number_input("📈 Margem de Lucro (%)", min_value=0.0, value=30.0, format="%.2f")
-            
-            imagem_url = col2.text_input("🔗 URL da Imagem (opcional)")
-            imagem_file = col2.file_uploader("🖼️ Ou envie uma foto (opcional)", type=["png", "jpg", "jpeg"])
-            
-            valor_default_rateio = st.session_state.get("rateio_manual", 0.0)
-            custo_extra_produto = col2.number_input("💸 Custo Extra/Rateio por Unidade (R$)", min_value=0.0, value=valor_default_rateio, format="%.4f")
-
-            adicionar_produto = st.form_submit_button("➕ Adicionar Produto à Lista", use_container_width=True)
-            if adicionar_produto:
-                if produto and quantidade > 0:
-                    imagem_bytes, url_salvar = None, ""
-                    if imagem_file: imagem_bytes = imagem_file.read()
-                    elif imagem_url.strip(): url_salvar = imagem_url.strip()
-
-                    novo_produto = pd.DataFrame([{
-                        "Produto": produto, "Qtd": quantidade, "Custo Unitário": valor_pago,
-                        "Custos Extras Produto": custo_extra_produto, "Margem (%)": margem_manual,
-                        "Imagem": imagem_bytes, "Imagem_URL": url_salvar
-                    }])
-                    st.session_state.produtos_manuais = pd.concat([st.session_state.produtos_manuais, novo_produto], ignore_index=True)
-                    st.success(f"Produto '{produto}' adicionado. Recalculando...")
-                    st.rerun()
-                else:
-                    st.warning("⚠️ Preencha o nome e a quantidade do produto.")
-        
-        # --- SEÇÃO DE RESULTADOS E AÇÕES (MOVIDA PARA DENTRO DESTA ABA) ---
-        st.markdown("---")
-        st.header("2. Resultados e Ações")
-
-        margem_fixa_geral = st.slider("Margem de Lucro Padrão (%)", 0, 200, 30, key="margem_fixa_prec")
-        
-        df_final = processar_dataframe_precificacao(
-            st.session_state.produtos_manuais,
-            st.session_state.get("frete_manual", 0.0),
-            st.session_state.get("extras_manual", 0.0),
-            margem_fixa_geral
-        )
-
-        if df_final.empty:
-            st.info("Adicione produtos na seção acima para ver os resultados da precificação.")
-        else:
-            st.subheader("Tabela de Precificação Final")
-            cols_editor = [c for c in df_final.columns if c not in ["Imagem", "Imagem_URL"]]
-            df_para_editar = df_final[cols_editor].copy()
-
-            df_editado = st.data_editor(
-                df_para_editar,
-                num_rows="dynamic",
-                use_container_width=True,
-                key="editor_precificacao"
-            )
-            
-            if not df_editado.equals(df_para_editar):
-                produtos_removidos = set(df_para_editar['Produto']) - set(df_editado['Produto'])
-                if produtos_removidos:
-                    st.session_state.produtos_manuais = st.session_state.produtos_manuais[
-                        ~st.session_state.produtos_manuais['Produto'].isin(produtos_removidos)
-                    ].reset_index(drop=True)
-                else:
-                    df_editado_full = df_editado.merge(
-                        st.session_state.produtos_manuais[['Produto', 'Imagem', 'Imagem_URL']],
-                        on='Produto',
-                        how='left'
-                    )
-                    st.session_state.produtos_manuais = df_editado_full
-                
-                st.success("Tabela sincronizada. Recalculando...")
-                st.rerun()
-
-            exibir_resultados_precificacao(df_final, imagens_dict)
-
-            st.markdown("---")
-            st.subheader("Ações")
-            if st.button("📤 Gerar PDF e Enviar para Telegram", use_container_width=True, type="primary"):
-                pdf_io = gerar_pdf(df_final)
-                enviar_pdf_telegram(pdf_io, df_final, thread_id=28)
-
 
 # ==============================================================================
 # ESTRUTURA PRINCIPAL E NAVEGAÇÃO SUPERIOR
@@ -3274,8 +3072,7 @@ PAGINAS = {
     "Home": homepage,
     "Livro Caixa": livro_caixa,
     "Produtos": gestao_produtos,
-    "Precificação": gestao_precificacao, # <-- PÁGINA NOVA
-    "Promoções": gestao_promocoes,
+    "Promoções": gestao_promocoes, # NOVA PÁGINA
     "Histórico de Compra": historico_compras
 }
 
@@ -3284,30 +3081,39 @@ if "pagina_atual" not in st.session_state:
 
 
 # --- Renderiza o Header e a Navegação no Topo ---
+
 def render_header():
     """Renderiza o header customizado com a navegação em botões."""
     
-    # Divide o espaço para o logo e os botões de navegação
     col_logo, col_nav = st.columns([1, 4])
     
     with col_logo:
+        # AQUI É A LINHA CORRIGIDA: usa o link direto para o logo.
+        # Se a imagem falhar, o CSS garante que a seção não quebre o layout.
         st.image(LOGO_DOCEBELLA_URL, width=150)
         
     with col_nav:
-        # Define a ordem desejada para os botões de navegação
-        paginas_ordenadas = ["Home", "Livro Caixa", "Produtos", "Precificação", "Promoções", "Histórico de Compra"]
+        cols_botoes = st.columns([1] * len(PAGINAS))
         
-        # Cria colunas para cada botão, distribuindo o espaço igualmente
-        cols_botoes = st.columns(len(paginas_ordenadas))
+        # Cria a lista de páginas na ordem desejada
+        paginas_ordenadas = ["Home", "Livro Caixa", "Produtos", "Promoções", "Histórico de Compra"]
         
         for i, nome in enumerate(paginas_ordenadas):
             if nome in PAGINAS:
-                # Usa o botão do Streamlit para navegação
+                is_active = st.session_state.pagina_atual == nome
+                
+                # Ajusta o estilo do botão para parecer um item de navegação
+                button_style = "color: white; font-weight: bold; border: none; background: none; cursor: pointer; padding: 10px 5px;"
+                if is_active:
+                    button_style += "border-bottom: 3px solid #FFCDD2; /* Linha de destaque rosa claro */"
+                
+                # Usando st.markdown e st.button em combinação para obter o efeito de botão customizado.
                 if cols_botoes[i].button(nome, key=f"nav_{nome}", use_container_width=True, help=f"Ir para {nome}"):
                     st.session_state.pagina_atual = nome
                     st.rerun()
 
-# Simula o Header customizado no topo da página
+# O Streamlit nativamente não permite HTML/Markdown fora do corpo principal
+# Simulamos o Header customizado no topo da página
 with st.container():
     st.markdown('<div class="header-container">', unsafe_allow_html=True)
     render_header()
@@ -3315,11 +3121,9 @@ with st.container():
 
 
 # --- RENDERIZAÇÃO DO CONTEÚDO DA PÁGINA ---
-if st.session_state.pagina_atual in PAGINAS:
-    PAGINAS[st.session_state.pagina_atual]()
+PAGINAS[st.session_state.pagina_atual]()
 
-# --- Exibe/Oculta a Sidebar ---
-# A sidebar só é necessária para o formulário do Livro Caixa
+# --- Exibe/Oculta o Sidebar do Formulário ---
+# A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
-
