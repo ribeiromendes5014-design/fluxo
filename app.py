@@ -2215,7 +2215,6 @@ def livro_caixa():
     if "lista_produtos" not in st.session_state: st.session_state.lista_produtos = []
     if "edit_id" not in st.session_state: st.session_state.edit_id = None
     if "operacao_selecionada" not in st.session_state: st.session_state.operacao_selecionada = "Editar" 
-    # Adiciona variável de estado para o código de barras lido no Livro Caixa
     if "cb_lido_livro_caixa" not in st.session_state: st.session_state.cb_lido_livro_caixa = ""
 
 
@@ -2233,18 +2232,14 @@ def livro_caixa():
         if ' | ' in opcoes_str: return opcoes_str.split(' | ')[0]
         return None
     
-    # Função auxiliar para encontrar a opção de produto pelo Código de Barras
     def encontrar_opcao_por_cb(codigo_barras, produtos_df, opcoes_produtos_list):
         if not codigo_barras: return None
         
-        # Encontra o produto no DataFrame pelo código de barras
         produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
         
         if not produto_encontrado.empty:
-            # Pega o primeiro ID encontrado (o CB deve ser único)
             produto_id = produto_encontrado.iloc[0]["ID"]
             
-            # Encontra a string completa no selectbox options (ID | Nome | Estoque)
             for opcao in opcoes_produtos_list:
                 if opcao.startswith(f"{produto_id} |"):
                     return opcao
@@ -2305,60 +2300,86 @@ def livro_caixa():
             elif default_tipo == "Saída":
                 st.session_state.lista_produtos = []
             
-            st.session_state.cb_lido_livro_caixa = "" # Limpa o código de barras lido ao entrar em modo edição
-            st.sidebar.warning(f"Modo EDIÇÃO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
+            st.session_state.cb_lido_livro_caixa = ""
+            st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
             
         else:
             st.session_state.edit_id = None
             edit_mode = False
-            st.sidebar.info("Movimentação não encontrada, saindo do modo de edição.")
+            st.info("Movimentação não encontrada, saindo do modo de edição.")
             st.rerun() 
 
 
-    with st.sidebar:
-        st.header("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
+    # --- CRIAÇÃO DAS NOVAS ABAS ---
+    tab_nova_mov, tab_mov, tab_rel = st.tabs(["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"])
+
+
+    # ==============================================================================================
+    # NOVA ABA: NOVA MOVIMENTAÇÃO (Substitui a Sidebar)
+    # ==============================================================================================
+    with tab_nova_mov:
         
-        tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1, key="input_tipo", disabled=edit_mode)
+        st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
         
+        # O layout principal do formulário agora vai aqui, sem o `st.sidebar`
+        
+        # Categoria Principal
+        col_principal_1, col_principal_2 = st.columns([1, 1])
+        with col_principal_1:
+            tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1, key="input_tipo", disabled=edit_mode)
+        
+        # Variáveis de estado
         is_recorrente = False
         status_selecionado = default_status
         data_primeira_parcela = date.today().replace(day=1) + timedelta(days=32)
         valor_parcela = default_valor
         nome_despesa_recorrente = default_cliente
         num_parcelas = 1
-        
         valor_calculado = 0.0
         produtos_vendidos_json = ""
         categoria_selecionada = ""
         
+        # --- Seção de Entrada (Venda/Produtos) ---
         if tipo == "Entrada":
-            st.markdown("#### 🛍️ Detalhes dos Produtos (Entrada)")
             
-            if st.session_state.lista_produtos:
-                df_produtos = pd.DataFrame(st.session_state.lista_produtos)
-                df_produtos['Quantidade'] = pd.to_numeric(df_produtos['Quantidade'], errors='coerce').fillna(0)
-                df_produtos['Preço Unitário'] = pd.to_numeric(df_produtos['Preço Unitário'], errors='coerce').fillna(0.0)
-                df_produtos['Custo Unitário'] = pd.to_numeric(df_produtos['Custo Unitário'], errors='coerce').fillna(0.0)
+            with col_principal_2:
+                st.markdown("#### 🛍️ Detalhes dos Produtos")
                 
-                valor_calculado = (df_produtos['Quantidade'] * df_produtos['Preço Unitário']).sum()
-                
-                produtos_para_json = df_produtos[['Produto_ID', 'Produto', 'Quantidade', 'Preço Unitário', 'Custo Unitário']].to_dict('records')
-                produtos_vendidos_json = json.dumps(produtos_para_json)
-                
-                st.success(f"Soma Total da Venda Calculada: R$ {valor_calculado:,.2f}")
+                # Exibe a soma calculada dos produtos (se houver)
+                if st.session_state.lista_produtos:
+                    df_produtos = pd.DataFrame(st.session_state.lista_produtos)
+                    df_produtos['Quantidade'] = pd.to_numeric(df_produtos['Quantidade'], errors='coerce').fillna(0)
+                    df_produtos['Preço Unitário'] = pd.to_numeric(df_produtos['Preço Unitário'], errors='coerce').fillna(0.0)
+                    df_produtos['Custo Unitário'] = pd.to_numeric(df_produtos['Custo Unitário'], errors='coerce').fillna(0.0)
+                    
+                    valor_calculado = (df_produtos['Quantidade'] * df_produtos['Preço Unitário']).sum()
+                    
+                    produtos_para_json = df_produtos[['Produto_ID', 'Produto', 'Quantidade', 'Preço Unitário', 'Custo Unitário']].to_dict('records')
+                    produtos_vendidos_json = json.dumps(produtos_para_json)
+                    
+                    st.success(f"Soma Total da Venda Calculada: R$ {valor_calculado:,.2f}")
 
-            with st.expander("➕ Adicionar/Limpar Lista de Produtos", expanded=True):
-                with st.container():
+            # Expandido para adicionar produtos
+            with st.expander("➕ Adicionar/Limpar Lista de Produtos (Venda)", expanded=True):
+                
+                col_prod_lista, col_prod_add = st.columns([1, 1])
+                
+                with col_prod_lista:
                     st.markdown("##### Produtos Atuais:")
                     if st.session_state.lista_produtos:
                         df_exibicao_produtos = pd.DataFrame(st.session_state.lista_produtos)
                         st.dataframe(df_exibicao_produtos[['Produto', 'Quantidade', 'Preço Unitário']], use_container_width=True, hide_index=True)
                     else:
                         st.info("Lista de produtos vazia.")
-
-                    # --- NOVO: Upload de imagem para leitura do Código de Barras ---
-                    st.markdown("---")
                     
+                    if st.button("Limpar Lista", key="limpar_lista_button", type="secondary", use_container_width=True, help="Limpa todos os produtos da lista de venda"):
+                        st.session_state.lista_produtos = []
+                        st.rerun()
+
+                with col_prod_add:
+                    st.markdown("##### Adicionar Produto")
+                    
+                    # --- NOVO: Upload de imagem para leitura do Código de Barras ---
                     foto_cb_upload_caixa = st.file_uploader(
                         "📤 Upload de imagem do código de barras", 
                         type=["png", "jpg", "jpeg"], 
@@ -2366,23 +2387,16 @@ def livro_caixa():
                     )
                     
                     if foto_cb_upload_caixa is not None:
-                        # Processa a imagem e tenta ler o código
                         imagem_bytes = foto_cb_upload_caixa.getvalue() 
                         codigos_lidos = ler_codigo_barras_api(imagem_bytes)
-                        
                         if codigos_lidos:
-                            # Se um código foi lido, salva na sessão
                             st.session_state.cb_lido_livro_caixa = codigos_lidos[0]
                             st.toast(f"Código de barras lido: {codigos_lidos[0]}")
-                            # Nota: Não forçamos o st.rerun() aqui, a leitura será usada no selectbox abaixo
                         else:
                             st.session_state.cb_lido_livro_caixa = ""
                             st.error("❌ Não foi possível ler nenhum código na imagem enviada.")
                     
-                    # Tenta encontrar a opção do produto pelo código de barras lido
                     index_selecionado = 0
-                    
-                    # Usa o CB lido para pré-selecionar o item se o selectbox não tiver sido alterado manualmente
                     if st.session_state.cb_lido_livro_caixa: 
                         opcao_encontrada = encontrar_opcao_por_cb(st.session_state.cb_lido_livro_caixa, produtos_para_venda, opcoes_produtos)
                         if opcao_encontrada:
@@ -2391,68 +2405,39 @@ def livro_caixa():
                         else:
                             st.warning(f"Código '{st.session_state.cb_lido_livro_caixa}' lido, mas nenhum produto com esse CB encontrado no estoque.")
                             st.session_state.cb_lido_livro_caixa = ""
-                    
-                    st.markdown("---")
+
                     produto_selecionado = st.selectbox(
                         "Selecione o Produto (ID | Nome)", 
                         opcoes_produtos, 
                         key="input_produto_selecionado",
-                        # Prioriza o index encontrado pelo CB, depois o valor anterior da sessão, depois 0
                         index=index_selecionado if index_selecionado != 0 else (opcoes_produtos.index(st.session_state.input_produto_selecionado) if st.session_state.input_produto_selecionado in opcoes_produtos else 0)
                     )
                     
-                    # Garante que o estado de CB lido seja limpo se o usuário selecionar manualmente outra opção
                     if produto_selecionado != opcoes_produtos[index_selecionado] and index_selecionado != 0 and st.session_state.cb_lido_livro_caixa:
                          st.session_state.cb_lido_livro_caixa = ""
 
-                    
                     if produto_selecionado == OPCAO_MANUAL:
-                        nome_produto_manual = st.text_input(
-                            "Nome do Produto (Manual)", 
-                            value=st.session_state.input_nome_prod_manual,
-                            key="input_nome_prod_manual"
-                        )
-                        quantidade_manual = st.number_input(
-                            "Qtd Manual", 
-                            min_value=0.01, 
-                            value=st.session_state.input_qtd_prod_manual, 
-                            step=1.0, 
-                            key="input_qtd_prod_manual"
-                        )
-                        preco_unitario_manual = st.number_input(
-                            "Preço Unitário (R$)", 
-                            min_value=0.01, 
-                            format="%.2f", 
-                            value=st.session_state.input_preco_prod_manual,
-                            key="input_preco_prod_manual"
-                        )
-                        custo_unitario_manual = st.number_input(
-                            "Custo Unitário (R$)", 
-                            min_value=0.00, 
-                            value=st.session_state.input_custo_prod_manual,
-                            format="%.2f", 
-                            key="input_custo_prod_manual"
-                        )
+                        # Lógica de Adição Manual
+                        nome_produto_manual = st.text_input("Nome do Produto (Manual)", value=st.session_state.input_nome_prod_manual, key="input_nome_prod_manual")
+                        col_m1, col_m2 = st.columns(2)
+                        with col_m1:
+                            quantidade_manual = st.number_input("Qtd Manual", min_value=0.01, value=st.session_state.input_qtd_prod_manual, step=1.0, key="input_qtd_prod_manual")
+                            custo_unitario_manual = st.number_input("Custo Unitário (R$)", min_value=0.00, value=st.session_state.input_custo_prod_manual, format="%.2f", key="input_custo_prod_manual")
+                        with col_m2:
+                            preco_unitario_manual = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=st.session_state.input_preco_prod_manual, key="input_preco_prod_manual")
                         
-                        if st.button(
-                            "Adicionar Manual", 
-                            key="adicionar_item_manual_button", 
-                            use_container_width=True,
+                        if st.button("Adicionar Manual", key="adicionar_item_manual_button", use_container_width=True,
                             on_click=callback_adicionar_manual,
-                            args=(nome_produto_manual, quantidade_manual, preco_unitario_manual, custo_unitario_manual),
-                            help="Adicionar Item Manual à Lista de Venda" 
-                        ):
-                            st.rerun() 
+                            args=(nome_produto_manual, quantidade_manual, preco_unitario_manual, custo_unitario_manual)): st.rerun() 
 
-                    
                     elif produto_selecionado != "":
+                        # Lógica de Adição do Estoque
                         produto_id_selecionado = extrair_id_do_nome(produto_selecionado) 
                         produto_row_completa = produtos_para_venda[produtos_para_venda["ID"] == produto_id_selecionado]
                         
                         if not produto_row_completa.empty:
                             produto_data = produto_row_completa.iloc[0]
                             nome_produto = produto_data['Nome']
-                            # Nota: Aqui estamos usando o PrecoVista como preço base
                             preco_sugerido = produto_data['PrecoVista'] 
                             custo_unit = produto_data['PrecoCusto']
                             estoque_disp = produto_data['Quantidade']
@@ -2460,193 +2445,189 @@ def livro_caixa():
                             col_p1, col_p2 = st.columns(2)
                             with col_p1:
                                 quantidade_input = st.number_input("Qtd", min_value=1, value=1, step=1, max_value=int(estoque_disp) if estoque_disp > 0 else 1, key="input_qtd_prod_edit")
+                                st.caption(f"Estoque Disponível: {int(estoque_disp)}")
                             with col_p2:
-                                # O preço já será ajustado pelo callback
                                 preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=float(preco_sugerido), key="input_preco_prod_edit")
-                            
-                            st.caption(f"Custo Unitário: R$ {custo_unit:,.2f}")
+                                st.caption(f"Custo Unitário: R$ {custo_unit:,.2f}")
 
-                            if st.button(
-                                "Adicionar Item", 
-                                key="adicionar_item_button", 
-                                use_container_width=True,
-                                # Chama o callback, que aplicará o desconto se houver promoção
+                            if st.button("Adicionar Item", key="adicionar_item_button", use_container_width=True,
                                 on_click=callback_adicionar_estoque,
-                                args=(produto_id_selecionado, nome_produto, quantidade_input, preco_unitario_input, custo_unit, estoque_disp),
-                                help="Adicionar Item do Estoque à Lista de Venda"
-                            ):
-                                st.rerun()
-                        
-                    
-                    if st.button("Limpar Lista", key="limpar_lista_button", type="secondary", use_container_width=True, help="Limpa todos os produtos da lista de venda"):
-                        st.session_state.lista_produtos = []
-                        st.rerun()
-            
-            valor_input_manual = st.number_input(
-                "Valor Total (R$)", 
-                value=valor_calculado if valor_calculado > 0.0 else default_valor,
-                min_value=0.01, 
-                format="%.2f",
-                disabled=(valor_calculado > 0.0), 
-                key="input_valor_entrada"
-            )
-            valor_final_movimentacao = valor_calculado if valor_calculado > 0.0 else valor_input_manual
+                                args=(produto_id_selecionado, nome_produto, quantidade_input, preco_unitario_input, custo_unit, estoque_disp)): st.rerun()
 
-            status_selecionado = st.radio(
-                "Status", 
-                ["Realizada", "Pendente"], 
-                index=0 if default_status == "Realizada" else 1, 
-                key="input_status_global",
-                disabled=edit_mode
-            )
 
+            # Input do Valor Total e Status para Entrada
+            col_entrada_valor, col_entrada_status = st.columns(2)
+            with col_entrada_valor:
+                valor_input_manual = st.number_input(
+                    "Valor Total (R$)", 
+                    value=valor_calculado if valor_calculado > 0.0 else default_valor,
+                    min_value=0.01, 
+                    format="%.2f",
+                    disabled=(valor_calculado > 0.0), 
+                    key="input_valor_entrada"
+                )
+                valor_final_movimentacao = valor_calculado if valor_calculado > 0.0 else valor_input_manual
             
-        else: # Tipo é Saída
-            st.markdown("#### Opções de Saída")
-            
-            if not edit_mode:
-                is_recorrente = st.checkbox("🔄 Cadastrar como Despesa Recorrente (Parcelas)", key="input_is_recorrente")
-            
-            default_select_index = 0
-            custom_desc_default = ""
-            
-            if default_categoria in CATEGORIAS_SAIDA:
-                default_select_index = CATEGORIAS_SAIDA.index(default_categoria)
-            elif default_categoria.startswith("Outro: "):
-                default_select_index = CATEGORIAS_SAIDA.index("Outro/Diversos") if "Outro/Diversos" in CATEGORIAS_SAIDA else 0
-                custom_desc_default = default_categoria.replace("Outro: ", "")
-            
-            st.markdown("#### ⚙️ Centro de Custo (Saída)")
-            categoria_selecionada = st.selectbox("Categoria de Gasto", 
-                                                    CATEGORIAS_SAIDA, 
-                                                    index=default_select_index,
-                                                    key="input_categoria_saida",
-                                                    disabled=is_recorrente and not edit_mode)
-
-            if categoria_selecionada == "Outro/Diversos" and not (is_recorrente and not edit_mode):
-                descricao_personalizada = st.text_input("Especifique o Gasto", 
-                                                        value=custom_desc_default, 
-                                                        key="input_custom_category")
-                if descricao_personalizada:
-                    categoria_selecionada = f"Outro: {descricao_personalizada}"
-                    
-            if is_recorrente and not edit_mode:
-                st.markdown("##### 🧾 Detalhes da Recorrência")
-                
-                nome_despesa_recorrente = st.text_input("Nome da Despesa Recorrente (Ex: Aluguel, Financiamento)", 
-                                                        value=default_cliente if default_cliente else "", 
-                                                        key="input_nome_despesa_recorrente")
-                
-                col_rec1, col_rec2 = st.columns(2)
-                with col_rec1:
-                    num_parcelas = st.number_input("Quantidade de Parcelas", min_value=1, value=12, step=1, key="input_num_parcelas")
-                with col_rec2:
-                    valor_parcela = st.number_input("Valor de Cada Parcela (R$)", min_value=0.01, format="%.2f", value=default_valor, key="input_valor_parcela")
-                
-                data_primeira_parcela = st.date_input("Data de Vencimento da 1ª Parcela", 
-                                                      value=date.today().replace(day=1) + timedelta(days=32),
-                                                      key="input_data_primeira_parcela")
-                
-                st.checkbox("🚩 Despesa Fixa (Terá avisos mensais no painel)", value=True, disabled=True)
-                
-                valor_final_movimentacao = float(valor_parcela)
-                
-                status_selecionado = "Pendente" 
-                st.caption(f"Status forçado para **Pendente**. Serão geradas {int(num_parcelas)} parcelas de R$ {valor_final_movimentacao:,.2f}.")
-                
-            else:
+            with col_entrada_status:
                 status_selecionado = st.radio(
                     "Status", 
                     ["Realizada", "Pendente"], 
                     index=0 if default_status == "Realizada" else 1, 
-                    key="input_status_global",
+                    key="input_status_global_entrada",
                     disabled=edit_mode
                 )
 
-                valor_input_manual = st.number_input(
-                    "Valor (R$)", 
-                    value=default_valor, 
-                    min_value=0.01, 
-                    format="%.2f", 
-                    key="input_valor_saida"
-                )
-                valor_final_movimentacao = valor_input_manual
+        # --- Seção de Saída (Despesa) ---
+        else: # Tipo é Saída
+            st.markdown("---")
+            col_saida_1, col_saida_2 = st.columns(2)
+            
+            with col_saida_1:
+                st.markdown("#### ⚙️ Centro de Custo (Saída)")
+                
+                if not edit_mode:
+                    is_recorrente = st.checkbox("🔄 Cadastrar como Despesa Recorrente (Parcelas)", key="input_is_recorrente")
+                
+                default_select_index = 0
+                custom_desc_default = ""
+                if default_categoria in CATEGORIAS_SAIDA:
+                    default_select_index = CATEGORIAS_SAIDA.index(default_categoria)
+                elif default_categoria.startswith("Outro: "):
+                    default_select_index = CATEGORIAS_SAIDA.index("Outro/Diversos") if "Outro/Diversos" in CATEGORIAS_SAIDA else 0
+                    custom_desc_default = default_categoria.replace("Outro: ", "")
+                
+                categoria_selecionada = st.selectbox("Categoria de Gasto", 
+                                                        CATEGORIAS_SAIDA, 
+                                                        index=default_select_index,
+                                                        key="input_categoria_saida",
+                                                        disabled=is_recorrente and not edit_mode)
+
+                if categoria_selecionada == "Outro/Diversos" and not (is_recorrente and not edit_mode):
+                    descricao_personalizada = st.text_input("Especifique o Gasto", 
+                                                            value=custom_desc_default, 
+                                                            key="input_custom_category")
+                    if descricao_personalizada:
+                        categoria_selecionada = f"Outro: {descricao_personalizada}"
+            
+            with col_saida_2:
+                if is_recorrente and not edit_mode:
+                    st.markdown("##### 🧾 Detalhes da Recorrência")
+                    
+                    nome_despesa_recorrente = st.text_input("Nome da Despesa Recorrente (Ex: Aluguel)", 
+                                                            value=default_cliente if default_cliente else "", 
+                                                            key="input_nome_despesa_recorrente")
+                    col_rec1, col_rec2 = st.columns(2)
+                    with col_rec1:
+                        num_parcelas = st.number_input("Quantidade de Parcelas", min_value=1, value=12, step=1, key="input_num_parcelas")
+                    with col_rec2:
+                        valor_parcela = st.number_input("Valor de Cada Parcela (R$)", min_value=0.01, format="%.2f", value=default_valor, key="input_valor_parcela")
+                    data_primeira_parcela = st.date_input("Data de Vencimento da 1ª Parcela", value=date.today().replace(day=1) + timedelta(days=32), key="input_data_primeira_parcela")
+                    valor_final_movimentacao = float(valor_parcela)
+                    status_selecionado = "Pendente" 
+                    st.caption(f"Status forçado para **Pendente**. Serão geradas {int(num_parcelas)} parcelas de R$ {valor_final_movimentacao:,.2f}.")
+                    
+                else:
+                    status_selecionado = st.radio(
+                        "Status", 
+                        ["Realizada", "Pendente"], 
+                        index=0 if default_status == "Realizada" else 1, 
+                        key="input_status_global_saida",
+                        disabled=edit_mode
+                    )
+                    valor_input_manual = st.number_input(
+                        "Valor (R$)", 
+                        value=default_valor, 
+                        min_value=0.01, 
+                        format="%.2f", 
+                        key="input_valor_saida"
+                    )
+                    valor_final_movimentacao = valor_input_manual
 
 
         data_pagamento_final = None 
-
-        if status_selecionado == "Pendente" and not (is_recorrente and not edit_mode):
-            data_prevista_existe = pd.notna(default_data_pagamento) and (default_data_pagamento is not None)
-            st.markdown("##### 🗓️ Previsão de Pagamento")
-            data_status_opcoes = ["Com Data Prevista", "Sem Data Prevista"]
-            data_status_key = "input_data_status_previsto_global" 
-            
-            default_data_status_index = 0
-            if edit_mode and default_status == "Pendente":
-                data_status_previsto_str = "Com Data Prevista" if data_prevista_existe else "Sem Data Prevista"
-                default_data_status_index = data_status_opcoes.index(data_status_previsto_str) if data_status_previsto_str in data_status_opcoes else 0
-            elif data_status_key in st.session_state:
-                default_data_status_index = data_status_opcoes.index(st.session_state[data_status_key]) if st.session_state[data_status_key] in data_status_opcoes else 0
-
-
-            data_status_selecionado_previsto = st.radio(
-                "Essa pendência tem data prevista?",
-                options=data_status_opcoes,
-                index=default_data_status_index,
-                key=data_status_key, 
-                horizontal=True,
-                disabled=edit_mode and default_status == "Pendente" and data_prevista_existe
-            )
-            
-            if data_status_selecionado_previsto == "Com Data Prevista":
-                prev_date_value = default_data_pagamento if data_prevista_existe and edit_mode else date.today() 
-                
-                data_prevista_pendente = st.date_input(
-                    "Selecione a Data Prevista", 
-                    value=prev_date_value, 
-                    key="input_data_pagamento_prevista_global"
-                )
-                data_pagamento_final = data_prevista_pendente
-            else:
-                data_pagamento_final = None
         
+        # Lógica para Data Prevista (Movimentação Pendente NÃO recorrente)
+        if status_selecionado == "Pendente" and not (is_recorrente and not edit_mode):
+            with st.expander("🗓️ Data Prevista de Pagamento/Recebimento (Opcional)", expanded=False):
+                data_prevista_existe = pd.notna(default_data_pagamento) and (default_data_pagamento is not None)
+                data_status_opcoes = ["Com Data Prevista", "Sem Data Prevista"]
+                data_status_key = "input_data_status_previsto_global" 
+                
+                default_data_status_index = 0
+                if edit_mode and default_status == "Pendente":
+                    data_status_previsto_str = "Com Data Prevista" if data_prevista_existe else "Sem Data Prevista"
+                    default_data_status_index = data_status_opcoes.index(data_status_previsto_str) if data_status_previsto_str in data_status_opcoes else 0
+                elif data_status_key in st.session_state:
+                    default_data_status_index = data_status_opcoes.index(st.session_state[data_status_key]) if st.session_state[data_status_key] in data_status_opcoes else 0
+
+                data_status_selecionado_previsto = st.radio(
+                    "Essa pendência tem data prevista?",
+                    options=data_status_opcoes,
+                    index=default_data_status_index,
+                    key=data_status_key, 
+                    horizontal=True,
+                    disabled=edit_mode and default_status == "Pendente" and data_prevista_existe
+                )
+                
+                if data_status_selecionado_previsto == "Com Data Prevista":
+                    prev_date_value = default_data_pagamento if data_prevista_existe and edit_mode else date.today() 
+                    
+                    data_prevista_pendente = st.date_input(
+                        "Selecione a Data Prevista", 
+                        value=prev_date_value, 
+                        key="input_data_pagamento_prevista_global"
+                    )
+                    data_pagamento_final = data_prevista_pendente
+                else:
+                    data_pagamento_final = None
+        
+        # Lógica para Data Prevista (Movimentação Pendente Recorrente)
         elif status_selecionado == "Pendente" and is_recorrente:
             data_pagamento_final = data_primeira_parcela
             st.markdown(f"##### 🗓️ 1ª Parcela Vence em: **{data_pagamento_final.strftime('%d/%m/%Y')}**")
 
-        with st.form("form_movimentacao_sidebar", clear_on_submit=not edit_mode):
-            
-            loja_selecionada = st.selectbox("Loja Responsável", 
-                                                 LOJAS_DISPONIVEIS, 
-                                                 index=LOJAS_DISPONIVEIS.index(default_loja) if default_loja in LOJAS_DISPONIVEIS else 0,
-                                                 key="input_loja_form",
-                                                 disabled=is_recorrente and not edit_mode)
-                                                 
-            data_input = st.date_input("Data da Transação (Lançamento)", value=default_data, key="input_data_form", disabled=is_recorrente and not edit_mode)
-            
-            default_cliente_form = nome_despesa_recorrente if is_recorrente and not edit_mode else default_cliente
-            
-            cliente = st.text_input("Nome do Cliente (ou Descrição)", 
-                                    value=default_cliente_form, 
-                                    key="input_cliente_form",
-                                    disabled=is_recorrente and not edit_mode)
-                                    
-            forma_pagamento = st.selectbox("Forma de Pagamento", 
-                                                 FORMAS_PAGAMENTO, 
-                                                 index=FORMAS_PAGAMENTO.index(default_forma) if default_forma in FORMAS_PAGAMENTO else 0,
-                                                 key="input_forma_pagamento_form",
-                                                 disabled=status_selecionado == "Pendente" and not edit_mode)
 
-            if status_selecionado == "Realizada":
-                 data_pagamento_final = data_input
-            elif status_selecionado == "Pendente" and data_pagamento_final is None:
-                forma_pagamento = "Pendente" 
-            elif status_selecionado == "Pendente" and is_recorrente:
-                 forma_pagamento = "Pendente" 
+        # --- FORMULÁRIO DE DADOS GERAIS E BOTÃO SALVAR ---
+        st.markdown("---")
+        with st.form("form_movimentacao", clear_on_submit=not edit_mode):
+            st.markdown("#### Dados Finais da Transação")
             
-            st.caption(f"Valor Final da Movimentação: R$ {valor_final_movimentacao:,.2f}")
+            col_f1, col_f2, col_f3 = st.columns(3)
 
+            with col_f1:
+                loja_selecionada = st.selectbox("Loja Responsável", 
+                                                    LOJAS_DISPONIVEIS, 
+                                                    index=LOJAS_DISPONIVEIS.index(default_loja) if default_loja in LOJAS_DISPONIVEIS else 0,
+                                                    key="input_loja_form",
+                                                    disabled=is_recorrente and not edit_mode)
+                                                    
+                data_input = st.date_input("Data da Transação (Lançamento)", value=default_data, key="input_data_form", disabled=is_recorrente and not edit_mode)
+            
+            with col_f2:
+                default_cliente_form = nome_despesa_recorrente if is_recorrente and not edit_mode else default_cliente
+                
+                cliente = st.text_input("Nome do Cliente (ou Descrição)", 
+                                        value=default_cliente_form, 
+                                        key="input_cliente_form",
+                                        disabled=is_recorrente and not edit_mode)
+                
+                if status_selecionado == "Realizada":
+                    data_pagamento_final = data_input
+                    
+                    forma_pagamento = st.selectbox("Forma de Pagamento", 
+                                                        FORMAS_PAGAMENTO, 
+                                                        index=FORMAS_PAGAMENTO.index(default_forma) if default_forma in FORMAS_PAGAMENTO else 0,
+                                                        key="input_forma_pagamento_form")
+                else:
+                    forma_pagamento = "Pendente" 
+                    st.text_input("Forma de Pagamento", value="Pendente", disabled=True)
+            
+            with col_f3:
+                st.markdown(f"**Valor Final:** R$ {valor_final_movimentacao:,.2f}")
+                st.markdown(f"**Status:** **{status_selecionado}**")
+                st.markdown(f"**Data Pagamento:** {data_pagamento_final.strftime('%d/%m/%Y') if data_pagamento_final else 'N/A'}")
 
+            # Botões de Envio
             if edit_mode:
                 col_save, col_cancel = st.columns(2)
                 with col_save:
@@ -2659,6 +2640,7 @@ def livro_caixa():
                 cancelar = False 
 
             if enviar:
+                # [Lógica de validação e salvamento do código original, movida aqui]
                 if valor_final_movimentacao <= 0 and not is_recorrente:
                     st.error("O valor deve ser maior que R$ 0,00.")
                 elif valor_parcela <= 0 and is_recorrente:
@@ -2670,8 +2652,10 @@ def livro_caixa():
                 else:
                     valor_armazenado = valor_final_movimentacao if tipo == "Entrada" else -valor_final_movimentacao
                     
+                    # Lógica de ajuste de estoque (reversão e débito)
                     if edit_mode:
                         original_row = df_dividas.loc[st.session_state.edit_id]
+                        # ... [todo o bloco de lógica de ajuste de estoque para edição]
                         if original_row["Status"] == "Realizada" and status_selecionado == "Pendente" and original_row["Tipo"] == "Entrada":
                             try:
                                 produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
@@ -2704,8 +2688,10 @@ def livro_caixa():
                                 inicializar_produtos.clear()
                                 st.cache_data.clear()
 
+
                     novas_movimentacoes = []
                     if is_recorrente and not edit_mode:
+                        # [Bloco de geração de recorrência]
                         num_parcelas_int = int(num_parcelas)
                         valor_parcela_float = float(valor_parcela)
                         recorrencia_seed = f"{nome_despesa_recorrente}{data_primeira_parcela}{num_parcelas_int}{valor_parcela_float}{categoria_selecionada}{loja_selecionada}"
@@ -2732,6 +2718,7 @@ def livro_caixa():
                         commit_msg = f"Cadastro de Dívida Recorrente ({num_parcelas_int} parcelas)"
                         
                     else:
+                        # [Bloco de adição/edição de item único]
                         nova_linha_data = {
                             "Data": data_input,
                             "Loja": loja_selecionada, 
@@ -2764,11 +2751,10 @@ def livro_caixa():
                 st.session_state.edit_id = None
                 st.session_state.lista_produtos = []
                 st.rerun()
-
-
-    tab_mov, tab_rel = st.tabs(["📋 Movimentações e Resumo", "📈 Relatórios e Filtros"])
-
-
+                
+    # ==============================================================================================
+    # ABA: MOVIMENTAÇÕES E RESUMO (Código Original)
+    # ==============================================================================================
     with tab_mov:
         hoje = date.today()
         primeiro_dia_mes = hoje.replace(day=1)
@@ -2784,25 +2770,21 @@ def livro_caixa():
         
         st.subheader(f"📊 Resumo Financeiro Geral")
 
-        # --- ALTERAÇÃO AQUI ---
-        # 1. Cálculo para o mês atual (o que já existia)
         total_entradas_mes, total_saidas_mes, saldo_mes = calcular_resumo(df_mes_atual_realizado)
 
-        # 2. Cálculo para o saldo geral/total
         df_geral_realizado = df_exibicao[df_exibicao['Status'] == 'Realizada']
         _, _, saldo_geral_total = calcular_resumo(df_geral_realizado)
         
-        # 3. Exibição com 4 colunas, incluindo o novo "Saldo Atual (Geral)"
         col1, col2, col3, col4 = st.columns(4)
         col1.metric(f"Entradas (Mês: {primeiro_dia_mes.strftime('%b')})", f"R$ {total_entradas_mes:,.2f}")
         col2.metric(f"Saídas (Mês: {primeiro_dia_mes.strftime('%b')})", f"R$ {total_saidas_mes:,.2f}")
         delta_saldo_mes = f"R$ {saldo_mes:,.2f}"
         col3.metric("Saldo do Mês (Realizado)", f"R$ {saldo_mes:,.2f}", delta=delta_saldo_mes if saldo_mes != 0 else None, delta_color="normal")
         col4.metric("Saldo Atual (Geral)", f"R$ {saldo_geral_total:,.2f}")
-        # --- FIM DA ALTERAÇÃO ---
 
         st.markdown("---")
         
+        # [Bloco de Alerta de Dívidas Pendentes Vencidas]
         hoje_date = date.today()
         df_pendente_alerta = df_exibicao[
             (df_exibicao["Status"] == "Pendente") & 
@@ -2835,6 +2817,7 @@ def livro_caixa():
         
         st.subheader(f"🏠 Resumo Rápido por Loja (Mês de {primeiro_dia_mes.strftime('%m/%Y')} - Realizado)")
         
+        # [Bloco de Resumo por Loja]
         df_resumo_loja = df_mes_atual_realizado.groupby('Loja')['Valor'].agg(['sum', lambda x: x[x >= 0].sum(), lambda x: abs(x[x < 0].sum())]).reset_index()
         df_resumo_loja.columns = ['Loja', 'Saldo', 'Entradas', 'Saídas']
         
@@ -2856,6 +2839,7 @@ def livro_caixa():
         
         st.subheader("📋 Tabela de Movimentações")
         
+        # [Bloco de Filtros e Tabela de Movimentações]
         if df_exibicao.empty:
             st.info("Nenhuma movimentação registrada ainda.")
         else:
@@ -2910,6 +2894,7 @@ def livro_caixa():
             st.markdown("---")
             st.markdown("### Operações de Edição e Exclusão")
             
+            # [Bloco de Edição e Exclusão]
             if df_para_mostrar.empty:
                 st.info("Nenhuma movimentação disponível para edição/exclusão com os filtros aplicados.")
             else:
@@ -2935,6 +2920,7 @@ def livro_caixa():
                     if row['Tipo'] == 'Entrada' and row['Produtos Vendidos'] and pd.notna(row['Produtos Vendidos']):
                         st.markdown("#### Detalhes dos Produtos Selecionados")
                         try:
+                            # [Bloco de exibição de detalhes dos produtos]
                             try:
                                 produtos = json.loads(row['Produtos Vendidos'])
                             except json.JSONDecodeError:
@@ -2948,10 +2934,7 @@ def livro_caixa():
                             df_detalhe['Total Custo'] = df_detalhe['Quantidade'] * df_detalhe['Custo Unitário']
                             df_detalhe['Lucro Bruto'] = df_detalhe['Total Venda'] - df_detalhe['Total Custo']
 
-                            st.dataframe(
-                                df_detalhe,
-                                hide_index=True,
-                                use_container_width=True,
+                            st.dataframe(df_detalhe, hide_index=True, use_container_width=True, 
                                 column_config={
                                     "Produto": "Produto",
                                     "Quantidade": st.column_config.NumberColumn("Qtd"),
@@ -2960,8 +2943,7 @@ def livro_caixa():
                                     "Total Venda": st.column_config.NumberColumn("Total Venda", format="R$ %.2f"),
                                     "Total Custo": st.column_config.NumberColumn("Total Custo", format="R$ %.2f"),
                                     "Lucro Bruto": st.column_config.NumberColumn("Lucro Bruto", format="R$ %.2f", help="Venda - Custo")
-                                },
-                                column_order=("Produto", "Quantidade", "Preço Unitário", "Custo Unitário", "Total Venda", "Total Custo", "Lucro Bruto")
+                                }
                             ) 
                         
                         except Exception as e:
@@ -2995,14 +2977,16 @@ def livro_caixa():
                 else:
                     st.info("Selecione uma movimentação no menu acima para ver detalhes e opções de edição/exclusão.")
 
-
+    # ==============================================================================================
+    # ABA: RELATÓRIOS E FILTROS (Código Original)
+    # ==============================================================================================
     with tab_rel:
         st.subheader("📄 Relatório Detalhado e Comparativo")
         
+        # [Conteúdo original da aba tab_rel]
         with st.container(border=True):
             st.markdown("#### Filtros do Relatório")
             
-            # --- Filtros ---
             col_f1, col_f2 = st.columns(2)
             with col_f1:
                 lojas_selecionadas = st.multiselect(
@@ -3019,7 +3003,6 @@ def livro_caixa():
                 )
             
             with col_f2:
-                # Lógica para definir datas padrão
                 min_date_geral = df_exibicao["Data"].min() if not df_exibicao.empty and pd.notna(df_exibicao["Data"].min()) else date.today()
                 max_date_geral = df_exibicao["Data"].max() if not df_exibicao.empty and pd.notna(df_exibicao["Data"].max()) else date.today()
 
@@ -3028,7 +3011,6 @@ def livro_caixa():
 
             if st.button("📊 Gerar Relatório Comparativo", use_container_width=True, type="primary"):
                 
-                # --- Lógica de Filtragem ---
                 df_relatorio = df_exibicao[
                     (df_exibicao['Status'] == 'Realizada') &
                     (df_exibicao['Loja'].isin(lojas_selecionadas)) &
@@ -3042,10 +3024,8 @@ def livro_caixa():
                 if df_relatorio.empty:
                     st.warning("Nenhum dado encontrado com os filtros selecionados.")
                 else:
-                    # --- Processamento e Agrupamento Mensal ---
                     df_relatorio['MesAno'] = df_relatorio['Data_dt'].dt.to_period('M').astype(str)
                     
-                    # Agrupa por mês e calcula Entradas e Saídas
                     df_agrupado = df_relatorio.groupby('MesAno').apply(lambda x: pd.Series({
                         'Entradas': x[x['Valor'] > 0]['Valor'].sum(),
                         'Saídas': abs(x[x['Valor'] < 0]['Valor'].sum())
@@ -3053,68 +3033,39 @@ def livro_caixa():
 
                     df_agrupado['Saldo'] = df_agrupado['Entradas'] - df_agrupado['Saídas']
                     
-                    # Calcula o crescimento percentual
                     df_agrupado = df_agrupado.sort_values(by='MesAno').reset_index(drop=True)
                     df_agrupado['Crescimento Entradas (%)'] = (df_agrupado['Entradas'].pct_change() * 100).fillna(0)
                     df_agrupado['Crescimento Saídas (%)'] = (df_agrupado['Saídas'].pct_change() * 100).fillna(0)
                     
-                    # --- Exibição dos Resultados ---
                     st.markdown("---")
                     st.subheader("Resultados do Relatório")
 
-                    # Tabela Comparativa
                     st.markdown("##### 🗓️ Tabela Comparativa Mensal")
-                    st.dataframe(
-                        df_agrupado, 
-                        use_container_width=True,
-                        column_config={
-                            "MesAno": "Mês/Ano",
-                            "Entradas": st.column_config.NumberColumn("Entradas (R$)", format="R$ %.2f"),
+                    st.dataframe(df_agrupado, use_container_width=True,
+                        column_config={"MesAno": "Mês/Ano","Entradas": st.column_config.NumberColumn("Entradas (R$)", format="R$ %.2f"),
                             "Saídas": st.column_config.NumberColumn("Saídas (R$)", format="R$ %.2f"),
                             "Saldo": st.column_config.NumberColumn("Saldo (R$)", format="R$ %.2f"),
                             "Crescimento Entradas (%)": st.column_config.NumberColumn("Cresc. Entradas", format="%.2f%%"),
-                            "Crescimento Saídas (%)": st.column_config.NumberColumn("Cresc. Saídas", format="%.2f%%"),
-                        }
+                            "Crescimento Saídas (%)": st.column_config.NumberColumn("Cresc. Saídas", format="%.2f%%")}
                     )
 
-                    # Gráficos
                     st.markdown("##### 📈 Gráficos de Evolução")
                     
-                    # Gráfico 1: Entradas vs Saídas
-                    fig_comp = px.bar(
-                        df_agrupado, 
-                        x='MesAno', 
-                        y=['Entradas', 'Saídas'], 
-                        title="Comparativo de Entradas vs. Saídas por Mês",
-                        labels={'value': 'Valor (R$)', 'variable': 'Tipo', 'MesAno': 'Mês/Ano'},
-                        barmode='group',
-                        color_discrete_map={'Entradas': 'green', 'Saídas': 'red'}
-                    )
+                    fig_comp = px.bar(df_agrupado, x='MesAno', y=['Entradas', 'Saídas'], title="Comparativo de Entradas vs. Saídas por Mês",
+                        labels={'value': 'Valor (R$)', 'variable': 'Tipo', 'MesAno': 'Mês/Ano'}, barmode='group', color_discrete_map={'Entradas': 'green', 'Saídas': 'red'})
                     st.plotly_chart(fig_comp, use_container_width=True)
 
-                    # Gráfico 2: Crescimento Percentual
-                    fig_cresc = px.line(
-                        df_agrupado,
-                        x='MesAno',
-                        y=['Crescimento Entradas (%)', 'Crescimento Saídas (%)'],
+                    fig_cresc = px.line(df_agrupado, x='MesAno', y=['Crescimento Entradas (%)', 'Crescimento Saídas (%)'],
                         title="Crescimento Percentual Mensal (Entradas e Saídas)",
-                        labels={'value': '% de Crescimento', 'variable': 'Métrica', 'MesAno': 'Mês/Ano'},
-                        markers=True
-                    )
+                        labels={'value': '% de Crescimento', 'variable': 'Métrica', 'MesAno': 'Mês/Ano'}, markers=True)
                     st.plotly_chart(fig_cresc, use_container_width=True)
 
-                    # Ranking de Vendas
                     if 'Entradas' in df_agrupado.columns and not df_agrupado[df_agrupado['Entradas'] > 0].empty:
                         st.markdown("##### 🏆 Ranking de Vendas (Entradas) por Mês")
                         df_ranking = df_agrupado[['MesAno', 'Entradas']].sort_values(by='Entradas', ascending=False).reset_index(drop=True)
-                        df_ranking.index += 1 # Começa o ranking em 1
-                        st.dataframe(
-                            df_ranking,
-                            use_container_width=True,
-                            column_config={
-                                "MesAno": "Mês/Ano",
-                                "Entradas": st.column_config.NumberColumn("Total de Entradas (R$)", format="R$ %.2f")
-                            }
+                        df_ranking.index += 1
+                        st.dataframe(df_ranking, use_container_width=True,
+                            column_config={"MesAno": "Mês/Ano","Entradas": st.column_config.NumberColumn("Total de Entradas (R$)", format="R$ %.2f")}
                         )
 
         st.markdown("---")
@@ -3170,13 +3121,10 @@ def livro_caixa():
                 concluir = st.form_submit_button("✅ Concluir Selecionada", use_container_width=True, type="primary")
 
                 if concluir and original_idx_concluir is not None:
-                    # Encontra o índice no DataFrame de sessão (df_dividas, que é st.session_state.df)
-                    # CORREÇÃO: Usa 'original_index' para encontrar a linha correta no DF original.
-                    
+                    # [Lógica de conclusão de dívida]
                     if original_idx_concluir in st.session_state.df.index:
                         idx_original = original_idx_concluir
                     else:
-                         # Tenta mapear o original_index de volta, caso o index tenha sido alterado
                          df_original_index = st.session_state.df.reset_index()
                          match = df_original_index[df_original_index['index'] == original_idx_concluir].index
                          idx_original = match[0] if not match.empty else None
@@ -3280,3 +3228,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
