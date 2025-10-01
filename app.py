@@ -14,7 +14,7 @@ import base64
 import calendar 
 
 # ==============================================================================
-# CONFIGURAÇÃO GERAL E INÍCIO DO APP
+# CONFIGURAÇÃO GERAL E INÍCIO DO APP (Mantido)
 # ==============================================================================
 
 # Configuração da página para ter largura total e usar o estilo web
@@ -823,62 +823,8 @@ def get_most_sold_products(df_movimentacoes):
     
     return df_mais_vendidos
 
-
-# NOVA FUNÇÃO PARA RELATÓRIO DE PRODUTOS VENDIDOS
-@st.cache_data(show_spinner="Processando dados de vendas...")
-def desempacotar_e_processar_vendas(df_movimentacoes):
-    """
-    Extrai, limpa e calcula totais de vendas e lucros a partir do JSON 'Produtos Vendidos'.
-    Retorna um DataFrame detalhado com cada item de venda em uma linha.
-    """
-    df_vendas_realizadas = df_movimentacoes[
-        (df_movimentacoes["Tipo"] == "Entrada") & 
-        (df_movimentacoes["Status"] == "Realizada") &
-        (df_movimentacoes["Produtos Vendidos"].notna()) &
-        (df_movimentacoes["Produtos Vendidos"] != "")
-    ].copy()
-
-    if df_vendas_realizadas.empty:
-        return pd.DataFrame()
-
-    lista_vendas_detalhada = []
-    for index, row in df_vendas_realizadas.iterrows():
-        try:
-            produtos_vendidos = ast.literal_eval(row["Produtos Vendidos"])
-            if not isinstance(produtos_vendidos, list):
-                continue
-
-            for item in produtos_vendidos:
-                try:
-                    quantidade = to_float(item.get("Quantidade", 0))
-                    preco_unitario = to_float(item.get("Preço Unitário", 0))
-                    custo_unitario = to_float(item.get("Custo Unitário", 0))
-                    
-                    lista_vendas_detalhada.append({
-                        "Data": row["Data"],
-                        "Loja": row["Loja"],
-                        "Produto_ID": str(item.get("Produto_ID", "")),
-                        "NomeProduto": item.get("Produto", "N/A"),
-                        "Quantidade": quantidade,
-                        "ValorVendaTotal": quantidade * preco_unitario,
-                        "ValorCustoTotal": quantidade * custo_unitario,
-                    })
-                except (ValueError, TypeError):
-                    continue 
-        except (ValueError, SyntaxError):
-            continue
-
-    if not lista_vendas_detalhada:
-        return pd.DataFrame()
-        
-    df_detalhado = pd.DataFrame(lista_vendas_detalhada)
-    df_detalhado["LucroBruto"] = df_detalhado["ValorVendaTotal"] - df_detalhado["ValorCustoTotal"]
-    df_detalhado["Data"] = pd.to_datetime(df_detalhado["Data"], errors='coerce').dt.date
-    
-    return df_detalhado
-
 # ==============================================================================
-# 1. PÁGINA DE APRESENTAÇÃO (HOMEPAGE)
+# 1. PÁGINA DE APRESENTAÇÃO (HOMEPAGE) (Mantida)
 # ==============================================================================
 
 def homepage():
@@ -1369,6 +1315,143 @@ def gestao_promocoes():
         else:
             st.info("Selecione uma promoção para ver as opções de edição e exclusão.")
 
+# ==============================================================================
+# NOVA FUNÇÃO: relatorio_produtos (Para ser usada na nova sub-aba)
+# ==============================================================================
+
+def relatorio_produtos():
+    """Sub-aba de Relatório e Alertas de Produtos."""
+    st.subheader("⚠️ Relatório e Alertas de Estoque")
+
+    produtos = inicializar_produtos().copy()
+    df_movimentacoes = carregar_livro_caixa()
+    vendas = df_movimentacoes[df_movimentacoes["Tipo"] == "Entrada"].copy()
+
+    # --- Configurações de Alerta ---
+    with st.expander("⚙️ Configurações de Alerta", expanded=False):
+        col_c1, col_c2, col_c3 = st.columns(3)
+        with col_c1:
+            limite_estoque_baixo = st.number_input(
+                "Estoque Baixo (Qtd. Máxima)", min_value=1, value=2, step=1, key="limite_estoque_baixo"
+            )
+        with col_c2:
+            dias_validade_alerta = st.number_input(
+                "Aviso de Vencimento (Dias)", min_value=1, max_value=365, value=60, step=1, key="dias_validade_alerta"
+            )
+        with col_c3:
+            dias_sem_venda = st.number_input(
+                "Produtos Parados (Dias)", min_value=1, max_value=365, value=90, step=7, key="dias_sem_venda_alerta"
+            )
+            
+    st.markdown("---")
+
+    # --- 1. Aviso de Estoque Baixo ---
+    st.markdown(f"#### ⬇️ Alerta de Estoque Baixo (Qtd $\le {limite_estoque_baixo}$)")
+    
+    df_estoque_baixo = produtos[
+        (produtos["Quantidade"] > 0) & 
+        (produtos["Quantidade"] <= limite_estoque_baixo)
+    ].sort_values(by="Quantidade").copy()
+    
+    if df_estoque_baixo.empty:
+        st.success("🎉 Nenhum produto com estoque baixo encontrado.")
+    else:
+        st.warning(f"🚨 **{len(df_estoque_baixo)}** produto(s) com estoque baixo!")
+        st.dataframe(
+            df_estoque_baixo[["ID", "Nome", "Marca", "Quantidade", "Categoria", "PrecoVista"]],
+            use_container_width=True, hide_index=True,
+            column_config={"PrecoVista": st.column_config.NumberColumn("Preço Venda (R$)", format="R$ %.2f")}
+        )
+
+    st.markdown("---")
+
+    # --- 2. Aviso de Vencimento ---
+    st.markdown(f"#### ⏳ Alerta de Vencimento (Até {dias_validade_alerta} dias)")
+    
+    limite_validade = date.today() + timedelta(days=int(dias_validade_alerta))
+    
+    df_validade = produtos.copy()
+    df_validade['Validade_dt'] = pd.to_datetime(df_validade['Validade'], errors='coerce')
+    limite_validade_dt = datetime.combine(limite_validade, datetime.min.time()) 
+    
+    df_vencimento = df_validade[
+        (df_validade["Quantidade"] > 0) &
+        (df_validade["Validade_dt"].notna()) &
+        (df_validade["Validade_dt"] <= limite_validade_dt)
+    ].copy()
+    
+    # Calcula dias restantes
+    def calcular_dias_restantes(x):
+        if pd.notna(x) and isinstance(x, date):
+            return (x - date.today()).days
+        return float('inf')
+
+    df_vencimento['Dias Restantes'] = df_vencimento['Validade'].apply(calcular_dias_restantes)
+    df_vencimento = df_vencimento.sort_values("Dias Restantes")
+
+    if df_vencimento.empty:
+        st.success("🎉 Nenhum produto próximo da validade encontrado.")
+    else:
+        st.warning(f"🚨 **{len(df_vencimento)}** produto(s) vencendo em breve (até {dias_validade_alerta} dias)!")
+        st.dataframe(
+            df_vencimento[["ID", "Nome", "Marca", "Quantidade", "Validade", "Dias Restantes"]],
+            use_container_width=True, hide_index=True
+        )
+
+    st.markdown("---")
+
+    # --- 3. Produtos Parados (Sem Vendas) ---
+    st.markdown(f"#### 📦 Alerta de Produtos Parados (Sem venda nos últimos {dias_sem_venda} dias)")
+
+    # 1. Processa vendas para encontrar a última venda de cada produto
+    vendas_list = []
+    for index, row in vendas.iterrows():
+        produtos_json = row["Produtos Vendidos"]
+        if pd.notna(produtos_json) and produtos_json:
+            try:
+                items = ast.literal_eval(produtos_json)
+                if isinstance(items, list):
+                    for item in items:
+                         produto_id = str(item.get("Produto_ID"))
+                         if produto_id and produto_id != "None":
+                            vendas_list.append({
+                                "Data": parse_date_yyyy_mm_dd(row["Data"]), 
+                                "IDProduto": produto_id
+                            })
+            except Exception:
+                continue
+    
+    if vendas_list:
+        vendas_flat = pd.DataFrame(vendas_list)
+        vendas_flat["Data"] = pd.to_datetime(vendas_flat["Data"], errors="coerce")
+        ultima_venda = vendas_flat.groupby("IDProduto")["Data"].max().reset_index()
+        ultima_venda.columns = ["IDProduto", "UltimaVenda"]
+    else:
+        ultima_venda = pd.DataFrame(columns=["IDProduto", "UltimaVenda"])
+
+    # 2. Merge com a lista de produtos
+    produtos_parados = produtos.merge(ultima_venda, left_on="ID", right_on="IDProduto", how="left")
+    
+    produtos_parados["UltimaVenda"] = pd.to_datetime(produtos_parados["UltimaVenda"], errors='coerce')
+    limite_dt = datetime.combine(date.today() - timedelta(days=int(dias_sem_venda)), datetime.min.time())
+
+    # 3. Filtra: com estoque > 0 E (nunca vendidos OU última venda antes do limite)
+    df_parados_sugeridos = produtos_parados[
+        (produtos_parados["Quantidade"] > 0) &
+        (produtos_parados["UltimaVenda"].isna() | (produtos_parados["UltimaVenda"] < limite_dt))
+    ].copy()
+    
+    df_parados_sugeridos['UltimaVenda'] = df_parados_sugeridos['UltimaVenda'].dt.date.fillna(pd.NaT)
+    
+    if df_parados_sugeridos.empty:
+        st.success("🎉 Nenhum produto parado com estoque encontrado.")
+    else:
+        st.warning(f"🚨 **{len(df_parados_sugeridos)}** produto(s) parados. Considere fazer uma promoção!")
+        st.dataframe(
+            df_parados_sugeridos[["ID", "Nome", "Marca", "Quantidade", "UltimaVenda"]].fillna({"UltimaVenda": "NUNCA VENDIDO"}),
+            use_container_width=True, hide_index=True
+        )
+
 
 def gestao_produtos():
     
@@ -1385,7 +1468,8 @@ def gestao_produtos():
     # ================================
     # SUBABAS
     # ================================
-    tab_cadastro, tab_lista = st.tabs(["📝 Cadastro de Produtos", "📑 Lista & Busca"])
+    # NOVA ABA: Adicionando relatorio_produtos como tab_relatorio
+    tab_cadastro, tab_lista, tab_relatorio = st.tabs(["📝 Cadastro de Produtos", "📑 Lista & Busca", "📈 Relatório e Alertas"])
 
     # ================================
     # SUBABA: CADASTRO
@@ -1807,6 +1891,12 @@ def gestao_produtos():
                         if st.button("❌ Cancelar", key=f"cancel_{eid}", use_container_width=True, help="Cancelar Edição"):
                             del st.session_state["edit_prod"]
                             st.rerun()
+
+    # ================================
+    # SUBABA: RELATÓRIO E ALERTAS (Novo)
+    # ================================
+    with tab_relatorio:
+        relatorio_produtos()
 
 
 def historico_compras():
@@ -2676,12 +2766,7 @@ def livro_caixa():
                 st.rerun()
 
 
-    # ALTERAÇÃO AQUI: Adiciona a nova aba de relatório de produtos
-    tab_mov, tab_rel, tab_rel_prod = st.tabs([
-        "📋 Movimentações e Resumo", 
-        "📈 Relatórios e Filtros", 
-        "🛍️ Relatório de Produtos Vendidos"
-    ])
+    tab_mov, tab_rel = st.tabs(["📋 Movimentações e Resumo", "📈 Relatórios e Filtros"])
 
 
     with tab_mov:
@@ -3130,112 +3215,6 @@ def livro_caixa():
             df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
 
             st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
-
-
-    # NOVA ABA: Relatório de Produtos Vendidos
-    with tab_rel_prod:
-        st.subheader("🛍️ Relatório de Produtos Vendidos")
-
-        df_vendas_detalhado = desempacotar_e_processar_vendas(df_exibicao)
-
-        if df_vendas_detalhado.empty:
-            st.info("Não há dados de vendas de produtos para gerar relatórios.")
-        else:
-            # --- FILTROS GERAIS PARA ESTA ABA ---
-            st.markdown("#### Filtros do Relatório de Vendas")
-            col_f1, col_f2, col_f3 = st.columns(3)
-            with col_f1:
-                lojas_disponiveis_rel = ["Todas"] + df_vendas_detalhado["Loja"].unique().tolist()
-                loja_selecionada_rel = st.selectbox("Filtrar por Empresa/Loja", lojas_disponiveis_rel, key="rel_prod_loja")
-
-            with col_f2:
-                min_data_venda = df_vendas_detalhado["Data"].min()
-                data_inicio_rel_prod = st.date_input("Data de Início", value=min_data_venda, min_value=min_data_venda, key="rel_prod_data_ini")
-            
-            with col_f3:
-                max_data_venda = df_vendas_detalhado["Data"].max()
-                data_fim_rel_prod = st.date_input("Data de Fim", value=max_data_venda, max_value=max_data_venda, key="rel_prod_data_fim")
-            
-            # Aplica os filtros
-            df_vendas_filtrado = df_vendas_detalhado.copy()
-            if loja_selecionada_rel != "Todas":
-                df_vendas_filtrado = df_vendas_filtrado[df_vendas_filtrado["Loja"] == loja_selecionada_rel]
-            
-            df_vendas_filtrado = df_vendas_filtrado[
-                (df_vendas_filtrado["Data"] >= data_inicio_rel_prod) &
-                (df_vendas_filtrado["Data"] <= data_fim_rel_prod)
-            ]
-
-            if df_vendas_filtrado.empty:
-                st.warning("Nenhum produto vendido encontrado para os filtros selecionados.")
-            else:
-                # --- RESUMO FINANCEIRO DAS VENDAS ---
-                st.markdown("---")
-                st.markdown("#### Resumo de Vendas no Período")
-                
-                total_vendido = df_vendas_filtrado["ValorVendaTotal"].sum()
-                total_custo = df_vendas_filtrado["ValorCustoTotal"].sum()
-                lucro_bruto_liquido = df_vendas_filtrado["LucroBruto"].sum()
-                
-                col_res1, col_res2, col_res3 = st.columns(3)
-                col_res1.metric("Total Vendido (Lucro Bruto)", f"R$ {total_vendido:,.2f}")
-                col_res2.metric("Custo dos Produtos (CMV)", f"R$ {total_custo:,.2f}")
-                col_res3.metric("Lucro Líquido (Venda - Custo)", f"R$ {lucro_bruto_liquido:,.2f}")
-
-                # --- RANKING DE PRODUTOS MAIS VENDIDOS ---
-                st.markdown("---")
-                st.markdown("#### 🏆 Ranking de Produtos Mais Vendidos")
-
-                df_ranking = df_vendas_filtrado.groupby("Produto_ID").agg(
-                    NomeProduto=("NomeProduto", 'first'),
-                    QuantidadeVendida=("Quantidade", 'sum'),
-                    LucroTotal=("LucroBruto", 'sum')
-                ).reset_index().sort_values("QuantidadeVendida", ascending=False)
-                
-                df_ranking = pd.merge(df_ranking, produtos[['ID', 'FotoURL']], left_on='Produto_ID', right_on='ID', how='left')
-
-                for index, row in df_ranking.head(10).iterrows():
-                    with st.container(border=True):
-                        col_img, col_info = st.columns([1, 4])
-                        with col_img:
-                            foto_url = row.get("FotoURL") if pd.notna(row.get("FotoURL")) else f"https://placehold.co/150x150/F48FB1/880E4F?text={str(row.get('NomeProduto','')).replace(' ', '+')}"
-                            st.image(foto_url, width=80)
-                        with col_info:
-                            st.markdown(f"**{row['NomeProduto']}**")
-                            st.markdown(f"📦 **Quantidade Vendida:** {row['QuantidadeVendida']:.0f} unidades")
-                            st.markdown(f"💰 **Lucro Gerado:** R$ {row['LucroTotal']:,.2f}")
-
-                # --- ANÁLISE POR PERÍODO E PRODUTO ---
-                st.markdown("---")
-                st.markdown("#### Análises Específicas")
-                
-                col_ana1, col_ana2 = st.columns(2)
-                
-                with col_ana1:
-                    # Análise por Mês
-                    st.markdown("##### 📅 Análise Mensal")
-                    df_vendas_filtrado['MesAno'] = pd.to_datetime(df_vendas_filtrado['Data']).dt.strftime('%Y-%m')
-                    meses_disponiveis = ["Selecione um mês"] + sorted(df_vendas_filtrado['MesAno'].unique().tolist(), reverse=True)
-                    mes_selecionado = st.selectbox("Escolha o Mês", meses_disponiveis)
-                    
-                    if mes_selecionado != "Selecione um mês":
-                        df_mes = df_vendas_filtrado[df_vendas_filtrado['MesAno'] == mes_selecionado]
-                        total_itens_mes = df_mes['Quantidade'].sum()
-                        lucro_mes = df_mes['LucroBruto'].sum()
-                        st.metric(f"Itens Vendidos em {mes_selecionado}", f"{total_itens_mes:.0f} unidades")
-                        st.metric(f"Lucro Bruto/Líquido em {mes_selecionado}", f"R$ {lucro_mes:,.2f}")
-
-                with col_ana2:
-                    # Análise por Produto Individual
-                    st.markdown("##### 🧮 Análise por Produto")
-                    produtos_disponiveis = ["Selecione um produto"] + sorted(df_vendas_filtrado['NomeProduto'].unique().tolist())
-                    produto_selecionado_ana = st.selectbox("Escolha o Produto", produtos_disponiveis)
-                    
-                    if produto_selecionado_ana != "Selecione um produto":
-                        df_produto_esp = df_vendas_filtrado[df_vendas_filtrado['NomeProduto'] == produto_selecionado_ana]
-                        lucro_liquido_prod = df_produto_esp['LucroBruto'].sum()
-                        st.metric(f"Lucro Líquido de '{produto_selecionado_ana}'", f"R$ {lucro_liquido_prod:,.2f}")
-                        st.metric(f"Lucro Bruto de '{produto_selecionado_ana}'", f"R$ {lucro_liquido_prod:,.2f}")
 
 
 # ==============================================================================
