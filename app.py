@@ -2231,9 +2231,7 @@ def livro_caixa():
     if "cb_lido_livro_caixa" not in st.session_state: st.session_state.cb_lido_livro_caixa = ""
     if "edit_id_loaded" not in st.session_state: st.session_state.edit_id_loaded = None
     if "cliente_selecionado_divida" not in st.session_state: st.session_state.cliente_selecionado_divida = None
-    # NOVO: Chave para indicar o ID da dívida para pagamento parcial
     if "divida_parcial_id" not in st.session_state: st.session_state.divida_parcial_id = None
-    
 
 
     df_dividas = st.session_state.df
@@ -2828,7 +2826,7 @@ def livro_caixa():
                                 "Status": "Pendente",
                                 "Data Pagamento": data_vencimento_parcela, 
                                 "RecorrenciaID": recorrencia_id,
-                                "TransacaoPaiID": "" # Novo Campo
+                                "TransacaoPaiID": "" 
                             }
                             novas_movimentacoes.append(nova_linha_parcela)
                         
@@ -2849,7 +2847,7 @@ def livro_caixa():
                             "Status": status_selecionado, 
                             "Data Pagamento": data_pagamento_final,
                             "RecorrenciaID": "",
-                            "TransacaoPaiID": "" # Novo Campo
+                            "TransacaoPaiID": "" 
                         }
                         
                         if edit_mode:
@@ -3136,7 +3134,7 @@ def livro_caixa():
                     (df_exibicao['Status'] == 'Realizada') &
                     (df_exibicao['Loja'].isin(lojas_selecionadas)) &
                     (df_exibicao['Data'] >= data_inicio_rel) &
-                    (df_exibicao['Data'] <= data_fim_rel)
+                    (df_relatorio['Data'] <= data_fim_rel)
                 ].copy()
 
                 if tipo_movimentacao != "Ambos":
@@ -3240,6 +3238,14 @@ def livro_caixa():
                     try:
                         divida_row = df_pendentes_ordenado[df_pendentes_ordenado['original_index'] == original_idx_para_selecionar].iloc[0]
                         option_key = f"ID {divida_row['ID Visível']} | {divida_row['Tipo']} | R$ {divida_row['Valor'] if divida_row['Tipo'] == 'Entrada' else abs(divida_row['Valor']):,.2f} | Venc.: {divida_row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_row['Data Pagamento']) else 'S/ Data'} | {divida_row['Cliente']}"
+                        
+                        opcoes_pendentes = {
+                            f"ID {row['ID Visível']} | {row['Tipo']} | R$ {row['Valor'] if row['Tipo'] == 'Entrada' else abs(row['Valor']):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
+                            for index, row in df_pendentes_ordenado.iterrows()
+                        }
+                        
+                        opcoes_keys = ["Selecione uma dívida..."] + list(opcoes_pendentes_map.keys())
+                        
                         if option_key in opcoes_keys:
                             default_concluir_idx = opcoes_keys.index(option_key)
                         
@@ -3299,11 +3305,14 @@ def livro_caixa():
                         row_original = st.session_state.df.loc[idx_original].copy()
                         
                         # 1. Cria a transação de pagamento (Entrada Realizada)
+                        # O valor deve ter o sinal correto (Entrada é positivo, Saída é negativo)
+                        valor_pagamento_com_sinal = valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago
+                        
                         nova_transacao_pagamento = {
                             "Data": data_conclusao,
                             "Loja": row_original['Loja'],
-                            "Cliente": f"{row_original['Cliente']} (PAGTO PARCIAL)",
-                            "Valor": valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago, # Mantém o sinal da transação original (Entrada é positivo)
+                            "Cliente": f"{row_original['Cliente']} (Pagto de R$ {valor_pago:,.2f})",
+                            "Valor": valor_pagamento_com_sinal, 
                             "Forma de Pagamento": forma_pagt_concluir,
                             "Tipo": row_original['Tipo'],
                             "Produtos Vendidos": row_original['Produtos Vendidos'], # Mantém os produtos para rastreio
@@ -3311,33 +3320,38 @@ def livro_caixa():
                             "Status": "Realizada",
                             "Data Pagamento": data_conclusao,
                             "RecorrenciaID": row_original['RecorrenciaID'],
-                            "TransacaoPaiID": row_original.name # Rastreia o ID original (índice Pandas)
+                            "TransacaoPaiID": idx_original # Rastreia o ID original (índice Pandas)
                         }
                         
+                        # Adiciona o pagamento realizado
                         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_transacao_pagamento])], ignore_index=True)
                         
                         # 2. Atualiza a dívida original
                         if valor_restante > 0.01: # Se sobrar valor, atualiza a dívida original
                             
-                            # Atualiza o valor restante e o status (continua pendente)
-                            st.session_state.df.loc[idx_original, 'Valor'] = valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
-                            st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente']} (EM ABERTO)"
-                            
-                            # Não debita estoque aqui, pois os produtos já foram incluídos no pagamento (nova_transacao_pagamento)
+                            # Atualiza o valor restante (o sinal já foi definido no processamento)
+                            novo_valor_restante_com_sinal = valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
 
+                            st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal
+                            st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
+                            # O status e data de pagamento previsto são mantidos (Pendente)
+                            
+                            # Não debita estoque aqui, pois o débito ocorre na conclusão total
                             commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f} da dívida {row_original['Cliente']}. Resta R$ {valor_restante:,.2f}."
                             
                         else: # Pagamento total (valor restante <= 0.01)
                             
-                            # Atualiza a dívida original para realizada, mas com valor 0
+                            # Atualiza a dívida original para realizada, mas com valor 0 (para não duplicar o valor com o pagamento)
                             st.session_state.df.loc[idx_original, 'Status'] = 'Realizada'
-                            st.session_state.df.loc[idx_original, 'Valor'] = valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago
+                            st.session_state.df.loc[idx_original, 'Valor'] = 0.00
                             st.session_state.df.loc[idx_original, 'Data'] = data_conclusao
                             st.session_state.df.loc[idx_original, 'Data Pagamento'] = data_conclusao
                             st.session_state.df.loc[idx_original, 'Forma de Pagamento'] = forma_pagt_concluir
-                            st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente']} (PAGTO TOTAL)"
+                            st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (CONCLUÍDA)"
+                            st.session_state.df.loc[idx_original, 'TransacaoPaiID'] = '' # Limpa o PaiID se for a conclusão da original
 
                             # Débito de Estoque (Apenas para Entrada)
+                            # O débito de estoque só deve ocorrer se a transação original for a venda (Tipo Entrada)
                             if row_original["Tipo"] == "Entrada" and row_original["Produtos Vendidos"]:
                                 try:
                                     produtos_vendidos = ast.literal_eval(row_original['Produtos Vendidos'])
