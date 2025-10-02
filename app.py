@@ -2348,18 +2348,9 @@ def livro_caixa():
 
 
     # --- CRIAÇÃO DAS NOVAS ABAS ---
-    # Correção do TypeError: Usando o valor seguro de st.session_state.aba_ativa_livro_caixa para o default_index
-    try:
-        # Garante que o valor da sessão é uma string para a busca
-        default_index = abas_validas.index(str(st.session_state.aba_ativa_livro_caixa))
-    except ValueError:
-        default_index = 0 # Retorna para "📝 Nova Movimentação" se houver um valor inválido.
-        st.session_state.aba_ativa_livro_caixa = abas_validas[0]
-        
-    tab_nova_mov, tab_mov, tab_rel = st.tabs(
-        abas_validas,
-        default_index=default_index
-    )
+    # CORREÇÃO DO TypeError: Removido default_index para compatibilidade
+    tab_nova_mov, tab_mov, tab_rel = st.tabs(abas_validas)
+
 
 
     # ==============================================================================================
@@ -3458,3 +3449,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
