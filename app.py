@@ -2347,9 +2347,16 @@ def livro_caixa():
 
 
     # --- CRIAÇÃO DAS NOVAS ABAS ---
+    # Correção do TypeError: Usando o valor seguro de st.session_state.aba_ativa_livro_caixa para o default_index
+    try:
+        default_index = abas_validas.index(st.session_state.aba_ativa_livro_caixa)
+    except ValueError:
+        default_index = 0 # Retorna para "📝 Nova Movimentação" se houver um valor inválido.
+        st.session_state.aba_ativa_livro_caixa = abas_validas[0]
+        
     tab_nova_mov, tab_mov, tab_rel = st.tabs(
         abas_validas,
-        default_index=abas_validas.index(st.session_state.aba_ativa_livro_caixa)
+        default_index=default_index
     )
 
 
@@ -3315,7 +3322,7 @@ def livro_caixa():
 
                         row_original = st.session_state.df.loc[idx_original].copy()
                         
-                        # 1. Cria a transação de pagamento (Entrada Realizada)
+                        # 1. Cria a transação de pagamento (Realizada)
                         # O valor deve ter o sinal correto (Entrada é positivo, Saída é negativo)
                         valor_pagamento_com_sinal = valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago
                         
