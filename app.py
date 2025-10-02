@@ -2216,8 +2216,9 @@ def livro_caixa():
     if "edit_id" not in st.session_state: st.session_state.edit_id = None
     if "operacao_selecionada" not in st.session_state: st.session_state.operacao_selecionada = "Editar" 
     if "cb_lido_livro_caixa" not in st.session_state: st.session_state.cb_lido_livro_caixa = ""
-    # NOVO: Chave de controle para evitar recarregamento repetitivo da lista de produtos na edição
     if "edit_id_loaded" not in st.session_state: st.session_state.edit_id_loaded = None
+    # NOVO: Chave de controle para dívidas pendentes de um cliente
+    if "cliente_selecionado_divida" not in st.session_state: st.session_state.cliente_selecionado_divida = None
 
 
     df_dividas = st.session_state.df
@@ -2322,6 +2323,9 @@ def livro_caixa():
         if st.session_state.edit_id_loaded is not None:
              st.session_state.edit_id_loaded = None
              st.session_state.lista_produtos = []
+        # NOVO: Limpa o alerta de dívida, exceto se houver um re-run imediato
+        if st.session_state.cliente_selecionado_divida and st.session_state.cliente_selecionado_divida != "CHECKED":
+             st.session_state.cliente_selecionado_divida = None
 
 
     # --- CRIAÇÃO DAS NOVAS ABAS ---
@@ -2352,11 +2356,66 @@ def livro_caixa():
         valor_calculado = 0.0
         produtos_vendidos_json = ""
         categoria_selecionada = ""
-        
+
         # --- Seção de Entrada (Venda/Produtos) ---
         if tipo == "Entrada":
             
+            # Campo de Cliente (precisa ser definido antes para a lógica de dívida)
             with col_principal_2:
+                cliente = st.text_input("Nome do Cliente (ou Descrição)", 
+                                        value=default_cliente, 
+                                        key="input_cliente_form",
+                                        on_change=lambda: st.session_state.update(cliente_selecionado_divida="CHECKED", edit_id=None), # Gatilho de busca
+                                        disabled=edit_mode)
+                
+                # NOVO: Lógica de Alerta Inteligente de Dívida
+                if cliente.strip() and not edit_mode:
+                    
+                    df_dividas_cliente = df_exibicao[
+                        (df_exibicao["Cliente"].astype(str).str.lower() == cliente.strip().lower()) &
+                        (df_exibicao["Status"] == "Pendente") &
+                        (df_exibicao["Tipo"] == "Entrada")
+                    ].sort_values(by="Data Pagamento", ascending=True).copy()
+
+                    if not df_dividas_cliente.empty:
+                        
+                        total_divida = df_dividas_cliente["Valor"].abs().sum()
+                        num_dividas = df_dividas_cliente.shape[0]
+                        divida_mais_antiga = df_dividas_cliente.iloc[0]
+                        original_idx_divida = divida_mais_antiga['original_index']
+                        vencimento_str = divida_mais_antiga['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_mais_antiga['Data Pagamento']) else "S/ Data"
+
+                        st.session_state.cliente_selecionado_divida = original_idx_divida # Salva o ID da dívida mais antiga
+                        
+                        st.warning(f"🚨 **{cliente.strip()}** possui **{num_dividas}** conta(s) a receber pendente(s)!")
+                        st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
+
+                        col_btn_add, col_btn_conc, col_btn_canc = st.columns(3)
+
+                        if col_btn_add.button("➕ Adicionar Mais Produtos à Dívida", key="btn_add_produtos", use_container_width=True, type="secondary"):
+                            st.session_state.edit_id = original_idx_divida
+                            st.rerun()
+
+                        if col_btn_conc.button("✅ Concluir/Pagar Dívida", key="btn_concluir_divida", use_container_width=True, type="primary"):
+                            # Define o ID para conclusão (pode usar o mesmo ID para a lógica da aba Relatórios)
+                            st.session_state.divida_concluir_id = original_idx_divida
+                            st.session_state.pagina_atual = "Livro Caixa" # Mantém na página, mas foca na aba de conclusão
+                            st.rerun()
+
+                        if col_btn_canc.button("🗑️ Cancelar Dívida", key="btn_cancelar_divida", use_container_width=True):
+                            # Lógica simplificada de exclusão (cancelamento)
+                            df_to_delete = df_dividas_cliente.copy()
+                            for idx in df_to_delete['original_index'].tolist():
+                                st.session_state.df = st.session_state.df.drop(idx, errors='ignore')
+                            
+                            if salvar_dados_no_github(st.session_state.df, f"Cancelamento de {num_dividas} dívida(s) de {cliente.strip()}"):
+                                st.session_state.cliente_selecionado_divida = None
+                                st.cache_data.clear()
+                                st.success(f"{num_dividas} dívida(s) de {cliente.strip()} cancelada(s) com sucesso!")
+                                st.rerun()
+                    else:
+                        st.session_state.cliente_selecionado_divida = None # Limpa a chave se não houver dívida
+
                 st.markdown("#### 🛍️ Detalhes dos Produtos")
                 
                 # Exibe a soma calculada dos produtos (se houver)
@@ -2558,6 +2617,10 @@ def livro_caixa():
                         key="input_valor_saida"
                     )
                     valor_final_movimentacao = valor_input_manual
+                    cliente = st.text_input("Nome do Cliente (ou Descrição)", 
+                                        value=default_cliente, 
+                                        key="input_cliente_form_saida",
+                                        disabled=edit_mode)
 
 
         data_pagamento_final = None 
@@ -2620,12 +2683,17 @@ def livro_caixa():
                 data_input = st.date_input("Data da Transação (Lançamento)", value=default_data, key="input_data_form", disabled=is_recorrente and not edit_mode)
             
             with col_f2:
-                default_cliente_form = nome_despesa_recorrente if is_recorrente and not edit_mode else default_cliente
+                # O campo Cliente aqui é uma duplicata, pois o input_cliente_form já está sendo usado. 
+                # Apenas para Saída Recorrente que ainda não está no modo edição, ele usa o nome da despesa recorrente
+                if not is_recorrente or edit_mode:
+                    cliente_final = cliente
+                else:
+                    cliente_final = nome_despesa_recorrente
                 
-                cliente = st.text_input("Nome do Cliente (ou Descrição)", 
-                                        value=default_cliente_form, 
-                                        key="input_cliente_form",
-                                        disabled=is_recorrente and not edit_mode)
+                st.text_input("Cliente/Descrição (Final)", 
+                                        value=cliente_final, 
+                                        key="input_cliente_form_display",
+                                        disabled=True)
                 
                 if status_selecionado == "Realizada":
                     data_pagamento_final = data_input
@@ -2671,7 +2739,8 @@ def livro_caixa():
                     # Lógica de ajuste de estoque (reversão e débito)
                     if edit_mode:
                         original_row = df_dividas.loc[st.session_state.edit_id]
-                        # ... [todo o bloco de lógica de ajuste de estoque para edição]
+                        
+                        # 1. Reversão de estoque se o status da Entrada mudar para Pendente
                         if original_row["Status"] == "Realizada" and status_selecionado == "Pendente" and original_row["Tipo"] == "Entrada":
                             try:
                                 produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
@@ -2679,13 +2748,16 @@ def livro_caixa():
                                     if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
                             except: pass
                             
+                        # 2. Reversão e novo débito se for uma edição de Entrada Realizada
                         elif original_row["Status"] == "Realizada" and status_selecionado == "Realizada" and original_row["Tipo"] == "Entrada":
                             try:
+                                # Reverte o estoque da venda original
                                 produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
                                 for item in produtos_vendidos_antigos:
                                     if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
                             except: pass
                             
+                            # Aplica o débito do novo estado (st.session_state.lista_produtos)
                             if produtos_vendidos_json:
                                 produtos_vendidos_novos = json.loads(produtos_vendidos_json)
                                 for item in produtos_vendidos_novos:
@@ -2694,15 +2766,26 @@ def livro_caixa():
                             if salvar_produtos_no_github(st.session_state.produtos, "Ajuste de estoque por edição de venda"):
                                 inicializar_produtos.clear()
                                 st.cache_data.clear()
-                                
-                        elif not edit_mode and tipo == "Entrada" and status_selecionado == "Realizada" and st.session_state.lista_produtos:
+                        
+                        # 3. Débito se for uma conclusão de Entrada Pendente
+                        elif original_row["Status"] == "Pendente" and status_selecionado == "Realizada" and original_row["Tipo"] == "Entrada":
                             if produtos_vendidos_json:
                                 produtos_vendidos_novos = json.loads(produtos_vendidos_json)
                                 for item in produtos_vendidos_novos:
                                     if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                            if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por nova venda"):
+                            if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por conclusão de venda"):
                                 inicializar_produtos.clear()
                                 st.cache_data.clear()
+                                
+                    # 4. Novo Débito se for uma nova Entrada Realizada
+                    elif not edit_mode and tipo == "Entrada" and status_selecionado == "Realizada" and st.session_state.lista_produtos:
+                        if produtos_vendidos_json:
+                            produtos_vendidos_novos = json.loads(produtos_vendidos_json)
+                            for item in produtos_vendidos_novos:
+                                if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                        if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por nova venda"):
+                            inicializar_produtos.clear()
+                            st.cache_data.clear()
 
 
                     novas_movimentacoes = []
@@ -2738,7 +2821,7 @@ def livro_caixa():
                         nova_linha_data = {
                             "Data": data_input,
                             "Loja": loja_selecionada, 
-                            "Cliente": cliente,
+                            "Cliente": cliente_final,
                             "Valor": valor_armazenado, 
                             "Forma de Pagamento": forma_pagamento,
                             "Tipo": tipo,
@@ -2758,7 +2841,7 @@ def livro_caixa():
                     
                     salvar_dados_no_github(st.session_state.df, commit_msg)
                     st.session_state.edit_id = None
-                    st.session_state.edit_id_loaded = None # CORREÇÃO: Limpa a chave de controle
+                    st.session_state.edit_id_loaded = None 
                     st.session_state.lista_produtos = [] 
                     st.cache_data.clear()
                     st.rerun()
@@ -2766,7 +2849,7 @@ def livro_caixa():
 
             if cancelar:
                 st.session_state.edit_id = None
-                st.session_state.edit_id_loaded = None # CORREÇÃO: Limpa a chave de controle
+                st.session_state.edit_id_loaded = None 
                 st.session_state.lista_produtos = []
                 st.rerun()
                 
@@ -2974,7 +3057,6 @@ def livro_caixa():
 
                     if col_op_1.button(f"✏️ Editar: {item_selecionado_str}", key=f"edit_mov_{original_idx_selecionado}", use_container_width=True, type="secondary"):
                         st.session_state.edit_id = original_idx_selecionado
-                        # Não limpa a lista aqui. A lógica de edição acima (linha 2139) irá carregar ou limpar.
                         st.rerun()
 
                     if col_op_2.button(f"🗑️ Excluir: {item_selecionado_str}", key=f"del_mov_{original_idx_selecionado}", use_container_width=True, type="primary"):
@@ -3120,15 +3202,44 @@ def livro_caixa():
             with st.form("form_concluir_divida"):
                 st.markdown("##### ✅ Concluir Dívida Pendente")
                 
-                opcoes_pendentes = {
+                # NOVO: Se houver uma dívida vindo da Nova Movimentação, a seleciona automaticamente
+                default_concluir_idx = 0
+                if 'divida_concluir_id' in st.session_state and st.session_state.divida_concluir_id is not None:
+                    # Encontra o índice na lista de opções pendentes (df_pendentes_ordenado)
+                    try:
+                        divida_row = df_pendentes_ordenado[df_pendentes_ordenado['original_index'] == st.session_state.divida_concluir_id].iloc[0]
+                        option_key = f"ID {divida_row['ID Visível']} | {divida_row['Tipo']} | R$ {divida_row['Valor'] if divida_row['Tipo'] == 'Entrada' else abs(divida_row['Valor']):,.2f} | Venc.: {divida_row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_row['Data Pagamento']) else 'S/ Data'} | {divida_row['Cliente']}"
+                        
+                        opcoes_pendentes = {
+                            f"ID {row['ID Visível']} | {row['Tipo']} | R$ {row['Valor'] if row['Tipo'] == 'Entrada' else abs(row['Valor']):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
+                            for index, row in df_pendentes_ordenado.iterrows()
+                        }
+                        
+                        opcoes_keys = [""] + list(opcoes_pendentes.keys())
+                        
+                        if option_key in opcoes_keys:
+                            default_concluir_idx = opcoes_keys.index(option_key)
+                        
+                        # Limpa após o uso
+                        del st.session_state['divida_concluir_id']
+
+                    except Exception:
+                        pass # Continua com o índice 0 (Selecione)
+
+                opcoes_pendentes_map = {
                     f"ID {row['ID Visível']} | {row['Tipo']} | R$ {row['Valor'] if row['Tipo'] == 'Entrada' else abs(row['Valor']):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
                     for index, row in df_pendentes_ordenado.iterrows()
                 }
-                opcoes_keys = [""] + list(opcoes_pendentes.keys())
+                opcoes_keys = ["Selecione uma dívida..."] + list(opcoes_pendentes_map.keys())
                 
-                divida_selecionada_str = st.selectbox("Selecione a Dívida para Concluir:", options=opcoes_keys, key="select_divida_concluir")
+                divida_selecionada_str = st.selectbox(
+                    "Selecione a Dívida para Concluir:", 
+                    options=opcoes_keys, 
+                    index=default_concluir_idx,
+                    key="select_divida_concluir"
+                )
                 
-                original_idx_concluir = opcoes_pendentes.get(divida_selecionada_str)
+                original_idx_concluir = opcoes_pendentes_map.get(divida_selecionada_str)
 
                 col_c1, col_c2 = st.columns(2)
                 with col_c1:
@@ -3141,17 +3252,20 @@ def livro_caixa():
                 if concluir and original_idx_concluir is not None:
                     # [Lógica de conclusão de dívida]
                     
-                    # Tenta obter o índice correto, pois original_index é o índice do df subjacente
                     idx_original = original_idx_concluir
-                    # Confere se o índice está no df
-                    if idx_original not in st.session_state.df.index:
-                         # Caso o df_dividas tenha sido reindexado em algum momento (o que pode ocorrer em manipulações)
-                         # A lógica acima de usar df_dividas.loc[st.session_state.edit_id] já cobre o caso de edição.
-                         # Para a exclusão/conclusão, usamos o índice que veio do df_exibicao
-                         pass # Apenas confia no original_idx_concluir que é o índice original (do df subjacente)
+                    
 
                     if idx_original is not None:
-                        row_data = st.session_state.df.loc[idx_original].copy()
+                        # Tenta acessar o df de dívidas com o original_index
+                        if idx_original in st.session_state.df.index:
+                            row_data = st.session_state.df.loc[idx_original].copy()
+                        else:
+                            # Se o índice for numérico após um reset_index (o que não deveria ocorrer se o original_index for mantido)
+                            # Não é seguro indexar assim, mas manteremos o acesso pelo índice original
+                            st.error("Erro interno ao localizar dívida. Tente novamente.")
+                            st.rerun()
+                            return 
+
                         
                         st.session_state.df.loc[idx_original, 'Status'] = 'Realizada'
                         st.session_state.df.loc[idx_original, 'Data'] = data_conclusao
@@ -3162,7 +3276,14 @@ def livro_caixa():
                             try:
                                 produtos_vendidos = ast.literal_eval(row_data['Produtos Vendidos'])
                                 for item in produtos_vendidos:
+                                    # Ajuste: Apenas debita o estoque se ele ainda não foi debitado (se o status anterior era Pendente)
+                                    # O código de edição no Livro Caixa já lida com o débito de estoque em Pendente -> Realizada, 
+                                    # mas aqui é a conclusão direta pela aba de dívidas.
+
+                                    # Se a transação é Entrada e é concluída, DEBITE o estoque.
+                                    # O sistema de Livro Caixa deve garantir que o estoque não foi debitado antes.
                                     if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                                    
                                 if salvar_produtos_no_github(st.session_state.produtos, f"Débito de estoque por conclusão de venda {row_data['Cliente']}"): inicializar_produtos.clear()
                             except: st.warning("⚠️ Venda concluída, mas falha no débito do estoque (JSON inválido).")
                         
