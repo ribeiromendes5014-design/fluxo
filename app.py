@@ -2232,6 +2232,8 @@ def livro_caixa():
     if "edit_id_loaded" not in st.session_state: st.session_state.edit_id_loaded = None
     if "cliente_selecionado_divida" not in st.session_state: st.session_state.cliente_selecionado_divida = None
     if "divida_parcial_id" not in st.session_state: st.session_state.divida_parcial_id = None
+    # NOVO: Chave para controlar a aba ativa dentro do Livro Caixa (para navegação automática)
+    if "aba_ativa_livro_caixa" not in st.session_state: st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
 
 
     df_dividas = st.session_state.df
@@ -2342,13 +2344,18 @@ def livro_caixa():
 
 
     # --- CRIAÇÃO DAS NOVAS ABAS ---
-    tab_nova_mov, tab_mov, tab_rel = st.tabs(["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"])
+    tab_nova_mov, tab_mov, tab_rel = st.tabs([
+        "📝 Nova Movimentação", 
+        "📋 Movimentações e Resumo", 
+        "📈 Relatórios e Filtros"
+    ], default_index=["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"].index(st.session_state.aba_ativa_livro_caixa))
 
 
     # ==============================================================================================
     # NOVA ABA: NOVA MOVIMENTAÇÃO (Substitui a Sidebar)
     # ==============================================================================================
     with tab_nova_mov:
+        st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
         
         st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
         
@@ -2411,9 +2418,9 @@ def livro_caixa():
                             st.rerun()
 
                         if col_btn_conc.button("✅ Concluir/Pagar Dívida", key="btn_concluir_divida", use_container_width=True, type="primary"):
-                            # Define o ID para pagamento parcial na aba de relatórios
+                            # Define o ID para pagamento parcial e força a mudança para a aba Relatórios
                             st.session_state.divida_parcial_id = original_idx_divida 
-                            st.session_state.pagina_atual = "Livro Caixa" 
+                            st.session_state.aba_ativa_livro_caixa = "📈 Relatórios e Filtros"
                             st.rerun()
 
                         if col_btn_canc.button("🗑️ Cancelar Dívida", key="btn_cancelar_divida", use_container_width=True):
@@ -2875,6 +2882,8 @@ def livro_caixa():
     # ABA: MOVIMENTAÇÕES E RESUMO (Código Original)
     # ==============================================================================================
     with tab_mov:
+        st.session_state.aba_ativa_livro_caixa = "📋 Movimentações e Resumo"
+        
         hoje = date.today()
         primeiro_dia_mes = hoje.replace(day=1)
         if hoje.month == 12: proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
@@ -3100,6 +3109,8 @@ def livro_caixa():
     # ABA: RELATÓRIOS E FILTROS (Código Original)
     # ==============================================================================================
     with tab_rel:
+        st.session_state.aba_ativa_livro_caixa = "📈 Relatórios e Filtros"
+        
         st.subheader("📄 Relatório Detalhado e Comparativo")
         
         # [Conteúdo original da aba tab_rel]
@@ -3134,7 +3145,7 @@ def livro_caixa():
                     (df_exibicao['Status'] == 'Realizada') &
                     (df_exibicao['Loja'].isin(lojas_selecionadas)) &
                     (df_exibicao['Data'] >= data_inicio_rel) &
-                    (df_relatorio['Data'] <= data_fim_rel)
+                    (df_exibicao['Data'] <= data_fim_rel)
                 ].copy()
 
                 if tipo_movimentacao != "Ambos":
@@ -3168,8 +3179,6 @@ def livro_caixa():
                             "Crescimento Saídas (%)": st.column_config.NumberColumn("Cresc. Saídas", format="%.2f%%")}
                     )
 
-                    st.markdown("##### 📈 Gráficos de Evolução")
-                    
                     fig_comp = px.bar(df_agrupado, x='MesAno', y=['Entradas', 'Saídas'], title="Comparativo de Entradas vs. Saídas por Mês",
                         labels={'value': 'Valor (R$)', 'variable': 'Tipo', 'MesAno': 'Mês/Ano'}, barmode='group', color_discrete_map={'Entradas': 'green', 'Saídas': 'red'})
                     st.plotly_chart(fig_comp, use_container_width=True)
@@ -3294,7 +3303,7 @@ def livro_caixa():
                     concluir = st.form_submit_button("✅ Registrar Pagamento", use_container_width=True, type="primary")
 
                     if concluir:
-                        valor_restante = valor_em_aberto - valor_pago
+                        valor_restante = round(valor_em_aberto - valor_pago, 2)
                         idx_original = original_idx_concluir
                         
                         if idx_original not in st.session_state.df.index:
@@ -3311,7 +3320,7 @@ def livro_caixa():
                         nova_transacao_pagamento = {
                             "Data": data_conclusao,
                             "Loja": row_original['Loja'],
-                            "Cliente": f"{row_original['Cliente']} (Pagto de R$ {valor_pago:,.2f})",
+                            "Cliente": f"{row_original['Cliente'].split(' (')[0]} (Pagto Parcial de R$ {valor_pago:,.2f})",
                             "Valor": valor_pagamento_com_sinal, 
                             "Forma de Pagamento": forma_pagt_concluir,
                             "Tipo": row_original['Tipo'],
@@ -3327,29 +3336,21 @@ def livro_caixa():
                         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_transacao_pagamento])], ignore_index=True)
                         
                         # 2. Atualiza a dívida original
-                        if valor_restante > 0.01: # Se sobrar valor, atualiza a dívida original
+                        if valor_restante > 0.01: # Pagamento parcial: atualiza a dívida original
                             
                             # Atualiza o valor restante (o sinal já foi definido no processamento)
                             novo_valor_restante_com_sinal = valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
 
                             st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal
                             st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
-                            # O status e data de pagamento previsto são mantidos (Pendente)
                             
-                            # Não debita estoque aqui, pois o débito ocorre na conclusão total
                             commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f} da dívida {row_original['Cliente']}. Resta R$ {valor_restante:,.2f}."
                             
                         else: # Pagamento total (valor restante <= 0.01)
                             
-                            # Atualiza a dívida original para realizada, mas com valor 0 (para não duplicar o valor com o pagamento)
-                            st.session_state.df.loc[idx_original, 'Status'] = 'Realizada'
-                            st.session_state.df.loc[idx_original, 'Valor'] = 0.00
-                            st.session_state.df.loc[idx_original, 'Data'] = data_conclusao
-                            st.session_state.df.loc[idx_original, 'Data Pagamento'] = data_conclusao
-                            st.session_state.df.loc[idx_original, 'Forma de Pagamento'] = forma_pagt_concluir
-                            st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (CONCLUÍDA)"
-                            st.session_state.df.loc[idx_original, 'TransacaoPaiID'] = '' # Limpa o PaiID se for a conclusão da original
-
+                            # Exclui a linha original pendente (pois o pagamento total já foi registrado como nova transação)
+                            st.session_state.df = st.session_state.df.drop(idx_original, errors='ignore')
+                            
                             # Débito de Estoque (Apenas para Entrada)
                             # O débito de estoque só deve ocorrer se a transação original for a venda (Tipo Entrada)
                             if row_original["Tipo"] == "Entrada" and row_original["Produtos Vendidos"]:
@@ -3360,7 +3361,7 @@ def livro_caixa():
                                     if salvar_produtos_no_github(st.session_state.produtos, f"Débito de estoque por conclusão total {row_original['Cliente']}"): inicializar_produtos.clear()
                                 except: st.warning("⚠️ Venda concluída, mas falha no débito do estoque (JSON inválido).")
                                 
-                            commit_msg = f"Pagamento total de R$ {valor_pago:,.2f} da dívida {row_original['Cliente']}."
+                            commit_msg = f"Pagamento total de R$ {valor_pago:,.2f} da dívida {row_original['Cliente'].split(' (')[0]}."
                             
                         
                         if salvar_dados_no_github(st.session_state.df, commit_msg):
