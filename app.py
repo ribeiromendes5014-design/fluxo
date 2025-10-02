@@ -2232,6 +2232,8 @@ def livro_caixa():
     if "edit_id_loaded" not in st.session_state: st.session_state.edit_id_loaded = None
     if "cliente_selecionado_divida" not in st.session_state: st.session_state.cliente_selecionado_divida = None
     if "divida_parcial_id" not in st.session_state: st.session_state.divida_parcial_id = None
+    # NOVA CHAVE: Para controlar a quitação rápida na aba Nova Movimentação
+    if "divida_a_quitar" not in st.session_state: st.session_state.divida_a_quitar = None 
     
     # CORREÇÃO CRÍTICA: Inicializa a aba ativa com um valor padrão válido
     abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
@@ -2360,6 +2362,122 @@ def livro_caixa():
         # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
         
         st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
+
+        # --- NOVO: FORMULÁRIO DE QUITAÇÃO RÁPIDA (Se houver dívida selecionada na aba) ---
+        if 'divida_a_quitar' in st.session_state and st.session_state.divida_a_quitar is not None:
+            
+            idx_quitar = st.session_state.divida_a_quitar
+            # Busca o registro pelo índice original (DataFrame não processado)
+            # Usa o índice do pandas original, que é o que fica armazenado no TransacaoPaiID
+            if idx_quitar not in st.session_state.df.index:
+                st.session_state.divida_a_quitar = None
+                st.error("Erro interno ao localizar dívida para quitação. O registro original foi perdido.")
+                st.rerun()
+                # st.stop() # Adicionar um st.stop() aqui se for garantir que o rerender não falhe, mas o st.rerun já é uma forma de stop.
+                
+            divida_para_quitar = st.session_state.df.loc[idx_quitar].copy()
+            # Garante que o valor é um float (e positivo)
+            valor_em_aberto = abs(pd.to_numeric(divida_para_quitar['Valor'], errors='coerce').fillna(0))
+            
+            if valor_em_aberto <= 0.01:
+                st.session_state.divida_a_quitar = None
+                st.warning("Dívida já quitada.")
+                # st.rerun() # Não faz rerun para evitar loop se a dívida já tiver sido excluída
+                # O usuário terá que clicar no botão de cancelamento para voltar ao formulário principal.
+
+            st.subheader(f"✅ Quitar Dívida: {divida_para_quitar['Cliente']}")
+            st.info(f"Valor Total em Aberto: **R$ {valor_em_aberto:,.2f}**")
+            
+            with st.form("form_quitar_divida_rapida", clear_on_submit=False):
+                col_q1, col_q2, col_q3 = st.columns(3)
+                
+                with col_q1:
+                    valor_pago = st.number_input(
+                        f"Valor Pago Agora (Máx: R$ {valor_em_aberto:,.2f})", 
+                        min_value=0.01, 
+                        max_value=valor_em_aberto, 
+                        value=valor_em_aberto, # Valor sugerido é o total
+                        format="%.2f",
+                        key="input_valor_pago_quitar"
+                    )
+                with col_q2:
+                    data_conclusao = st.date_input("Data Real do Pagamento", value=date.today(), key="data_conclusao_quitar")
+                with col_q3:
+                    forma_pagt_concluir = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="forma_pagt_quitar")
+
+                concluir = st.form_submit_button("✅ Registrar Pagamento e Quitar", type="primary", use_container_width=True)
+                cancelar_quitacao = st.form_submit_button("❌ Cancelar Quitação", type="secondary", use_container_width=True)
+
+                if cancelar_quitacao:
+                    st.session_state.divida_a_quitar = None
+                    st.rerun()
+
+                if concluir:
+                    valor_restante = round(valor_em_aberto - valor_pago, 2)
+                    idx_original = idx_quitar
+                    
+                    if idx_original not in st.session_state.df.index:
+                        st.error("Erro interno ao localizar dívida. O registro original foi perdido.")
+                        # Não faz rerun, apenas avisa. O botão de cancelar permite voltar.
+                        return
+
+                    row_original = divida_para_quitar # Usamos a cópia carregada
+                    
+                    # 1. Cria a transação de pagamento (Realizada)
+                    valor_pagamento_com_sinal = valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago
+                    
+                    # Cria a nova transação de pagamento
+                    nova_transacao_pagamento = {
+                        "Data": data_conclusao,
+                        "Loja": row_original['Loja'],
+                        "Cliente": f"{row_original['Cliente'].split(' (')[0]} (Pagto de R$ {valor_pago:,.2f})",
+                        "Valor": valor_pagamento_com_sinal, 
+                        "Forma de Pagamento": forma_pagt_concluir,
+                        "Tipo": row_original['Tipo'],
+                        "Produtos Vendidos": row_original['Produtos Vendidos'],
+                        "Categoria": row_original['Categoria'],
+                        "Status": "Realizada",
+                        "Data Pagamento": data_conclusao,
+                        "RecorrenciaID": row_original['RecorrenciaID'],
+                        "TransacaoPaiID": idx_original 
+                    }
+                    
+                    st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_transacao_pagamento])], ignore_index=True)
+                    
+                    # 2. Atualiza a dívida original
+                    if valor_restante > 0.01:
+                        # Pagamento parcial: atualiza a dívida original
+                        novo_valor_restante_com_sinal = valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
+
+                        st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal
+                        st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
+                        
+                        commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f} da dívida. Resta R$ {valor_restante:,.2f}."
+                        
+                    else: 
+                        # Pagamento total: exclui a linha original
+                        st.session_state.df = st.session_state.df.drop(idx_original, errors='ignore')
+                        
+                        # Débito de Estoque (Apenas para Entrada)
+                        if row_original["Tipo"] == "Entrada" and row_original["Produtos Vendidos"]:
+                            try:
+                                produtos_vendidos = ast.literal_eval(row_original['Produtos Vendidos'])
+                                for item in produtos_vendidos:
+                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                                if salvar_produtos_no_github(st.session_state.produtos, f"Débito de estoque por conclusão total"): inicializar_produtos.clear()
+                            except: st.warning("⚠️ Venda concluída, mas falha no débito do estoque (JSON inválido).")
+                            
+                        commit_msg = f"Pagamento total de R$ {valor_pago:,.2f} da dívida."
+                        
+                    
+                    if salvar_dados_no_github(st.session_state.df, commit_msg):
+                        st.session_state.divida_a_quitar = None
+                        st.session_state.cliente_selecionado_divida = None # Garante que o alerta do cliente suma
+                        st.cache_data.clear()
+                        st.rerun()
+
+            # Não exibe o restante do formulário "Nova Movimentação" se estiver no modo quitação
+            st.stop()
         
         # O layout principal do formulário agora vai aqui, sem o `st.sidebar`
         
@@ -2387,7 +2505,7 @@ def livro_caixa():
                 cliente = st.text_input("Nome do Cliente (ou Descrição)", 
                                         value=default_cliente, 
                                         key="input_cliente_form",
-                                        on_change=lambda: st.session_state.update(cliente_selecionado_divida="CHECKED", edit_id=None), # Gatilho de busca
+                                        on_change=lambda: st.session_state.update(cliente_selecionado_divida="CHECKED", edit_id=None, divida_a_quitar=None), # Gatilho de busca
                                         disabled=edit_mode)
                 
                 # NOVO: Lógica de Alerta Inteligente de Dívida
@@ -2419,10 +2537,12 @@ def livro_caixa():
                             st.session_state.edit_id_loaded = None # Força o recarregamento dos dados na próxima execução
                             st.rerun()
 
+                        # ALTERADO: Este botão agora define a nova chave de estado para abrir o formulário de quitação rápida
                         if col_btn_conc.button("✅ Concluir/Pagar Dívida", key="btn_concluir_divida", use_container_width=True, type="primary"):
-                            # Define o ID para pagamento parcial e força a mudança para a aba Relatórios
-                            st.session_state.divida_parcial_id = original_idx_divida 
-                            st.session_state.aba_ativa_livro_caixa = "📈 Relatórios e Filtros"
+                            st.session_state.divida_a_quitar = divida_mais_antiga.name # Passa o índice original da linha no df_dividas (que é o original_index)
+                            st.session_state.edit_id = None 
+                            st.session_state.edit_id_loaded = None 
+                            st.session_state.lista_produtos = []
                             st.rerun()
 
                         if col_btn_canc.button("🗑️ Cancelar Dívida", key="btn_cancelar_divida", use_container_width=True):
@@ -2870,6 +2990,7 @@ def livro_caixa():
                     st.session_state.edit_id = None
                     st.session_state.edit_id_loaded = None 
                     st.session_state.lista_produtos = [] 
+                    st.session_state.divida_a_quitar = None # Limpa a chave de quitação
                     st.cache_data.clear()
                     st.rerun()
 
@@ -3449,4 +3570,5 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
