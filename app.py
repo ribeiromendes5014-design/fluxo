@@ -2216,6 +2216,8 @@ def livro_caixa():
     if "edit_id" not in st.session_state: st.session_state.edit_id = None
     if "operacao_selecionada" not in st.session_state: st.session_state.operacao_selecionada = "Editar" 
     if "cb_lido_livro_caixa" not in st.session_state: st.session_state.cb_lido_livro_caixa = ""
+    # NOVO: Chave de controle para evitar recarregamento repetitivo da lista de produtos na edição
+    if "edit_id_loaded" not in st.session_state: st.session_state.edit_id_loaded = None
 
 
     df_dividas = st.session_state.df
@@ -2282,32 +2284,44 @@ def livro_caixa():
             default_status = movimentacao_para_editar['Status'] 
             default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None) 
             
-            if default_tipo == "Entrada" and default_produtos_json:
-                try:
+            # CORREÇÃO: Carrega a lista de produtos APENAS se o item for diferente do último carregado
+            if st.session_state.edit_id_loaded != original_idx_to_edit:
+                if default_tipo == "Entrada" and default_produtos_json:
                     try:
-                        produtos_list = json.loads(default_produtos_json)
-                    except json.JSONDecodeError:
-                        produtos_list = ast.literal_eval(default_produtos_json)
+                        try:
+                            produtos_list = json.loads(default_produtos_json)
+                        except json.JSONDecodeError:
+                            produtos_list = ast.literal_eval(default_produtos_json)
 
-                    for p in produtos_list:
-                        p['Quantidade'] = float(p.get('Quantidade', 0))
-                        p['Preço Unitário'] = float(p.get('Preço Unitário', 0))
-                        p['Custo Unitário'] = float(p.get('Custo Unitário', 0))
-                        p['Produto_ID'] = str(p.get('Produto_ID', ''))
-                    st.session_state.lista_produtos = [p for p in produtos_list if p['Quantidade'] > 0] 
-                except:
+                        for p in produtos_list:
+                            p['Quantidade'] = float(p.get('Quantidade', 0))
+                            p['Preço Unitário'] = float(p.get('Preço Unitário', 0))
+                            p['Custo Unitário'] = float(p.get('Custo Unitário', 0))
+                            p['Produto_ID'] = str(p.get('Produto_ID', ''))
+                            
+                        st.session_state.lista_produtos = [p for p in produtos_list if p['Quantidade'] > 0] 
+                    except:
+                        st.session_state.lista_produtos = []
+                else: # Tipo Saída ou sem produtos, limpa a lista.
                     st.session_state.lista_produtos = []
-            elif default_tipo == "Saída":
-                st.session_state.lista_produtos = []
+                
+                st.session_state.edit_id_loaded = original_idx_to_edit # Marca como carregado
+                st.session_state.cb_lido_livro_caixa = "" # Limpa CB lido
             
-            st.session_state.cb_lido_livro_caixa = ""
             st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
             
         else:
             st.session_state.edit_id = None
+            st.session_state.edit_id_loaded = None # Limpa a chave de controle
+            st.session_state.lista_produtos = [] # Limpeza adicional
             edit_mode = False
             st.info("Movimentação não encontrada, saindo do modo de edição.")
             st.rerun() 
+    else:
+        # NOVO: Se não está no modo edição, garante que a lista esteja vazia e a flag limpa
+        if st.session_state.edit_id_loaded is not None:
+             st.session_state.edit_id_loaded = None
+             st.session_state.lista_produtos = []
 
 
     # --- CRIAÇÃO DAS NOVAS ABAS ---
@@ -2374,6 +2388,8 @@ def livro_caixa():
                     
                     if st.button("Limpar Lista", key="limpar_lista_button", type="secondary", use_container_width=True, help="Limpa todos os produtos da lista de venda"):
                         st.session_state.lista_produtos = []
+                        # NOVO: Limpa o ID de carregamento para a próxima edição/nova venda
+                        st.session_state.edit_id_loaded = None 
                         st.rerun()
 
                 with col_prod_add:
@@ -2742,6 +2758,7 @@ def livro_caixa():
                     
                     salvar_dados_no_github(st.session_state.df, commit_msg)
                     st.session_state.edit_id = None
+                    st.session_state.edit_id_loaded = None # CORREÇÃO: Limpa a chave de controle
                     st.session_state.lista_produtos = [] 
                     st.cache_data.clear()
                     st.rerun()
@@ -2749,6 +2766,7 @@ def livro_caixa():
 
             if cancelar:
                 st.session_state.edit_id = None
+                st.session_state.edit_id_loaded = None # CORREÇÃO: Limpa a chave de controle
                 st.session_state.lista_produtos = []
                 st.rerun()
                 
@@ -2956,7 +2974,7 @@ def livro_caixa():
 
                     if col_op_1.button(f"✏️ Editar: {item_selecionado_str}", key=f"edit_mov_{original_idx_selecionado}", use_container_width=True, type="secondary"):
                         st.session_state.edit_id = original_idx_selecionado
-                        st.session_state.lista_produtos = []
+                        # Não limpa a lista aqui. A lógica de edição acima (linha 2139) irá carregar ou limpar.
                         st.rerun()
 
                     if col_op_2.button(f"🗑️ Excluir: {item_selecionado_str}", key=f"del_mov_{original_idx_selecionado}", use_container_width=True, type="primary"):
@@ -3122,13 +3140,15 @@ def livro_caixa():
 
                 if concluir and original_idx_concluir is not None:
                     # [Lógica de conclusão de dívida]
-                    if original_idx_concluir in st.session_state.df.index:
-                        idx_original = original_idx_concluir
-                    else:
-                         df_original_index = st.session_state.df.reset_index()
-                         match = df_original_index[df_original_index['index'] == original_idx_concluir].index
-                         idx_original = match[0] if not match.empty else None
-
+                    
+                    # Tenta obter o índice correto, pois original_index é o índice do df subjacente
+                    idx_original = original_idx_concluir
+                    # Confere se o índice está no df
+                    if idx_original not in st.session_state.df.index:
+                         # Caso o df_dividas tenha sido reindexado em algum momento (o que pode ocorrer em manipulações)
+                         # A lógica acima de usar df_dividas.loc[st.session_state.edit_id] já cobre o caso de edição.
+                         # Para a exclusão/conclusão, usamos o índice que veio do df_exibicao
+                         pass # Apenas confia no original_idx_concluir que é o índice original (do df subjacente)
 
                     if idx_original is not None:
                         row_data = st.session_state.df.loc[idx_original].copy()
@@ -3228,4 +3248,3 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
-
