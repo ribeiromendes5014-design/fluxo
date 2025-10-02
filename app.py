@@ -2388,109 +2388,115 @@ def livro_caixa():
 
 
             # FIM DA VERIFICAÇÃO DE SEGURANÇA
+
+# Garante que o valor é um float (e positivo)
+# Acessa com segurança após a verificação
+valor_raw = divida_para_quitar['Valor']
+
+if isinstance(valor_raw, (pd.Series, pd.DataFrame)):
+    valor_em_aberto = abs(pd.to_numeric(valor_raw, errors='coerce').fillna(0))
+else:
+    valor_em_aberto = abs(pd.to_numeric([valor_raw], errors='coerce').fillna(0).iloc[0])
+
+if valor_em_aberto <= 0.01:
+    st.session_state.divida_a_quitar = None
+    st.warning("Dívida já quitada.")
+    st.rerun()
+
+st.subheader(f"✅ Quitar Dívida: {divida_para_quitar['Cliente']}")
+st.info(f"Valor Total em Aberto: **R$ {valor_em_aberto:,.2f}**")
+
+with st.form("form_quitar_divida_rapida", clear_on_submit=False):
+    col_q1, col_q2, col_q3 = st.columns(3)
+    
+    with col_q1:
+        valor_pago = st.number_input(
+            f"Valor Pago Agora (Máx: R$ {valor_em_aberto:,.2f})", 
+            min_value=0.01, 
+            max_value=valor_em_aberto, 
+            value=valor_em_aberto, # Valor sugerido é o total
+            format="%.2f",
+            key="input_valor_pago_quitar"
+        )
+    with col_q2:
+        data_conclusao = st.date_input("Data Real do Pagamento", value=date.today(), key="data_conclusao_quitar")
+    with col_q3:
+        forma_pagt_concluir = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="forma_pagt_quitar")
+
+    concluir = st.form_submit_button("✅ Registrar Pagamento e Quitar", type="primary", use_container_width=True)
+    cancelar_quitacao = st.form_submit_button("❌ Cancelar Quitação", type="secondary", use_container_width=True)
+
+    if cancelar_quitacao:
+        st.session_state.divida_a_quitar = None
+        st.rerun()
+
+    if concluir:
+        valor_restante = round(valor_em_aberto - valor_pago, 2)
+        idx_original = idx_quitar
+        
+        if idx_original not in st.session_state.df.index:
+            st.error("Erro interno ao localizar dívida. O registro original foi perdido.")
+            st.rerun()
+            return
+
+        row_original = divida_para_quitar # Usamos a cópia carregada
+        
+        # 1. Cria a transação de pagamento (Realizada)
+        valor_pagamento_com_sinal = valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago
+        
+        # Cria a nova transação de pagamento
+        nova_transacao_pagamento = {
+            "Data": data_conclusao,
+            "Loja": row_original['Loja'],
+            "Cliente": f"{row_original['Cliente'].split(' (')[0]} (Pagto de R$ {valor_pago:,.2f})",
+            "Valor": valor_pagamento_com_sinal, 
+            "Forma de Pagamento": forma_pagt_concluir,
+            "Tipo": row_original['Tipo'],
+            "Produtos Vendidos": row_original['Produtos Vendidos'],
+            "Categoria": row_original['Categoria'],
+            "Status": "Realizada",
+            "Data Pagamento": data_conclusao,
+            "RecorrenciaID": row_original['RecorrenciaID'],
+            "TransacaoPaiID": idx_original 
+        }
+        
+        st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_transacao_pagamento])], ignore_index=True)
+        
+        # 2. Atualiza a dívida original
+        if valor_restante > 0.01:
+            # Pagamento parcial: atualiza a dívida original
+            novo_valor_restante_com_sinal = valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
+
+            st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal
+            st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
             
-            # Garante que o valor é um float (e positivo)
-            # Acessa com segurança após a verificação
-            valor_em_aberto = abs(pd.to_numeric(divida_para_quitar['Valor'], errors='coerce').fillna(0))
+            commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f} da dívida. Resta R$ {valor_restante:,.2f}."
             
-            if valor_em_aberto <= 0.01:
-                st.session_state.divida_a_quitar = None
-                st.warning("Dívida já quitada.")
-                st.rerun()
+        else: 
+            # Pagamento total: exclui a linha original
+            st.session_state.df = st.session_state.df.drop(idx_original, errors='ignore')
             
-            st.subheader(f"✅ Quitar Dívida: {divida_para_quitar['Cliente']}")
-            st.info(f"Valor Total em Aberto: **R$ {valor_em_aberto:,.2f}**")
-            
-            with st.form("form_quitar_divida_rapida", clear_on_submit=False):
-                col_q1, col_q2, col_q3 = st.columns(3)
+            # Débito de Estoque (Apenas para Entrada)
+            if row_original["Tipo"] == "Entrada" and row_original["Produtos Vendidos"]:
+                try:
+                    produtos_vendidos = ast.literal_eval(row_original['Produtos Vendidos'])
+                    for item in produtos_vendidos:
+                        if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                    if salvar_produtos_no_github(st.session_state.produtos, f"Débito de estoque por conclusão total"): inicializar_produtos.clear()
+                except: st.warning("⚠️ Venda concluída, mas falha no débito do estoque (JSON inválido).")
                 
-                with col_q1:
-                    valor_pago = st.number_input(
-                        f"Valor Pago Agora (Máx: R$ {valor_em_aberto:,.2f})", 
-                        min_value=0.01, 
-                        max_value=valor_em_aberto, 
-                        value=valor_em_aberto, # Valor sugerido é o total
-                        format="%.2f",
-                        key="input_valor_pago_quitar"
-                    )
-                with col_q2:
-                    data_conclusao = st.date_input("Data Real do Pagamento", value=date.today(), key="data_conclusao_quitar")
-                with col_q3:
-                    forma_pagt_concluir = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="forma_pagt_quitar")
+            commit_msg = f"Pagamento total de R$ {valor_pago:,.2f} da dívida."
+            
+        
+        if salvar_dados_no_github(st.session_state.df, commit_msg):
+            st.session_state.divida_a_quitar = None
+            st.session_state.cliente_selecionado_divida = None # Garante que o alerta do cliente suma
+            st.cache_data.clear()
+            st.rerun()
 
-                concluir = st.form_submit_button("✅ Registrar Pagamento e Quitar", type="primary", use_container_width=True)
-                cancelar_quitacao = st.form_submit_button("❌ Cancelar Quitação", type="secondary", use_container_width=True)
+# Não exibe o restante do formulário "Nova Movimentação" se estiver no modo quitação
+st.stop()
 
-                if cancelar_quitacao:
-                    st.session_state.divida_a_quitar = None
-                    st.rerun()
-
-                if concluir:
-                    valor_restante = round(valor_em_aberto - valor_pago, 2)
-                    idx_original = idx_quitar
-                    
-                    if idx_original not in st.session_state.df.index:
-                        st.error("Erro interno ao localizar dívida. O registro original foi perdido.")
-                        st.rerun()
-                        return
-
-                    row_original = divida_para_quitar # Usamos a cópia carregada
-                    
-                    # 1. Cria a transação de pagamento (Realizada)
-                    valor_pagamento_com_sinal = valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago
-                    
-                    # Cria a nova transação de pagamento
-                    nova_transacao_pagamento = {
-                        "Data": data_conclusao,
-                        "Loja": row_original['Loja'],
-                        "Cliente": f"{row_original['Cliente'].split(' (')[0]} (Pagto de R$ {valor_pago:,.2f})",
-                        "Valor": valor_pagamento_com_sinal, 
-                        "Forma de Pagamento": forma_pagt_concluir,
-                        "Tipo": row_original['Tipo'],
-                        "Produtos Vendidos": row_original['Produtos Vendidos'],
-                        "Categoria": row_original['Categoria'],
-                        "Status": "Realizada",
-                        "Data Pagamento": data_conclusao,
-                        "RecorrenciaID": row_original['RecorrenciaID'],
-                        "TransacaoPaiID": idx_original 
-                    }
-                    
-                    st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_transacao_pagamento])], ignore_index=True)
-                    
-                    # 2. Atualiza a dívida original
-                    if valor_restante > 0.01:
-                        # Pagamento parcial: atualiza a dívida original
-                        novo_valor_restante_com_sinal = valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
-
-                        st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal
-                        st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
-                        
-                        commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f} da dívida. Resta R$ {valor_restante:,.2f}."
-                        
-                    else: 
-                        # Pagamento total: exclui a linha original
-                        st.session_state.df = st.session_state.df.drop(idx_original, errors='ignore')
-                        
-                        # Débito de Estoque (Apenas para Entrada)
-                        if row_original["Tipo"] == "Entrada" and row_original["Produtos Vendidos"]:
-                            try:
-                                produtos_vendidos = ast.literal_eval(row_original['Produtos Vendidos'])
-                                for item in produtos_vendidos:
-                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                                if salvar_produtos_no_github(st.session_state.produtos, f"Débito de estoque por conclusão total"): inicializar_produtos.clear()
-                            except: st.warning("⚠️ Venda concluída, mas falha no débito do estoque (JSON inválido).")
-                            
-                        commit_msg = f"Pagamento total de R$ {valor_pago:,.2f} da dívida."
-                        
-                    
-                    if salvar_dados_no_github(st.session_state.df, commit_msg):
-                        st.session_state.divida_a_quitar = None
-                        st.session_state.cliente_selecionado_divida = None # Garante que o alerta do cliente suma
-                        st.cache_data.clear()
-                        st.rerun()
-
-            # Não exibe o restante do formulário "Nova Movimentação" se estiver no modo quitação
-            st.stop()
         
         # O layout principal do formulário agora vai aqui, sem o `st.sidebar`
         
@@ -3583,3 +3589,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
