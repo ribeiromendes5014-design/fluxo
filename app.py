@@ -2355,7 +2355,15 @@ def livro_caixa():
 
 
 
-    # --- NOVO: FORMULÁRIO DE QUITAÇÃO RÁPIDA (Se houver dívida selecionada na aba) ---
+    # ==============================================================================================
+    # NOVA ABA: NOVA MOVIMENTAÇÃO (Substitui a Sidebar)
+    # ==============================================================================================
+    with tab_nova_mov:
+        # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
+        
+        st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
+
+        # --- NOVO: FORMULÁRIO DE QUITAÇÃO RÁPIDA (Se houver dívida selecionada na aba) ---
         if 'divida_a_quitar' in st.session_state and st.session_state.divida_a_quitar is not None:
             
             idx_quitar = st.session_state.divida_a_quitar
@@ -2369,29 +2377,26 @@ def livro_caixa():
                 st.session_state.divida_a_quitar = None
                 st.error("Erro: A dívida selecionada não foi encontrada no registro principal. Tente novamente ou cancele.")
                 st.rerun()
-                return # Adiciona um return/stop para sair do fluxo
+                # O stop é alcançado pelo rerun
+                
             except Exception as e:
                 # Captura outros erros de acesso inesperados
                 st.session_state.divida_a_quitar = None
                 st.error(f"Erro inesperado ao carregar dívida: {e}. Cancelando quitação.")
                 st.rerun()
-                return
+                # O stop é alcançado pelo rerun
+
 
             # FIM DA VERIFICAÇÃO DE SEGURANÇA
             
             # Garante que o valor é um float (e positivo)
+            # Acessa com segurança após a verificação
             valor_em_aberto = abs(pd.to_numeric(divida_para_quitar['Valor'], errors='coerce').fillna(0))
             
             if valor_em_aberto <= 0.01:
                 st.session_state.divida_a_quitar = None
                 st.warning("Dívida já quitada.")
                 st.rerun()
-                # O usuário terá que clicar no botão de cancelamento para voltar ao formulário principal.
-                # return
-                
-            # [O restante do formulário de quitação segue aqui...]
-            
-            # ... (Restante do seu formulário e lógica de quitação)
             
             st.subheader(f"✅ Quitar Dívida: {divida_para_quitar['Cliente']}")
             st.info(f"Valor Total em Aberto: **R$ {valor_em_aberto:,.2f}**")
@@ -3578,6 +3583,3 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
-
-
-
