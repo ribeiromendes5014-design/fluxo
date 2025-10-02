@@ -2232,8 +2232,11 @@ def livro_caixa():
     if "edit_id_loaded" not in st.session_state: st.session_state.edit_id_loaded = None
     if "cliente_selecionado_divida" not in st.session_state: st.session_state.cliente_selecionado_divida = None
     if "divida_parcial_id" not in st.session_state: st.session_state.divida_parcial_id = None
-    # NOVO: Chave para controlar a aba ativa dentro do Livro Caixa (para navegação automática)
-    if "aba_ativa_livro_caixa" not in st.session_state: st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
+    
+    # CORREÇÃO CRÍTICA: Inicializa a aba ativa com um valor padrão válido
+    abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
+    if "aba_ativa_livro_caixa" not in st.session_state or st.session_state.aba_ativa_livro_caixa not in abas_validas: 
+        st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
 
 
     df_dividas = st.session_state.df
@@ -2344,11 +2347,10 @@ def livro_caixa():
 
 
     # --- CRIAÇÃO DAS NOVAS ABAS ---
-    tab_nova_mov, tab_mov, tab_rel = st.tabs([
-        "📝 Nova Movimentação", 
-        "📋 Movimentações e Resumo", 
-        "📈 Relatórios e Filtros"
-    ], default_index=["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"].index(st.session_state.aba_ativa_livro_caixa))
+    tab_nova_mov, tab_mov, tab_rel = st.tabs(
+        abas_validas,
+        default_index=abas_validas.index(st.session_state.aba_ativa_livro_caixa)
+    )
 
 
     # ==============================================================================================
@@ -3320,7 +3322,7 @@ def livro_caixa():
                         nova_transacao_pagamento = {
                             "Data": data_conclusao,
                             "Loja": row_original['Loja'],
-                            "Cliente": f"{row_original['Cliente'].split(' (')[0]} (Pagto Parcial de R$ {valor_pago:,.2f})",
+                            "Cliente": f"{row_original['Cliente'].split(' (')[0]} (Pagto de R$ {valor_pago:,.2f})",
                             "Valor": valor_pagamento_com_sinal, 
                             "Forma de Pagamento": forma_pagt_concluir,
                             "Tipo": row_original['Tipo'],
