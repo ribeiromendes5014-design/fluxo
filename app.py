@@ -2389,9 +2389,16 @@ def livro_caixa():
 
             # FIM DA VERIFICAÇÃO DE SEGURANÇA
             
-            # Garante que o valor é um float (e positivo)
-            # Acessa com segurança após a verificação
-            valor_em_aberto = abs(pd.to_numeric(divida_para_quitar['Valor'], errors='coerce').fillna(0))
+            # >> INÍCIO DA CORREÇÃO SOLICITADA PARA TRATAMENTO DE VALORES <<
+            valor_em_aberto = abs(pd.to_numeric(divida_para_quitar['Valor'], errors='coerce'))
+            if isinstance(valor_em_aberto, pd.Series):
+                 # Pega o primeiro elemento da série (garantindo que é um único valor) e trata NaN
+                valor_em_aberto = valor_em_aberto.fillna(0).iloc[0] 
+            else:
+                 # Trata caso não seja uma Série (caso o to_numeric retorne um único float/int)
+                valor_em_aberto = 0 if pd.isna(valor_em_aberto) else valor_em_aberto
+            # << FIM DA CORREÇÃO SOLICITADA PARA TRATAMENTO DE VALORES >>
+
             
             if valor_em_aberto <= 0.01:
                 st.session_state.divida_a_quitar = None
@@ -3418,7 +3425,14 @@ def livro_caixa():
 
 
                 if divida_para_concluir is not None:
-                    valor_em_aberto = abs(divida_para_concluir['Valor'])
+                    # >> INÍCIO DA CORREÇÃO SOLICITADA PARA TRATAMENTO DE VALORES (2) <<
+                    valor_em_aberto = abs(pd.to_numeric(divida_para_concluir['Valor'], errors='coerce'))
+                    if isinstance(valor_em_aberto, pd.Series):
+                        valor_em_aberto = valor_em_aberto.fillna(0).iloc[0]
+                    else:
+                        valor_em_aberto = 0 if pd.isna(valor_em_aberto) else valor_em_aberto
+                    # << FIM DA CORREÇÃO SOLICITADA PARA TRATAMENTO DE VALORES (2) >>
+
                     st.markdown(f"**Valor em Aberto:** R$ {valor_em_aberto:,.2f}")
                     
                     col_c1, col_c2, col_c3 = st.columns(3)
