@@ -2355,36 +2355,44 @@ def livro_caixa():
 
 
 
-    # ==============================================================================================
-    # NOVA ABA: NOVA MOVIMENTAÇÃO (Substitui a Sidebar)
-    # ==============================================================================================
-    with tab_nova_mov:
-        # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
-        
-        st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
-
-        # --- NOVO: FORMULÁRIO DE QUITAÇÃO RÁPIDA (Se houver dívida selecionada na aba) ---
+    # --- NOVO: FORMULÁRIO DE QUITAÇÃO RÁPIDA (Se houver dívida selecionada na aba) ---
         if 'divida_a_quitar' in st.session_state and st.session_state.divida_a_quitar is not None:
             
             idx_quitar = st.session_state.divida_a_quitar
-            # Busca o registro pelo índice original (DataFrame não processado)
-            # Usa o índice do pandas original, que é o que fica armazenado no TransacaoPaiID
-            if idx_quitar not in st.session_state.df.index:
+            
+            # --- VERIFICAÇÃO DE SEGURANÇA ADICIONAL ---
+            try:
+                # Tenta acessar o registro. Isso deve retornar uma Series do Pandas.
+                divida_para_quitar = st.session_state.df.loc[idx_quitar].copy()
+            except KeyError:
+                # Se a chave não existir mais (já foi excluída/quitada totalmente)
                 st.session_state.divida_a_quitar = None
-                st.error("Erro interno ao localizar dívida para quitação. O registro original foi perdido.")
+                st.error("Erro: A dívida selecionada não foi encontrada no registro principal. Tente novamente ou cancele.")
                 st.rerun()
-                # st.stop() # Adicionar um st.stop() aqui se for garantir que o rerender não falhe, mas o st.rerun já é uma forma de stop.
-                
-            divida_para_quitar = st.session_state.df.loc[idx_quitar].copy()
+                return # Adiciona um return/stop para sair do fluxo
+            except Exception as e:
+                # Captura outros erros de acesso inesperados
+                st.session_state.divida_a_quitar = None
+                st.error(f"Erro inesperado ao carregar dívida: {e}. Cancelando quitação.")
+                st.rerun()
+                return
+
+            # FIM DA VERIFICAÇÃO DE SEGURANÇA
+            
             # Garante que o valor é um float (e positivo)
             valor_em_aberto = abs(pd.to_numeric(divida_para_quitar['Valor'], errors='coerce').fillna(0))
             
             if valor_em_aberto <= 0.01:
                 st.session_state.divida_a_quitar = None
                 st.warning("Dívida já quitada.")
-                # st.rerun() # Não faz rerun para evitar loop se a dívida já tiver sido excluída
+                st.rerun()
                 # O usuário terá que clicar no botão de cancelamento para voltar ao formulário principal.
-
+                # return
+                
+            # [O restante do formulário de quitação segue aqui...]
+            
+            # ... (Restante do seu formulário e lógica de quitação)
+            
             st.subheader(f"✅ Quitar Dívida: {divida_para_quitar['Cliente']}")
             st.info(f"Valor Total em Aberto: **R$ {valor_em_aberto:,.2f}**")
             
@@ -2418,7 +2426,7 @@ def livro_caixa():
                     
                     if idx_original not in st.session_state.df.index:
                         st.error("Erro interno ao localizar dívida. O registro original foi perdido.")
-                        # Não faz rerun, apenas avisa. O botão de cancelar permite voltar.
+                        st.rerun()
                         return
 
                     row_original = divida_para_quitar # Usamos a cópia carregada
@@ -3570,5 +3578,6 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
