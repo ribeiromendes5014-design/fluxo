@@ -54,7 +54,7 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-09-25,Doce&bella,compra de produtos,-614.4,PIX,Saída,,Fornecedores/Matéria Prima,Realizada,2025-09-25,
 2025-09-30,Doce&bella,Compra de produtos ,-243.49,PIX,Saída,,Fornecedores/Matéria Prima,Realizada,2025-09-30,
 2025-09-30,Doce&bella,Mara,30.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Creme nivea"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 30.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-09-30,
-2025-10-01,Doce&bella,Andica ,30.0,Pendente,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Body splash ju azul"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 30.0, ""Custo Unit\u00e1rio"": 0.0}]",,Pendente,,
+2025-10-02,Doce&bella,Andica,45.0,Pendente,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Body splash ju azul"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 30.0, ""Custo Unit\u00e1rio"": 0.0}, {""Produto_ID"": """", ""Produto"": ""Batom"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 15.0, ""Custo Unit\u00e1rio"": 0.0}]",,Pendente,,
 2025-06-16,Doce&bella,venda,128.0,PIX,Entrada,,,Realizada,2025-06-16,
 2025-06-16,Doce&bella,venda,49.0,PIX,Entrada,,,Realizada,2025-06-16,
 2025-06-16,Doce&bella,venda,66.7,PIX,Entrada,,,Realizada,2025-06-16,
