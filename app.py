@@ -2235,9 +2235,10 @@ def livro_caixa():
     
     # CORREÇÃO CRÍTICA: Inicializa a aba ativa com um valor padrão válido
     abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
-    if "aba_ativa_livro_caixa" not in st.session_state or st.session_state.aba_ativa_livro_caixa not in abas_validas: 
-        st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
-
+    
+    # Adiciona garantia de que a chave existe e tem um valor válido
+    if "aba_ativa_livro_caixa" not in st.session_state or str(st.session_state.aba_ativa_livro_caixa) not in abas_validas: 
+        st.session_state.aba_ativa_livro_caixa = abas_validas[0]
 
     df_dividas = st.session_state.df
     df_exibicao = processar_dataframe(df_dividas)
@@ -2349,7 +2350,8 @@ def livro_caixa():
     # --- CRIAÇÃO DAS NOVAS ABAS ---
     # Correção do TypeError: Usando o valor seguro de st.session_state.aba_ativa_livro_caixa para o default_index
     try:
-        default_index = abas_validas.index(st.session_state.aba_ativa_livro_caixa)
+        # Garante que o valor da sessão é uma string para a busca
+        default_index = abas_validas.index(str(st.session_state.aba_ativa_livro_caixa))
     except ValueError:
         default_index = 0 # Retorna para "📝 Nova Movimentação" se houver um valor inválido.
         st.session_state.aba_ativa_livro_caixa = abas_validas[0]
@@ -2364,7 +2366,7 @@ def livro_caixa():
     # NOVA ABA: NOVA MOVIMENTAÇÃO (Substitui a Sidebar)
     # ==============================================================================================
     with tab_nova_mov:
-        st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
+        # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
         
         st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
         
@@ -2891,7 +2893,7 @@ def livro_caixa():
     # ABA: MOVIMENTAÇÕES E RESUMO (Código Original)
     # ==============================================================================================
     with tab_mov:
-        st.session_state.aba_ativa_livro_caixa = "📋 Movimentações e Resumo"
+        # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📋 Movimentações e Resumo"
         
         hoje = date.today()
         primeiro_dia_mes = hoje.replace(day=1)
@@ -3118,7 +3120,7 @@ def livro_caixa():
     # ABA: RELATÓRIOS E FILTROS (Código Original)
     # ==============================================================================================
     with tab_rel:
-        st.session_state.aba_ativa_livro_caixa = "📈 Relatórios e Filtros"
+        # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📈 Relatórios e Filtros"
         
         st.subheader("📄 Relatório Detalhado e Comparativo")
         
