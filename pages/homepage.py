@@ -15,10 +15,8 @@ def homepage():
     produtos_df = inicializar_produtos()
     df_movimentacoes = carregar_livro_caixa()
     
-    # ... [Cole o restante do código da sua função homepage() aqui]
-    
     # Produtos novos (últimos N cadastrados com estoque > 0)
-    produtos_novos = produtos_df[produtos_df['Quantidade'] > 0].sort_values(by='ID', ascending=False).head(10) 
+    produtos_novos = produtos_df[produtos_df['Quantidade'] > 0].sort_values(by='ID', ascending=False).head(10)
     
     # Produtos mais vendidos (Top N)
     df_mais_vendidos_id = get_most_sold_products(df_movimentacoes)
@@ -164,5 +162,6 @@ def homepage():
                 <div class="product-wrapper">
                     {''.join(html_cards_novidades)}
                
+                </div>
             </div>
         """, unsafe_allow_html=True)
