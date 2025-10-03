@@ -23,14 +23,14 @@ except ImportError:
         def create_file(self, path, msg, content, sha, branch): pass
 
 # --- Nomes dos arquivos CSV e Configuração ---
-CLIENTES_CSV = 'clientes_cash.csv' # <<< CORRIGIDO PARA O NOME SOLICITADO
+CLIENTES_CSV = 'clientes_cash.csv'
 LANÇAMENTOS_CSV = 'lancamentos.csv'
 PRODUTOS_TURBO_CSV = 'produtos_turbo.csv'
 BONUS_INDICACAO_PERCENTUAL = 0.03 # 3% para o indicador
 CASHBACK_INDICADO_PRIMEIRA_COMPRA = 0.05 # 5% para o indicado (na primeira compra)
 
 # Configuração do logo para o novo layout
-LOGO_DOCEBELLA_URL = "https://i.ibb.co/fYCWBKTm/Logo-Doce-Bella-Cosm-tico.png" # Link do logo
+LOGO_DOCEBELLA_URL = "https://i.ibb.co/fYCWBKTm/Logo-Doce-Bella-Cosm-tico.png"
 
 # --- Definição dos Níveis ---
 NIVEIS = {
@@ -144,7 +144,6 @@ def carregar_dados():
             except pd.errors.EmptyDataError: pass
         for col in df_columns:
             if col not in df.columns: df[col] = ""
-        # Adicione colunas de controle de Nível/Gasto/Primeira Compra, se não existirem
         if 'Cashback Disponível' in df.columns: df['Cashback Disponível'] = df['Cashback Disponível'].fillna('0.0')
         if 'Gasto Acumulado' in df.columns: df['Gasto Acumulado'] = df['Gasto Acumulado'].fillna('0.0')
         if 'Nivel Atual' in df.columns: df['Nivel Atual'] = df['Nivel Atual'].fillna('Prata')
@@ -157,7 +156,6 @@ def carregar_dados():
     df_clientes = carregar_dados_do_csv(CLIENTES_CSV, CLIENTES_COLS)
     df_clientes['Cashback Disponível'] = pd.to_numeric(df_clientes['Cashback Disponível'], errors='coerce').fillna(0.0)
     df_clientes['Gasto Acumulado'] = pd.to_numeric(df_clientes['Gasto Acumulado'], errors='coerce').fillna(0.0)
-    # Garante que a coluna 'Primeira Compra Feita' seja booleana
     df_clientes['Primeira Compra Feita'] = df_clientes['Primeira Compra Feita'].astype(str).str.lower().map({'true': True, 'false': False}).fillna(False).astype(bool)
     df_clientes['Nivel Atual'] = df_clientes['Nivel Atual'].fillna('Prata')
 
@@ -241,7 +239,6 @@ def excluir_cliente(nome_cliente):
 def cadastrar_cliente(nome, apelido, telefone, indicado_por=''):
     if nome in st.session_state.clientes['Nome'].values:
         st.error("Erro: Já existe um cliente com este nome."); return
-    # LÓGICA DE INDICAÇÃO RESTAURADA
     if indicado_por and indicado_por not in st.session_state.clientes['Nome'].values:
         st.warning(f"Atenção: Cliente indicador '{indicado_por}' não encontrado."); indicado_por = ''
     novo_cliente = pd.DataFrame([{'Nome': nome, 'Apelido/Descrição': apelido, 'Telefone': telefone,
@@ -256,21 +253,17 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
     idx_cliente = st.session_state.clientes[st.session_state.clientes['Nome'] == cliente_nome].index
     if idx_cliente.empty: st.error(f"Erro: Cliente '{cliente_nome}' não encontrado."); return
     
-    # --- LÓGICA COMPLETA DE CASHBACK E INDICAÇÃO ---
     cliente_data_antes = st.session_state.clientes.loc[idx_cliente].iloc[0].copy()
     nivel_antigo = cliente_data_antes['Nivel Atual']
     era_primeira_compra = not cliente_data_antes['Primeira Compra Feita']
     
-    # 2. Aplica as atualizações de valores
     st.session_state.clientes.loc[idx_cliente, 'Cashback Disponível'] += valor_cashback
     st.session_state.clientes.loc[idx_cliente, 'Gasto Acumulado'] += valor_venda
     
-    # 3. Recalcula o nível baseado nos novos valores
     novo_gasto_acumulado = st.session_state.clientes.loc[idx_cliente, 'Gasto Acumulado'].iloc[0]
     novo_nivel, _, _ = calcular_nivel_e_beneficios(novo_gasto_acumulado)
     st.session_state.clientes.loc[idx_cliente, 'Nivel Atual'] = novo_nivel
     
-    # 4. BÔNUS DE INDICAÇÃO (RESTURADA)
     if era_primeira_compra and cliente_data_antes['Indicado Por']:
         indicador_nome = cliente_data_antes['Indicado Por']
         idx_indicador = st.session_state.clientes[st.session_state.clientes['Nome'] == indicador_nome].index
@@ -281,7 +274,6 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
             st.session_state.lancamentos = pd.concat([st.session_state.lancamentos, bonus_lanc], ignore_index=True)
             st.success(f"🎁 Bônus de R$ {bonus:.2f} creditado para {indicador_nome}!")
 
-            # LÓGICA DE MENSAGEM PARA O INDICADOR (RESTAURADA)
             if TELEGRAM_ENABLED:
                 nivel_indicador = st.session_state.clientes.loc[idx_indicador, 'Nivel Atual'].iloc[0]
                 bonus_str = f"R$ {bonus:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -296,11 +288,9 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
                 )
                 enviar_mensagem_telegram(mensagem_indicador)
 
-    # 5. Cria o registro da venda
     novo_lancamento = pd.DataFrame([{'Data': data_venda, 'Cliente': cliente_nome, 'Tipo': 'Venda', 'Valor Venda/Resgate': valor_venda, 'Valor Cashback': valor_cashback, 'Venda Turbo': 'Sim' if venda_turbo_selecionada else 'Não'}])
     st.session_state.lancamentos = pd.concat([st.session_state.lancamentos, novo_lancamento], ignore_index=True)
 
-    # 6. LÓGICA DE MENSAGEM PARA O CLIENTE QUE COMPROU (RESTAURADA)
     if TELEGRAM_ENABLED:
         saldo_atualizado = st.session_state.clientes.loc[idx_cliente, 'Cashback Disponível'].iloc[0]
         fuso_horario_brasil = pytz.timezone('America/Sao_Paulo')
@@ -336,12 +326,10 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
         )
         enviar_mensagem_telegram(mensagem_header + mensagem_body + mensagem_footer)
 
-    # 7. Atualiza o status de primeira compra e salva tudo
     st.session_state.clientes.loc[idx_cliente, 'Primeira Compra Feita'] = True
     salvar_dados()
     st.success(f"Venda de R$ {valor_venda:.2f} lançada para {cliente_nome} ({novo_nivel}).")
     st.rerun()
-
 
 def resgatar_cashback(cliente_nome, valor_resgate, valor_venda_atual, data_resgate, saldo_disponivel):
     max_resgate = valor_venda_atual * 0.50
@@ -354,7 +342,6 @@ def resgatar_cashback(cliente_nome, valor_resgate, valor_venda_atual, data_resga
     salvar_dados()
     st.success(f"Resgate de R$ {valor_resgate:.2f} realizado para {cliente_nome}.")
     
-    # LÓGICA DE MENSAGEM PARA O CLIENTE APÓS RESGATE (RESTAURADA)
     if TELEGRAM_ENABLED:
         saldo_apos_resgate = st.session_state.clientes.loc[st.session_state.clientes['Nome'] == cliente_nome, 'Cashback Disponível'].iloc[0]
         fuso_horario_brasil = pytz.timezone('America/Sao_Paulo')
@@ -392,7 +379,6 @@ def excluir_lancamento_venda(lancamento_index: int):
     valor_venda = temp_venda if pd.notna(temp_venda) else 0
     valor_cashback = temp_cashback if pd.notna(temp_cashback) else 0
 
-    # Reverter dados do cliente
     idx_cliente = st.session_state.clientes[st.session_state.clientes['Nome'] == cliente_nome].index
     if not idx_cliente.empty:
         cliente_data_antes = st.session_state.clientes.loc[idx_cliente].iloc[0].copy()
@@ -404,19 +390,16 @@ def excluir_lancamento_venda(lancamento_index: int):
         novo_nivel, _, _ = calcular_nivel_e_beneficios(novo_gasto_acumulado)
         st.session_state.clientes.loc[idx_cliente, 'Nivel Atual'] = novo_nivel
 
-        # Checar se a venda era a primeira e única de um cliente indicado
         vendas_cliente = st.session_state.lancamentos[(st.session_state.lancamentos['Cliente'] == cliente_nome) & (st.session_state.lancamentos['Tipo'] == 'Venda')]
         if len(vendas_cliente) == 1 and cliente_data_antes['Indicado Por']:
             indicador_nome = cliente_data_antes['Indicado Por']
             st.session_state.clientes.loc[idx_cliente, 'Primeira Compra Feita'] = False
             
-            # Reverter bônus do indicador
             idx_indicador = st.session_state.clientes[st.session_state.clientes['Nome'] == indicador_nome].index
             if not idx_indicador.empty:
                 bonus_a_reverter = valor_venda * BONUS_INDICACAO_PERCENTUAL
                 st.session_state.clientes.loc[idx_indicador, 'Cashback Disponível'] -= bonus_a_reverter
                 
-                # Excluir lançamento de bônus
                 idx_bonus = st.session_state.lancamentos[
                     (st.session_state.lancamentos['Cliente'] == indicador_nome) &
                     (st.session_state.lancamentos['Tipo'] == 'Bônus Indicação') &
@@ -425,7 +408,6 @@ def excluir_lancamento_venda(lancamento_index: int):
                 if not idx_bonus.empty:
                     st.session_state.lancamentos = st.session_state.lancamentos.drop(idx_bonus)
 
-    # Excluir o lançamento da venda
     st.session_state.lancamentos = st.session_state.lancamentos.drop(lancamento_index).reset_index(drop=True)
     
     st.success(f"Venda de R$ {valor_venda:.2f} para {cliente_nome} foi excluída com sucesso.")
@@ -442,15 +424,13 @@ def render_lancamento():
         clientes_nomes = [''] + sorted(st.session_state.clientes['Nome'].tolist())
         cliente_selecionado = st.selectbox("Nome da Cliente:", options=clientes_nomes, key='nome_cliente_venda')
         
-        # Lógica de cálculo de taxa restaurada
         nivel_cliente, cb_normal_rate, cb_turbo_rate = 'Prata', NIVEIS['Prata']['cashback_normal'], NIVEIS['Prata']['cashback_turbo']
-        venda_turbo_selecionada = False # Inicializa a variável
+        venda_turbo_selecionada = False
         
         if cliente_selecionado:
             cliente_data = st.session_state.clientes[st.session_state.clientes['Nome'] == cliente_selecionado].iloc[0]
             nivel_cliente, cb_normal_rate, cb_turbo_rate = calcular_nivel_e_beneficios(cliente_data['Gasto Acumulado'])
             
-            # Aplica a taxa de PRIMEIRA COMPRA (5%) se for o caso
             if not cliente_data['Primeira Compra Feita'] and cliente_data['Indicado Por']:
                 taxa_ind = CASHBACK_INDICADO_PRIMEIRA_COMPRA
                 st.info(f"✨ INDICAÇÃO ATIVA! Cashback de {int(taxa_ind * 100)}% aplicado na primeira compra.")
@@ -470,11 +450,10 @@ def render_lancamento():
         if produtos_ativos:
             st.warning(f"⚠️ PRODUTOS TURBO ATIVOS: {', '.join(produtos_ativos)}", icon="⚡")
             if cb_turbo_rate > 0:
-                # O checkbox agora define a variável que será usada na função `lancar_venda`
                 venda_turbo_selecionada = st.checkbox(f"Venda contém Produtos Turbo (aplica taxa de {int(cb_turbo_rate * 100)}%)?", key='venda_turbo_check')
         
         taxa_final = cb_turbo_rate if venda_turbo_selecionada and cb_turbo_rate > 0 else cb_normal_rate
-        cashback_calculado = valor_venda * taxa_final # Usa valor_venda local para cálculo
+        cashback_calculado = valor_venda * taxa_final
         st.metric(label=f"Cashback a Gerar ({int(taxa_final * 100)}%):", value=f"R$ {cashback_calculado:.2f}")
         
         with st.form("form_venda", clear_on_submit=True):
@@ -484,7 +463,6 @@ def render_lancamento():
                 if not cliente_selecionado: st.error("Por favor, selecione uma cliente.")
                 elif valor_venda <= 0: st.error("O valor da venda deve ser maior que R$ 0,00.")
                 else: 
-                    # Passa o estado de venda_turbo_selecionada para a função de lançamento
                     lancar_venda(cliente_selecionado, valor_venda, cashback_calculado, data_venda, venda_turbo_selecionada)
 
     elif operacao == "Resgatar Cashback":
@@ -522,13 +500,11 @@ def render_lancamento():
                 elif valor_resgate <= 0:
                     st.error("O valor do resgate deve ser maior que zero.")
                 else:
-                    # Recalcula saldo atual para garantir que o saldo_disponivel passado à função esteja correto
                     if cliente_resgate in st.session_state.clientes['Nome'].values:
                         saldo_atual = st.session_state.clientes.loc[st.session_state.clientes['Nome'] == cliente_resgate, 'Cashback Disponível'].iloc[0]
                         resgatar_cashback(cliente_resgate, valor_resgate, valor_venda_resgate, data_resgate, saldo_atual)
                     else:
                         st.error("Erro ao calcular saldo. Cliente não encontrado.")
-
 
 def render_produtos_turbo():
     st.header("Gestão de Produtos Turbo (Cashback Extra)")
@@ -548,7 +524,6 @@ def render_produtos_turbo():
     else:
         df_display = st.session_state.produtos_turbo.copy()
         hoje = date.today()
-        # Garante que as colunas sejam datetime antes de comparar datas
         df_display['Data Início'] = pd.to_datetime(df_display['Data Início']) 
         df_display['Data Fim'] = pd.to_datetime(df_display['Data Fim'])
         
@@ -567,7 +542,6 @@ def render_cadastro():
     st.checkbox("Esta cliente foi indicada por outra?", key='is_indicado_check')
     indicado_por = ''
     
-    # LÓGICA DE INDICAÇÃO RESTAURADA
     if st.session_state.is_indicado_check:
         st.markdown("##### 🎁 Programa Indique e Ganhe")
         clientes_indicadores = [''] + sorted(st.session_state.clientes['Nome'].tolist())
@@ -584,7 +558,6 @@ def render_cadastro():
         
         if submitted_cadastro:
             if nome:
-                # O valor de 'indicado_por' é passado para a função, mesmo que vazio
                 indicado_final = indicado_por if st.session_state.is_indicado_check else ''
                 cadastrar_cliente(nome.strip(), apelido.strip(), telefone.strip(), indicado_final.strip())
             else: st.error("O campo 'Nome da Cliente' é obrigatório.")
@@ -598,7 +571,6 @@ def render_cadastro():
     if cliente_selecionado_operacao:
         cliente_data = st.session_state.clientes[st.session_state.clientes['Nome'] == cliente_selecionado_operacao].iloc[0]
         
-        # Lógica de edição e exclusão (mantida da correção anterior)
         st.markdown("##### Dados do Cliente Selecionado")
 
         col_edicao, col_exclusao = st.columns([1, 1])
@@ -663,19 +635,15 @@ def render_cadastro():
                     
     st.markdown("---")
     st.subheader("Clientes Cadastrados (Visualização)")
-    # Inclui a coluna Gasto Acumulado para visualização
     st.dataframe(st.session_state.clientes[['Nome', 'Apelido/Descrição', 'Telefone', 'Cashback Disponível', 'Gasto Acumulado', 'Nivel Atual']], hide_index=True, use_container_width=True)
-
 
 def render_relatorios():
     st.header("Relatórios e Rankings")
     st.markdown("---")
 
-    # --- Ranking de Níveis de Fidelidade (RESTURADA) ---
     st.subheader("💎 Ranking de Níveis de Fidelidade")
     df_niveis = st.session_state.clientes.copy()
     
-    # Recalcula níveis para garantir precisão
     df_niveis['Nivel Atual'] = df_niveis['Gasto Acumulado'].apply(lambda x: calcular_nivel_e_beneficios(x)[0])
     df_niveis['Falta p/ Próximo Nível'] = df_niveis.apply(lambda row: calcular_falta_para_proximo_nivel(row['Gasto Acumulado'], row['Nivel Atual']), axis=1)
     
@@ -687,8 +655,6 @@ def render_relatorios():
     st.dataframe(df_display, use_container_width=True)
     st.markdown("---")
 
-
-    # --- Ranking de Cashback e Compras (RESTURADA) ---
     st.subheader("🏆 Ranking: Maior Saldo de Cashback Disponível")
     ranking_cashback = st.session_state.clientes.sort_values(by='Cashback Disponível', ascending=False).reset_index(drop=True)
     ranking_cashback.index += 1  
@@ -710,15 +676,12 @@ def render_relatorios():
         st.info("Nenhuma venda registrada ainda para calcular o ranking de compras.")
     st.markdown("---")
     
-    
-    # --- Histórico de Lançamentos ---
     st.subheader("📄 Histórico de Lançamentos")
     
     col_data, col_tipo = st.columns(2)
     with col_data:
         data_selecionada = st.date_input("Filtrar por Data:", value=None)
     with col_tipo:
-        # Adicionado Tipo 'Bônus Indicação' ao filtro
         tipo_selecionado = st.selectbox("Filtrar por Tipo:", ['Todos', 'Venda', 'Resgate', 'Bônus Indicação'], index=0)
 
     df_historico = st.session_state.lancamentos.copy()
@@ -740,7 +703,6 @@ def render_relatorios():
         st.info("Nenhum lançamento registrado no histórico.")
     st.markdown("---")
     
-    # --- Excluir Lançamento (RESTURADA) ---
     st.subheader("🗑️ Excluir Lançamento de Venda")
     vendas_df = st.session_state.lancamentos[st.session_state.lancamentos['Tipo'] == 'Venda'].copy()
     if vendas_df.empty:
@@ -748,17 +710,16 @@ def render_relatorios():
     else:
         vendas_df_sorted = vendas_df.sort_values(by="Data", ascending=False)
         
-        # >>>>> INÍCIO DA CORREÇÃO <<<<<
-        # 1. Garante que a coluna de valor seja numérica antes do loop para evitar erros.
+        # Garante que a coluna de valor seja numérica para evitar erros.
         vendas_df_sorted['Valor Numerico'] = pd.to_numeric(vendas_df_sorted['Valor Venda/Resgate'], errors='coerce').fillna(0)
-
-        # 2. Cria o dicionário usando a nova coluna numérica, sem o '.iloc[0]'.
+        
+        # Cria o dicionário, agora com uma verificação para datas inválidas (NaT).
         options_map = {
-            f"ID {index}: {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {row['Valor Numerico']:.2f}": index
+            # Se a data for válida (notna), formata. Senão, exibe 'DATA INVÁLIDA'.
+            f"ID {index}: {row['Data'].strftime('%d/%m/%Y') if pd.notna(row['Data']) else 'DATA INVÁLIDA'} - {row['Cliente']} - R$ {row['Valor Numerico']:.2f}": index
             for index, row in vendas_df_sorted.iterrows()
         }
-        # >>>>> FIM DA CORREÇÃO <<<<<
-
+        
         option_selecionada = st.selectbox(
             "Selecione a venda que deseja excluir:",
             options=[''] + list(options_map.keys())
@@ -770,7 +731,6 @@ def render_relatorios():
             if st.button("🔴 Confirmar Exclusão da Venda", type="primary"):
                 excluir_lancamento_venda(index_para_excluir)
 
-
 def render_home():
     st.header("Seja Bem-Vinda ao Painel de Gestão de Cashback Doce&Bella!")
     st.markdown("---")
@@ -778,28 +738,23 @@ def render_home():
     total_clientes = len(st.session_state.clientes)
     total_cashback_pendente = st.session_state.clientes['Cashback Disponível'].sum()
     
-    # Filtra vendas
     vendas_df = st.session_state.lancamentos[st.session_state.lancamentos['Tipo'] == 'Venda']
     
     total_vendas_mes = 0.0
     
     if not vendas_df.empty:
-        # Garante que a coluna 'Data' seja tratada corretamente
         vendas_df_copy = vendas_df.copy()
         vendas_df_copy['Data'] = pd.to_datetime(vendas_df_copy['Data'], errors='coerce')
         
         vendas_mes = vendas_df_copy[
             vendas_df_copy['Data'].apply(
-                # Filtra pelo mês atual
                 lambda x: x.month == date.today().month if pd.notna(x) else False
             )
         ]
         
         if not vendas_mes.empty:
-            # Garante que a coluna de valor é numérica antes de somar
             vendas_mes['Valor Venda/Resgate'] = pd.to_numeric(vendas_mes['Valor Venda/Resgate'], errors='coerce').fillna(0)
             total_vendas_mes = vendas_mes['Valor Venda/Resgate'].sum()
-
 
     col1, col2, col3 = st.columns(3)
     
@@ -812,14 +767,9 @@ def render_home():
     
     col_nav1, col_nav2, col_nav3 = st.columns(3)
     
-    # Note: O sistema principal do app.py irá controlar a navegação.
-    # Aqui, a navegação é feita chamando render_home() e rerunning para a aba correta.
-    
-    # Mapeamento para permitir que o clique no botão atualize a aba interna (se for o caso)
     if 'cashback_tab_atual' not in st.session_state:
         st.session_state.cashback_tab_atual = "Home"
 
-    # Estes botões dependem de uma variável de estado interna para mudar a aba.
     if col_nav1.button("▶️ Lançar Nova Venda", use_container_width=True):
         st.session_state.cashback_tab_atual = "Lançamento"
         st.rerun()
@@ -836,59 +786,52 @@ def render_home():
 # FUNÇÃO CASHBACK PRINCIPAL (ISOLADA)
 # ==============================================================================
 
-def cashback_system(): # NOVO NOME DA FUNÇÃO EXPORTADA
+def cashback_system():
     st.markdown("""
         <style>
-        /* CSS LOCAL: Remove o Logo Duplicado e Corrige o Tamanho da Fonte das Abas Internas */
-        
-        /* Aumenta o tamanho das abas internas (st.tabs) */
         button[data-baseweb="tab"] {
             min-width: 150px !important;
             padding: 10px 20px !important;
             font-size: 16px !important;
             font-weight: bold !important;
         }
-        /* ESTILO DA BARRA DE NAVEGAÇÃO INTERNA */
         div[role="tablist"] {
             border-bottom: 2px solid #E91E63;
         }
         </style>
     """, unsafe_allow_html=True)
     
-    # --- EXECUÇÃO PRINCIPAL E CARREGAMENTO DE DADOS ---
     if 'editing_client' not in st.session_state: st.session_state.editing_client = False
     if 'deleting_client' not in st.session_state: st.session_state.deleting_client = False
     if 'valor_venda' not in st.session_state: st.session_state.valor_venda = 0.00
     if 'data_version' not in st.session_state: st.session_state.data_version = 0
     if 'clientes' not in st.session_state or 'cashback_tab_atual' not in st.session_state:
-        # Carregamos os dados aqui
         st.session_state.clientes, st.session_state.lancamentos, st.session_state.produtos_turbo = carregar_dados()
         st.session_state.cashback_tab_atual = "Home"
 
-    # --- MAPEAMENTO DE FUNÇÕES INTERNAS ---
     PAGINAS_INTERNAS = {
         "Home": render_home, "Lançamento": render_lancamento, "Cadastro": render_cadastro,
         "Produtos Turbo": render_produtos_turbo, "Relatórios": render_relatorios
     }
     
-    # --- RENDERIZAÇÃO USANDO ABAS NATIVAS (st.tabs) ---
-    
     tab_list = ["Home", "Lançamento", "Cadastro", "Produtos Turbo", "Relatórios"]
     
-    # Encontra o índice da aba atual (para setar como padrão)
     default_index = tab_list.index(st.session_state.cashback_tab_atual) if st.session_state.cashback_tab_atual in tab_list else 0
     
-    tabs = st.tabs(tab_list)
-    
-    # Renderiza o conteúdo na aba correta
-    for i, nome_tab in enumerate(tab_list):
-        with tabs[i]:
-            # Se a aba atual no state for a aba que está sendo renderizada:
-            if nome_tab == st.session_state.cashback_tab_atual:
-                 PAGINAS_INTERNAS[nome_tab]()
-            else:
-                # Chama a função principal de renderização, mas não força a rerenderização completa
-                PAGINAS_INTERNAS[nome_tab]()
+    # Usando st.tabs para a navegação interna
+    selected_tab_name = st.tabs(tab_list)
 
+    # A lógica para renderizar o conteúdo da aba selecionada
+    # Esta abordagem é mais simples e padrão do Streamlit
+    with selected_tab_name[0]:
+        PAGINAS_INTERNAS["Home"]()
+    with selected_tab_name[1]:
+        PAGINAS_INTERNAS["Lançamento"]()
+    with selected_tab_name[2]:
+        PAGINAS_INTERNAS["Cadastro"]()
+    with selected_tab_name[3]:
+        PAGINAS_INTERNAS["Produtos Turbo"]()
+    with selected_tab_name[4]:
+        PAGINAS_INTERNAS["Relatórios"]()
 
-# ⚠️ Nenhuma chamada de função deve estar aqui. O app.py chama cashback_system().
+# Nenhuma chamada de função deve estar aqui. O app.py chama cashback_system().
