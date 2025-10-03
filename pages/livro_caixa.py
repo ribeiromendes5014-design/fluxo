@@ -375,12 +375,42 @@ def livro_caixa():
                         else:
                             st.session_state.cliente_selecionado_divida = None
                 
-                # ... (O resto do código da Entrada Padrão, como adicionar produtos, etc., continua aqui)
-                # ... (O código foi omitido para brevidade, mas deve ser o seu código original)
-
+                st.markdown("#### 🛍️ Detalhes dos Produtos")
+                # ... (resto do código de Entrada Padrão)
+                
             else: # Saída Padrão
-                # ... (O resto do seu código original para Saída Padrão, categorias, etc., continua aqui)
-                pass
+                st.markdown("---")
+                col_saida_1, col_saida_2 = st.columns(2)
+                
+                with col_saida_1:
+                    st.markdown("#### ⚙️ Centro de Custo (Saída)")
+                    if not edit_mode:
+                        is_recorrente = st.checkbox("🔄 Cadastrar como Despesa Recorrente (Parcelas)", key="input_is_recorrente")
+                    
+                    default_select_index = 0
+                    custom_desc_default = ""
+                    if default_categoria in CATEGORIAS_SAIDA:
+                        default_select_index = CATEGORIAS_SAIDA.index(default_categoria)
+                    elif default_categoria.startswith("Outro: "):
+                        default_select_index = CATEGORIAS_SAIDA.index("Outro/Diversos") if "Outro/Diversos" in CATEGORIAS_SAIDA else 0
+                        custom_desc_default = default_categoria.replace("Outro: ", "")
+                    
+                    categoria_selecionada = st.selectbox("Categoria de Gasto", 
+                                                         CATEGORIAS_SAIDA, 
+                                                         index=default_select_index,
+                                                         key="input_categoria_saida",
+                                                         disabled=is_recorrente and not edit_mode)
+
+                    if categoria_selecionada == "Outro/Diversos" and not (is_recorrente and not edit_mode):
+                        descricao_personalizada = st.text_input("Especifique o Gasto", 
+                                                                value=custom_desc_default, 
+                                                                key="input_custom_category")
+                        if descricao_personalizada:
+                            categoria_selecionada = f"Outro: {descricao_personalizada}"
+                
+                with col_saida_2:
+                    # ... (resto do código de Saída Padrão)
+                    pass
 
 
     # --- ABA DE MOVIMENTAÇÕES E RESUMO ---
@@ -396,7 +426,6 @@ def livro_caixa():
         ]
         
         st.subheader(f"📊 Resumo Financeiro Geral")
-
         total_entradas_mes, total_saidas_mes, saldo_mes = calcular_resumo(df_mes_atual_realizado)
 
         df_geral_realizado = df_exibicao[
@@ -411,7 +440,6 @@ def livro_caixa():
         col3.metric("Saldo do Mês (Realizado)", f"R$ {saldo_mes:,.2f}", delta=f"R$ {saldo_mes:,.2f}" if saldo_mes != 0 else None)
         col4.metric("Saldo Atual (Geral)", f"R$ {saldo_geral_total:,.2f}")
         
-        # ... (Restante do código da aba 'tab_mov' continua o mesmo)
         st.markdown("---")
         hoje_date = date.today()
         df_pendente_alerta = df_exibicao[(df_exibicao["Status"] == "Pendente") & (pd.notna(df_exibicao["Data Pagamento"]))].copy()
@@ -443,8 +471,9 @@ def livro_caixa():
         else:
             st.info("Nenhuma movimentação REALIZADA registrada neste mês.")
         
-        # ... (e assim por diante para o restante da aba)
-
+        st.markdown("---")
+        st.subheader("📋 Tabela de Movimentações")
+        # ... (Resto do código da tabela de movimentações e edição/exclusão)
 
     # --- ABA DE RELATÓRIOS ---
     with tab_rel:
@@ -837,4 +866,5 @@ def livro_caixa():
             df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
 
             st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+
 
