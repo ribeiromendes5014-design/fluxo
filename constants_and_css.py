@@ -78,11 +78,18 @@ def render_global_config():
         /* Oculta a toolbar (menu de 3 pontos e deploy do topo) */
         [data-testid="stToolbar"] {display: none !important; height: 0 !important;}
 
-        /* Oculta botões de ação fixos no canto inferior direito */
-        a[data-testid="stAppDeployButton"],
+        /* === Oculta TODOS os botões fixos no canto inferior direito === */
+        [data-testid="stAppDeployButton"],
+        [data-testid="stStatusWidget"],
+        [data-testid="stDecoration"],
+        [data-testid="stActionButton"],
+        [data-testid="stFullscreenButton"],
+        a[target="_blank"][href*="streamlit.io"],
         .stActionButtonContainer,
         .st-emotion-cache-1wbqy5l,
-        [title="View fullscreen"] {
+        .css-1adrfps,
+        .css-1v0mbdj,
+        .css-1rs6os {
             display: none !important;
         }
 
