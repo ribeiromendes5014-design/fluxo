@@ -1,5 +1,3 @@
-# constants_and_css.py
-
 import streamlit as st
 from datetime import datetime, timedelta, date
 import calendar
@@ -70,22 +68,31 @@ def render_global_config():
         page_icon="🌸"
     )
 
-    # Adiciona CSS para simular a navegação no topo e o tema pink/magenta
+    # Adiciona CSS customizado
     st.markdown("""
         <style>
-        /* 1. Oculta o menu padrão do Streamlit e o footer */
+        /* Oculta menu padrão e footer */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
-        
-        /* 2. Estilo Global e Cor de Fundo do Header (simulando a barra superior) */
-        .stApp {
-            background-color: #f7f7f7; /* Fundo mais claro */
+
+        /* Oculta a toolbar (menu de 3 pontos e deploy do topo) */
+        [data-testid="stToolbar"] {display: none !important; height: 0 !important;}
+
+        /* Oculta botões de ação fixos no canto inferior direito */
+        a[data-testid="stAppDeployButton"],
+        .stActionButtonContainer,
+        .st-emotion-cache-1wbqy5l,
+        [title="View fullscreen"] {
+            display: none !important;
         }
-        
-        /* 3. Container customizado do Header (cor Magenta da Loja) */
+
+        /* Fundo global */
+        .stApp { background-color: #f7f7f7; }
+
+        /* Header customizado */
         div.header-container {
             padding: 10px 0;
-            background-color: #E91E63; /* Cor Magenta Forte */
+            background-color: #E91E63;
             color: white;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             display: flex;
@@ -93,83 +100,54 @@ def render_global_config():
             align-items: center;
             width: 100%;
         }
-        
-        /* 4. Estilo dos botões/abas de Navegação (dentro do header) */
-        .nav-button-group {
-            display: flex;
-            gap: 20px;
-            align-items: center;
-            padding-right: 20px;
-        }
-        
-        /* CORREÇÃO CRÍTICA: Garante que o texto dentro dos botões do Streamlit não quebre */
+
+        /* Botões da nav */
         .stButton > button {
-            white-space: nowrap !important; /* MANTÉM O TEXTO EM UMA ÚNICA LINHA */
+            white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
         }
-        
-        /* Oculta a Sidebar */
+
+        /* Oculta a sidebar */
         [data-testid="stSidebar"] {
             visibility: hidden; 
-            width: 0px !important; 
+            width: 0 !important;
         }
 
-        /* ---------------------------------------------------- */
-        /* CORREÇÕES FINAIS: OCULTAR BOTÕES PADRÃO DO STREAMLIT */
-        /* ---------------------------------------------------- */
-        
-        /* 1. OCULTA O MENU SUPERIOR (GITHUB/FORK E 3 PONTOS) */
-        [data-testid="stToolbar"] {
-            display: none !important; 
-            height: 0px !important;
-        }
-        
-        /* 2. SOLUÇÃO FINAL PARA O BOTÃO INFERIOR (COROA/DEPLOY) */
-        /* Usa o seletor para o contêiner de botões fixos de ação */
-        .stActionButtonContainer {
-            display: none !important;
-        }
-        
-        /* Estilos adicionais para o corpo do app (mantidos) */
+        /* Estilos adicionais */
         .homepage-title { color: #E91E63; font-size: 3em; font-weight: 700; text-shadow: 2px 2px #fbcfe8; }
         .homepage-subtitle { color: #880E4F; font-size: 1.5em; margin-top: -10px; margin-bottom: 20px; }
-        .insta-card { background-color: white; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); padding: 15px; height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
+        .insta-card { background-color: white; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.1); padding: 15px; height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
         .insta-header { display: flex; align-items: center; font-weight: bold; color: #E91E63; margin-bottom: 10px; }
-        .product-card { background-color: white; border-radius: 10px; padding: 15px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); text-align: center; height: 100%; width: 250px; flex-shrink: 0; margin-right: 15px; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.2s; }
+        .product-card { background-color: white; border-radius: 10px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); text-align: center; height: 100%; width: 250px; flex-shrink: 0; margin-right: 15px; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.2s; }
         .product-card:hover { transform: translateY(-5px); }
         .buy-button { background-color: #E91E63; color: white; font-weight: bold; border-radius: 20px; border: none; padding: 8px 15px; cursor: pointer; width: 100%; margin-top: 10px; }
         .carousel-outer-container { width: 100%; overflow-x: auto; padding-bottom: 20px; }
         .product-wrapper { display: flex; flex-direction: row; justify-content: flex-start; gap: 15px; padding: 0 50px; min-width: fit-content; margin: 0 auto; }
         .section-header-img { max-width: 400px; height: auto; display: block; margin: 0 auto 10px; }
-
         </style>
     """, unsafe_allow_html=True)
 
 
 def render_header(paginas_ordenadas, paginas_map):
     """Renderiza o header customizado com a navegação em botões."""
-    
     col_logo, col_nav = st.columns([1, 5.5])
-    
     with col_logo:
         st.image(LOGO_DOCEBELLA_URL, width=150)
-        
     with col_nav:
         cols_botoes = st.columns([1] * len(paginas_ordenadas))
-        
         for i, nome in enumerate(paginas_ordenadas):
             if nome in paginas_map:
                 is_active = st.session_state.pagina_atual == nome
-                
                 if cols_botoes[i].button(
-                    nome, 
-                    key=f"nav_{nome}", 
-                    use_container_width=True, 
-                    type="primary" if is_active else "secondary" 
+                    nome,
+                    key=f"nav_{nome}",
+                    use_container_width=True,
+                    type="primary" if is_active else "secondary"
                 ):
                     st.session_state.pagina_atual = nome
                     st.rerun()
+
 
 def render_custom_header(paginas_ordenadas, paginas_map):
     """Renderiza o container do header com o CSS injetado."""
