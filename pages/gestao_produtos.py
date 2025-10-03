@@ -13,28 +13,41 @@ from utils import (
 )
 from constants_and_css import FATOR_CARTAO, COMMIT_MESSAGE_PROD
 
-# Colar a função relatorio_produtos (ela é uma sub-função da gestao_produtos)
+
 def relatorio_produtos():
     """Sub-aba de Relatório e Alertas de Produtos."""
-    # ... [Cole o corpo da sua função relatorio_produtos() aqui]
-    
+    # COLOQUE A LÓGICA DA SUB-FUNÇÃO relatorio_produtos AQUI.
+    # Se você for deixar temporariamente vazio, use 'st.info(...)'
     st.subheader("⚠️ Relatório e Alertas de Estoque")
-
+    st.info("Função de relatório e alerta de produtos ativada. Lógica de cálculo pendente.")
+    
+    # É CRÍTICO que o corpo não esteja vazio com apenas pass ou recuo errado
     produtos = inicializar_produtos().copy()
     df_movimentacoes = carregar_livro_caixa()
     vendas = df_movimentacoes[df_movimentacoes["Tipo"] == "Entrada"].copy()
 
-    # --- Configurações de Alerta ---
-    with st.expander("⚙️ Configurações de Alerta", expanded=False):
-        # ... [O restante da lógica de relatorio_produtos]
-        
-    pass # Remova o pass após colar o código
 
 def gestao_produtos():
     """PÁGINA GESTÃO DE PRODUTOS: Cadastro, listagem e alertas."""
     
-    # [Cole o restante do código da sua função gestao_produtos() aqui]
+    # [COLOQUE O CORPO INTEIRO DA FUNÇÃO gestao_produtos() AQUI]
     
-    # ... (O corpo inteiro da função)
+    # Inicializa ou carrega o estado de produtos
+    produtos = inicializar_produtos()
     
-    pass # Remova o pass após colar o código
+    st.header("📦 Gestão de Produtos e Estoque") 
+
+    save_data_github_produtos(produtos, ARQ_PRODUTOS, COMMIT_MESSAGE_PROD)
+
+    tab_cadastro, tab_lista, tab_relatorio = st.tabs(["📝 Cadastro de Produtos", "📑 Lista & Busca", "📈 Relatório e Alertas"])
+
+    with tab_cadastro:
+        st.subheader("📝 Cadastro de Produtos")
+        st.info("Conteúdo do formulário de cadastro de produtos pendente.")
+
+    with tab_lista:
+        st.subheader("📑 Lista & Busca de Produtos")
+        st.info("Conteúdo da lista de produtos pendente.")
+
+    with tab_relatorio:
+        relatorio_produtos()
