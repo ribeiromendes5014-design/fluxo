@@ -78,23 +78,12 @@ def render_global_config():
         /* Oculta a toolbar (menu de 3 pontos e deploy do topo) */
         [data-testid="stToolbar"] {display: none !important; height: 0 !important;}
 
-        /* === Oculta botões fixos padrão do Streamlit === */
-        [data-testid="stAppDeployButton"],
+        /* === Oculta botões/links do perfil do Streamlit Cloud === */
+        a[href*="share.streamlit.io"],
+        a[href*="streamlit.io"],
+        a[data-testid="stAppDeployButton"],
         [data-testid="stStatusWidget"],
-        [data-testid="stDecoration"],
-        [data-testid="stActionButton"],
-        [data-testid="stFullscreenButton"],
-        a[target="_blank"][href*="streamlit.io"],
-        .stActionButtonContainer,
-        .st-emotion-cache-1wbqy5l,
-        .css-1adrfps,
-        .css-1v0mbdj,
-        .css-1rs6os {
-            display: none !important;
-        }
-
-        /* Força: remove QUALQUER div fixada no canto inferior direito */
-        div[style*="position: fixed"][style*="bottom"][style*="right"] {
+        [data-testid="stDecoration"] {
             display: none !important;
             visibility: hidden !important;
             opacity: 0 !important;
