@@ -125,9 +125,9 @@ def render_global_config():
             height: 0px !important;
         }
         
-        /* 2. OCULTA O BOTÃO DE AÇÃO/DEPLOY (COROA/FEEDBACK NO CANTO INFERIOR) */
-        /* Usa o seletor universal para o contêiner de elementos fixos (COROA) */
-        div[style*="flex-direction: column-reverse;"] {
+        /* 2. SOLUÇÃO FINAL PARA O BOTÃO INFERIOR (COROA/DEPLOY) */
+        /* Usa o seletor para o contêiner de botões fixos de ação */
+        .stActionButtonContainer {
             display: none !important;
         }
         
