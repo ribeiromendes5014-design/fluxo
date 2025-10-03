@@ -12,7 +12,7 @@ from pages.gestao_produtos import gestao_produtos
 from pages.gestao_promocoes import gestao_promocoes
 from pages.historico_compras import historico_compras
 from pages.precificacao import precificacao_completa
-from pages.cashback_system import cashback_system # <<< NOVO: Importa a função da nova página
+from pages.cashback_system import cashback_system # <<< Importação CORRETA do módulo
 
 # --- 1. CONFIGURAÇÃO INICIAL ---
 render_global_config() 
@@ -22,18 +22,18 @@ PAGINAS = {
     "Home": homepage,
     "Livro Caixa": livro_caixa,
     "Precificação": precificacao_completa,
+    "Cashback": cashback_system, # <<< NOVA PÁGINA MAPEADA
     "Produtos": gestao_produtos,
     "Promoções": gestao_promocoes,
     "Histórico de Compra": historico_compras,
-    "Cashback": cashback_system, # <<< NOVO: Adiciona a nova página ao mapa
 }
 
 # --- 3. NAVEGAÇÃO ---
 if "pagina_atual" not in st.session_state:
     st.session_state.pagina_atual = "Home"
 
-# NOVO: Adiciona "Cashback" à lista ordenada
-paginas_ordenadas = ["Home", "Livro Caixa", "Precificação", "Cashback", "Produtos", "Promoções", "Histórico de Compra"]
+# Lista ordenada de exibição
+paginas_ordenadas = ["Home", "Livro Caixa", "Precificação", "Cashback", "Produtos", "Promoções", "Histórico de Compra"] 
 render_custom_header(paginas_ordenadas, PAGINAS)
 
 # --- 4. RENDERIZAÇÃO DO CONTEÚDO ---
