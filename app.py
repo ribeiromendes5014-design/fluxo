@@ -32,9 +32,9 @@ PAGINAS = {
 if "pagina_atual" not in st.session_state:
     st.session_state.pagina_atual = "Home"
 
-# NOVO: Adiciona "Cashback" à lista ordenada (posicione onde desejar)
-paginas_ordenadas = ["Home", "Livro Caixa", "Precificação", "Cashback", "Produtos", "Promoções", "Histórico de Compra"] 
+# NOVO: Adiciona "Cashback" à lista ordenada
+paginas_ordenadas = ["Home", "Livro Caixa", "Precificação", "Cashback", "Produtos", "Promoções", "Histórico de Compra"]
 render_custom_header(paginas_ordenadas, PAGINAS)
 
-# 4. Renderiza a página
+# --- 4. RENDERIZAÇÃO DO CONTEÚDO ---
 PAGINAS[st.session_state.pagina_atual]()
