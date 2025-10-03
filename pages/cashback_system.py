@@ -23,7 +23,7 @@ except ImportError:
         def create_file(self, path, msg, content, sha, branch): pass
 
 # --- Nomes dos arquivos CSV e Configuração ---
-CLIENTES_CSV = 'clientes.csv'
+CLIENTES_CSV = 'clientes_cash.csv' # <<< CORRIGIDO PARA O NOVO NOME
 LANÇAMENTOS_CSV = 'lancamentos.csv'
 PRODUTOS_TURBO_CSV = 'produtos_turbo.csv'
 BONUS_INDICACAO_PERCENTUAL = 0.03 # 3% para o indicador
