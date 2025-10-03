@@ -295,7 +295,7 @@ except KeyError:
     TOKEN = "TOKEN_FICTICIO"
     OWNER = "user"
     REPO_NAME = "repo_default"
-    CSV_PATH = "contas_a_pagar_receber.csv"
+    CSV_PATH = "contas_a-pagar-receber.csv"
     BRANCH = "main"
 
     GITHUB_TOKEN = TOKEN
@@ -669,7 +669,6 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             st.session_state.cad_preco_vista = "0,00"
             st.session_state.cad_validade = date.today()
             st.session_state.cad_foto_url = ""
-            st.session_state.cad_cb = ""
             if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
             return True
         return False
@@ -2544,11 +2543,19 @@ def livro_caixa():
                         divida_mais_antiga = df_dividas_cliente.iloc[0]
                         original_idx_divida = divida_mais_antiga['original_index']
                         vencimento_str = divida_mais_antiga['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_mais_antiga['Data Pagamento']) else "S/ Data"
+                        
+                        # >> CORREÇÃO APLICADA: Usa o valor da dívida individual mais antiga para o alerta <<
+                        valor_para_quitar_individual = abs(divida_mais_antiga['Valor']) # Valor da dívida individual mais antiga
 
                         st.session_state.cliente_selecionado_divida = original_idx_divida # Salva o ID da dívida mais antiga
                         
                         st.warning(f"🚨 **{cliente.strip()}** possui **{num_dividas}** conta(s) a receber pendente(s)!")
-                        st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
+                        if num_dividas == 1:
+                            # Força o alerta a mostrar o valor que será quitado
+                            st.info(f"Total Pendente: **R$ {valor_para_quitar_individual:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
+                        else:
+                            st.info(f"Total Pendente: **R$ {total_divida:,.2f}** (Valor da 1ª a quitar: R$ {valor_para_quitar_individual:,.2f}). Mais antiga venceu/vence: **{vencimento_str}**")
+
 
                         col_btn_add, col_btn_conc, col_btn_canc = st.columns(3)
 
