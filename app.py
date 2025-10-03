@@ -2585,7 +2585,7 @@ def livro_caixa():
 
                         # ALTERADO: Este botão agora define a nova chave de estado para abrir o formulário de quitação rápida
                         if col_btn_conc.button("✅ Concluir/Pagar Dívida", key="btn_concluir_divida", use_container_width=True, type="primary"):
-                            st.session_state.divida_a_quitar = divida_mais_antiga.name # Passa o índice original da linha no df_dividas (que é o original_index)
+                            st.session_state.divida_a_quitar = divida_mais_antiga['original_index'] # CORREÇÃO: Usa o índice original e permanente da dívida
                             st.session_state.edit_id = None 
                             st.session_state.edit_id_loaded = None 
                             st.session_state.lista_produtos = []
@@ -3620,3 +3620,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
