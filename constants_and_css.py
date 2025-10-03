@@ -119,20 +119,15 @@ def render_global_config():
         /* CORREÇÕES FINAIS: OCULTAR BOTÕES PADRÃO DO STREAMLIT */
         /* ---------------------------------------------------- */
         
-        /* OCULTA O MENU SUPERIOR (GITHUB/FORK E 3 PONTOS) */
+        /* 1. OCULTA O MENU SUPERIOR (GITHUB/FORK E 3 PONTOS) */
         [data-testid="stToolbar"] {
             display: none !important; 
             height: 0px !important;
         }
         
-        /* ⚠️ SOLUÇÃO FINAL PARA O BOTÃO INFERIOR (COROA/DEPLOY) */
-        /* Ele está em um componente fixo, e vamos usar display: none no seu container */
-        .st-emotion-cache-1omg6g7 { /* Este é um seletor universal para o botão de feedback/ação */
-            display: none !important;
-        }
-
-        /* Caso o seletor acima não funcione, esta é a alternativa (classe de versões mais antigas) */
-        .stActionButton {
+        /* 2. OCULTA O BOTÃO DE AÇÃO/DEPLOY (COROA/FEEDBACK NO CANTO INFERIOR) */
+        /* Usa o seletor mais genérico para o container flutuante de botões de ação fixos */
+        div[style*="flex-direction: column-reverse;"] {
             display: none !important;
         }
         
