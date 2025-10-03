@@ -6,6 +6,13 @@ from datetime import datetime, timedelta, date
 import json
 import ast
 import hashlib # <--- CORREÇÃO: Importação necessária para gerar o RecorrenciaID
+import time # Adicionando time para garantir que COMMIT_MESSAGE não seja uma constante vazia
+
+# Define COMMIT_MESSAGE se não for importado, para evitar NameError no else:
+try:
+    from constants_and_css import COMMIT_MESSAGE
+except ImportError:
+    COMMIT_MESSAGE = "Nova Movimentação Registrada" # Valor padrão de segurança
 
 # Importa as funções auxiliares e constantes
 from utils import (
@@ -17,7 +24,7 @@ from utils import (
 )
 from constants_and_css import (
     LOJAS_DISPONIVEIS, CATEGORIAS_SAIDA, FORMAS_PAGAMENTO, FATOR_CARTAO,
-    COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE, COMMIT_MESSAGE # COMMIT_MESSAGE não definido no escopo, mas presumido
+    COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
 )
 
 def highlight_value(row):
@@ -808,7 +815,7 @@ def livro_caixa():
                             commit_msg = COMMIT_MESSAGE_EDIT
                         else:
                             st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
-                            commit_msg = "Nova Movimentação Registrada" # Substitua por uma constante válida se houver
+                            commit_msg = COMMIT_MESSAGE # Usa o COMMIT_MESSAGE definido (ou padrão)
                     
                     salvar_dados_no_github(st.session_state.df, commit_msg)
                     st.session_state.edit_id = None
