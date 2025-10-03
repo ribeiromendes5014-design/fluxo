@@ -93,6 +93,11 @@ def render_global_config():
             display: none !important;
         }
 
+        /* Captura qualquer DIV fixada no canto inferior direito (fallback) */
+        div[style*="position: fixed"][style*="bottom:"][style*="right:"] {
+            display: none !important;
+        }
+
         /* Fundo global */
         .stApp { background-color: #f7f7f7; }
 
