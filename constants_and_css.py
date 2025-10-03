@@ -78,9 +78,13 @@ def render_global_config():
         /* Oculta a toolbar (menu de 3 pontos e deploy do topo) */
         [data-testid="stToolbar"] {display: none !important; height: 0 !important;}
 
-        /* === Oculta botões/links do perfil do Streamlit Cloud === */
-        a[href*="share.streamlit.io"],
+        /* === Remove links/botões externos do Streamlit (perfil, share, report, etc.) === */
         a[href*="streamlit.io"],
+        a[href*="share.streamlit.io"],
+        a[href*="discuss.streamlit.io"],
+        a[href*="twitter.com/streamlit"],
+        a[href*="github.com/streamlit"],
+        a[target="_blank"][rel="noopener noreferrer"],
         a[data-testid="stAppDeployButton"],
         [data-testid="stStatusWidget"],
         [data-testid="stDecoration"] {
@@ -135,6 +139,7 @@ def render_global_config():
     """, unsafe_allow_html=True)
 
 
+
 def render_header(paginas_ordenadas, paginas_map):
     """Renderiza o header customizado com a navegação em botões."""
     col_logo, col_nav = st.columns([1, 5.5])
@@ -161,3 +166,4 @@ def render_custom_header(paginas_ordenadas, paginas_map):
         st.markdown('<div class="header-container">', unsafe_allow_html=True)
         render_header(paginas_ordenadas, paginas_map)
         st.markdown('</div>', unsafe_allow_html=True)
+
