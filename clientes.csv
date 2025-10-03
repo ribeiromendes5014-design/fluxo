@@ -1,1 +1,2 @@
-ClientID,Nome,Sobrenome,Telefone,Observacao
+ClientID,Nome Completo Cliente,Telefone,Email,DataCadastro
+1,renan,,,2025-10-03
