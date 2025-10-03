@@ -78,7 +78,7 @@ def render_global_config():
         /* Oculta a toolbar (menu de 3 pontos e deploy do topo) */
         [data-testid="stToolbar"] {display: none !important; height: 0 !important;}
 
-        /* === Oculta TODOS os botões fixos no canto inferior direito === */
+        /* === Oculta botões fixos padrão do Streamlit === */
         [data-testid="stAppDeployButton"],
         [data-testid="stStatusWidget"],
         [data-testid="stDecoration"],
@@ -93,9 +93,14 @@ def render_global_config():
             display: none !important;
         }
 
-        /* Captura qualquer DIV fixada no canto inferior direito (fallback) */
-        div[style*="position: fixed"][style*="bottom:"][style*="right:"] {
+        /* Força: remove QUALQUER div fixada no canto inferior direito */
+        div[style*="position: fixed"][style*="bottom"][style*="right"] {
             display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            height: 0 !important;
+            width: 0 !important;
         }
 
         /* Fundo global */
