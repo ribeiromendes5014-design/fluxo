@@ -349,15 +349,18 @@ def prox_id(df, coluna_id="ID"):
         except:
             return str(len(df) + 1)
             
-def prox_id_cliente(df): # << MANTIDO: Próximo ID para clientes
+def prox_id_cliente(df): 
     """Retorna o próximo ID numérico para a tabela de clientes (baseado no ClientID do livro_caixa)."""
     if df.empty:
         return 1
     else:
         try:
+            # Pega o ClientID máximo do DataFrame atual
             return pd.to_numeric(df["ClientID"], errors='coerce').fillna(0).astype(int).max() + 1
         except:
+            # Fallback seguro
             return len(df) + 1
+
 
 def hash_df(df):
     df_temp = df.copy()
@@ -2270,30 +2273,25 @@ def get_unique_clients(df):
     # Garante que ClientID seja int para agrupamento
     df_entradas['ClientID'] = pd.to_numeric(df_entradas['ClientID'], errors='coerce').fillna(0).astype(int)
     
-    # 1. Prioriza clientes que JÁ têm um ClientID
-    df_com_id = df_entradas[df_entradas['ClientID'] > 0].copy()
+    # 1. Pega o maior ID existente para iniciar a contagem para novos
+    max_id_existente = df_entradas['ClientID'].max() if not df_entradas.empty else 0
     
-    # 2. Encontra clientes ANTIGOS (ClientID=0) que ainda não foram convertidos
-    df_sem_id = df_entradas[df_entradas['ClientID'] == 0].copy()
-    
-    # Se houver clientes sem ID, atribuímos IDs temporários para eles.
-    # O ID é gerado sequencialmente após o maior ID existente (se houver).
-    max_id_existente = df_com_id['ClientID'].max() if not df_com_com_id.empty else 0
-    
-    clientes_sem_id_unicos = df_sem_id['Cliente_Nome_Limpo'].unique()
-    
+    # 2. Cria um mapa para garantir unicidade Nome -> ClientID
     clientes_map = {}
     next_id = max_id_existente + 1
     
-    # Adiciona os clientes já com ID
-    for _, row in df_com_id.groupby('ClientID').first().iterrows():
-        clientes_map[row['ClientID']] = row['Cliente_Nome_Limpo']
+    # Itera sobre todos os registros únicos
+    for cliente_nome in df_entradas['Cliente_Nome_Limpo'].unique():
+        # Tenta encontrar um ID já atribuído a esse nome (prioriza o maior ID encontrado)
+        existing_id_match = df_entradas[df_entradas['Cliente_Nome_Limpo'] == cliente_nome]['ClientID'].max()
         
-    # Adiciona os clientes antigos (sem ID)
-    for nome in clientes_sem_id_unicos:
-        # Verifica se o nome já foi mapeado com um ID na seção anterior (para nomes duplicados)
-        if nome not in clientes_map.values():
-            clientes_map[next_id] = nome
+        # Se encontrou um ID > 0, usa ele. Se encontrou 0, será tratado como novo no mapa (e receberá o next_id)
+        if existing_id_match > 0:
+            # Usa o ID existente para o nome
+            clientes_map[existing_id_match] = cliente_nome
+        elif cliente_nome not in clientes_map.values():
+            # Atribui um novo ID para o nome que não tem ID (registros antigos)
+            clientes_map[next_id] = cliente_nome
             next_id += 1
             
     # Cria o DataFrame de mapeamento final (ClientID -> Nome)
@@ -2318,7 +2316,7 @@ def gerenciar_cliente_venda(cliente_str, clientes_map_df): # << CORRIGIDO: Usa o
         except Exception:
             return 0, cliente_str
         
-    # 2. Cliente NÃO selecionado (Apenas nome digitado - deve ser novo)
+    # 2. Cliente NÃO selecionado (Apenas nome digitado)
     elif cliente_str and not cliente_str.startswith('Selecione') and not cliente_str.startswith("Buscar"):
         
         # Procura por correspondência exata
@@ -2328,8 +2326,8 @@ def gerenciar_cliente_venda(cliente_str, clientes_map_df): # << CORRIGIDO: Usa o
              # Se for um nome digitado que já existe, retorna o ID existente
             return match.iloc[0]['ClientID'], match.iloc[0]['Nome Completo Cliente']
             
-        # Se não existe, retorna um novo ID (que será salvo com a transação)
-        novo_id = prox_id_cliente(clientes_map_df)
+        # Se não existe, retorna um novo ID (que será o próximo a ser salvo no livro_caixa)
+        novo_id = prox_id_cliente(st.session_state.df) # Usa o df completo para achar o próximo ID
         return novo_id, cliente_str
             
     # 3. Cliente não fornecido ou busca inicial
@@ -2348,8 +2346,8 @@ def livro_caixa():
         if col not in st.session_state.df.columns: st.session_state.df[col] = ''
     
     # CARREGA CLIENTES ÚNICOS DO LIVRO CAIXA (PARA BUSCA)
-    if "clientes_map" not in st.session_state:
-        st.session_state.clientes_map = get_unique_clients(st.session_state.df)
+    # A lista de clientes únicos deve ser sempre recalculada, pois pode ter havido salvamento.
+    st.session_state.clientes_map = get_unique_clients(st.session_state.df)
         
     if "produtos" not in st.session_state: st.session_state.produtos = produtos
     if "lista_produtos" not in st.session_state: st.session_state.lista_produtos = []
@@ -2659,6 +2657,7 @@ def livro_caixa():
                 st.markdown("#### 👤 Seleção de Cliente")
                 
                 # 1. Combobox de busca/seleção
+                # A lista de clientes únicos é populada pelo get_unique_clients
                 opcoes_clientes = ["Buscar/Adicionar Novo Cliente"] + [
                     f"{row['ClientID']} | {row['Nome Completo Cliente']}" 
                     for _, row in st.session_state.clientes_map.iterrows()
@@ -2667,7 +2666,9 @@ def livro_caixa():
                 # Pre-seleção em modo edição
                 default_index_cliente = 0
                 if edit_mode and default_client_id > 0:
-                    opcao_padrao = f"{default_client_id} | {default_cliente}"
+                    # Tenta achar o cliente no mapa para setar o default
+                    cliente_nome_map = st.session_state.clientes_map[st.session_state.clientes_map['ClientID'] == default_client_id]['Nome Completo Cliente'].iloc[0] if not st.session_state.clientes_map[st.session_state.clientes_map['ClientID'] == default_client_id].empty else default_cliente
+                    opcao_padrao = f"{default_client_id} | {cliente_nome_map}"
                     if opcao_padrao in opcoes_clientes:
                         default_index_cliente = opcoes_clientes.index(opcao_padrao)
                 
@@ -2697,31 +2698,30 @@ def livro_caixa():
                         if df_match.empty:
                             st.info(f"Cliente '{cliente_input}' não encontrado. Ele será cadastrado automaticamente com a venda.")
                         else:
+                            # A busca inteligente encontrou nomes duplicados (ou parecidos)
                             st.warning(f"Clientes com '{cliente_input}' encontrados. Selecione acima para evitar duplicidade.")
 
                 # 3. Processa a seleção/input para definir as variáveis finais (ID e Nome)
                 if edit_mode:
-                    # Em modo edição, usa o ID e nome da transação original
                     cliente_id_final = default_client_id
                     cliente_nome_final = default_cliente
                 elif cliente_selecionado_str != "Buscar/Adicionar Novo Cliente" and "|" in cliente_selecionado_str:
                     # Cliente selecionado no selectbox (existente)
                     cliente_id_final, cliente_nome_final = gerenciar_cliente_venda(cliente_selecionado_str, st.session_state.clientes_map)
                 elif cliente_selecionado_str == "Buscar/Adicionar Novo Cliente" and cliente_input:
-                    # Novo cliente ou cliente existente digitado (será cadastrado/encontrado no salvamento)
+                    # Novo cliente ou cliente existente digitado (será criado/encontrado)
                     st.session_state.cliente_input_busca = cliente_input
                     cliente_id_final, cliente_nome_final = gerenciar_cliente_venda(cliente_input, st.session_state.clientes_map)
                 else:
-                    # Nenhum cliente selecionado/digitado
                     cliente_id_final = 0
                     cliente_nome_final = ""
                 
-                # **BLOCO CORRIGIDO**: Lógica de Alerta de Dívida (AGORA BUSCA PELO ClientID OU NOME) # << CORREÇÃO APLICADA
+                # **BLOCO DE ALERTA E BUSCA DE DÍVIDA CORRIGIDO**
                 if (cliente_id_final > 0 or cliente_nome_final) and not edit_mode:
                     
-                    cliente_display = cliente_nome_final # Nome a ser exibido
+                    cliente_display = cliente_nome_final
                     
-                    # Filtra por ClientID (se disponível) ou por Nome (para registros antigos)
+                    # CORREÇÃO CRÍTICA: Prioriza o ClientID, mas cai para o filtro por nome se ClientID for 0 
                     if cliente_id_final > 0:
                         df_dividas_cliente = df_exibicao[
                             (df_exibicao["ClientID"] == cliente_id_final) &
@@ -2739,7 +2739,6 @@ def livro_caixa():
 
                     if not df_dividas_cliente.empty:
                         
-                        # CORREÇÃO: Arredonda o valor antes de somar para evitar erros de float
                         total_divida = df_dividas_cliente["Valor"].abs().round(2).sum() 
                         num_dividas = df_dividas_cliente.shape[0]
                         divida_mais_antiga = df_dividas_cliente.iloc[0]
