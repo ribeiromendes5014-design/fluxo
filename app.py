@@ -11,7 +11,6 @@ from pages.livro_caixa import livro_caixa
 from pages.gestao_produtos import gestao_produtos
 from pages.gestao_promocoes import gestao_promocoes
 from pages.historico_compras import historico_compras
-from pages.historico_compras import historico_compras
 from pages.precificacao import precificacao_completa
 
 # --- 1. CONFIGURAÇÃO INICIAL ---
@@ -36,3 +35,4 @@ render_custom_header(paginas_ordenadas, PAGINAS)
 
 # --- 4. RENDERIZAÇÃO DO CONTEÚDO ---
 PAGINAS[st.session_state.pagina_atual]()
+
