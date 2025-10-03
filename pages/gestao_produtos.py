@@ -163,7 +163,6 @@ def gestao_produtos():
     st.header("📦 Gestão de Produtos e Estoque")
 
     # Lógica de Salvamento Automático para sincronizar alterações feitas pelo Livro Caixa
-    # (ARQ_PRODUTOS e COMMIT_MESSAGE_PROD são importados acima)
     save_data_github_produtos(produtos, ARQ_PRODUTOS, COMMIT_MESSAGE_PROD)
 
 
@@ -365,13 +364,8 @@ def gestao_produtos():
         if produtos_filtrados.empty:
             st.info("Nenhum produto encontrado.")
         else:
-            produtos_filtrados["Quantidade"] = pd.to_numeric(produtos_filtrados["Quantidade"], errors='coerce').fillna(0).astype(int)
-            
-            # CRÍTICO: Filtra apenas os produtos que NÃO são variações (PaiID é nulo ou vazio/NaN)
-            # Produtos que têm PaiID preenchido são listados *dentro* do expander do produto Pai.
-            produtos_pai = produtos_filtrados[produtos_filtrados["PaiID"].isnull() | (produtos_filtrados["PaiID"] == '')]
-            produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull() & (produtos_filtrados["PaiID"] != '')]
-            
+            # 🚨 CORREÇÃO CRÍTICA: INJETAMOS O CSS DA LISTA AQUI! 
+            # Ele não pode estar no nível da função para não interferir globalmente.
             st.markdown("""
                 <style>
                 .custom-header, .custom-row {
@@ -414,8 +408,14 @@ def gestao_produtos():
                     <div style="grid-column: span 2;">Ações</div>
                 </div>
             """, unsafe_allow_html=True)
+            # 🚨 FIM DA INJEÇÃO DE CSS
 
-
+            produtos_filtrados["Quantidade"] = pd.to_numeric(produtos_filtrados["Quantidade"], errors='coerce').fillna(0).astype(int)
+            
+            produtos_pai = produtos_filtrados[produtos_filtrados["PaiID"].isnull() | (produtos_filtrados["PaiID"] == '')]
+            produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull() & (produtos_filtrados["PaiID"] != '')]
+            
+            
             for index, pai in produtos_pai.iterrows():
                 # A partir daqui, a lógica de listagem funciona como o esperado, usando apenas os "produtos_pai" (que incluem produtos simples).
                 with st.container(border=True):
