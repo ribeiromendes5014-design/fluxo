@@ -687,11 +687,9 @@ def render_relatorios():
     df_historico = st.session_state.lancamentos.copy()
     
     if not df_historico.empty:
-        # CORREÇÃO: Garante que a coluna 'Data' seja datetime ANTES de filtrar
         df_historico['Data'] = pd.to_datetime(df_historico['Data'], errors='coerce').dt.date
 
         if data_selecionada:
-            # Filtra apenas as linhas onde a data não é NaT (inválida)
             df_historico = df_historico.dropna(subset=['Data'])
             df_historico = df_historico[df_historico['Data'] == data_selecionada]
 
@@ -745,8 +743,6 @@ def render_home():
     
     if not vendas_df.empty:
         vendas_df['Data'] = pd.to_datetime(vendas_df['Data'], errors='coerce')
-        
-        # CORREÇÃO: Filtra apenas as linhas onde a data não é NaT antes de comparar o mês
         vendas_df = vendas_df.dropna(subset=['Data'])
         
         vendas_mes = vendas_df[vendas_df['Data'].dt.month == date.today().month]
@@ -816,21 +812,18 @@ def cashback_system():
     
     tab_list = ["Home", "Lançamento", "Cadastro", "Produtos Turbo", "Relatórios"]
     
-    # Gerencia a aba ativa usando st.session_state para persistência
-    if 'active_tab' not in st.session_state:
-        st.session_state.active_tab = "Home"
-    
-    # Cria as abas e renderiza o conteúdo da aba ativa
     tabs = st.tabs(tab_list)
-    active_tab_index = tab_list.index(st.session_state.active_tab)
 
-    # Renderiza o conteúdo da aba correspondente
-    # Esta abordagem garante que apenas a lógica da aba visível seja executada,
-    # mas st.tabs renderiza o conteúdo de todas as abas no DOM.
-    # O controle de qual aba mostrar é feito pelo Streamlit internamente.
-    for i, tab in enumerate(tabs):
-        with tab:
-            # Chama a função de renderização correspondente à aba
-            PAGINAS_INTERNAS[tab_list[i]]()
+    # A maneira padrão e recomendada de usar st.tabs
+    with tabs[0]:
+        PAGINAS_INTERNAS["Home"]()
+    with tabs[1]:
+        PAGINAS_INTERNAS["Lançamento"]()
+    with tabs[2]:
+        PAGINAS_INTERNAS["Cadastro"]()
+    with tabs[3]:
+        PAGINAS_INTERNAS["Produtos Turbo"]()
+    with tabs[4]:
+        PAGINAS_INTERNAS["Relatórios"]()
 
 # Nenhuma chamada de função deve estar aqui. O app.py chama cashback_system().
