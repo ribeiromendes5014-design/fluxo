@@ -125,8 +125,13 @@ def render_global_config():
             height: 0px !important;
         }
         
-        /* OCULTA O BOTÃO DE AÇÃO/DEPLOY (COROA/FEEDBACK NO CANTO INFERIOR) */
-        /* Usa o seletor universal para todos os botões de ação fixos */
+        /* ⚠️ SOLUÇÃO FINAL PARA O BOTÃO INFERIOR (COROA/DEPLOY) */
+        /* Ele está em um componente fixo, e vamos usar display: none no seu container */
+        .st-emotion-cache-1omg6g7 { /* Este é um seletor universal para o botão de feedback/ação */
+            display: none !important;
+        }
+
+        /* Caso o seletor acima não funcione, esta é a alternativa (classe de versões mais antigas) */
         .stActionButton {
             display: none !important;
         }
