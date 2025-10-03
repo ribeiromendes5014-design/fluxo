@@ -119,21 +119,16 @@ def render_global_config():
         /* CORREÇÕES FINAIS: OCULTAR BOTÕES PADRÃO DO STREAMLIT */
         /* ---------------------------------------------------- */
         
-        /* Esconde o botão 'Fork' / Ícone do GitHub e o menu de 3 pontos */
+        /* OCULTA O MENU SUPERIOR (GITHUB/FORK E 3 PONTOS) */
         [data-testid="stToolbar"] {
-            visibility: hidden !important;
+            display: none !important; 
             height: 0px !important;
         }
         
-        /* Esconde o botão de 'Deploy' / 'Coroa' (canto inferior direito) */
+        /* OCULTA O BOTÃO DE AÇÃO/DEPLOY (COROA/FEEDBACK NO CANTO INFERIOR) */
+        /* Usa o seletor universal para todos os botões de ação fixos */
         .stActionButton {
-            visibility: hidden;
-            display: none; 
-        }
-        
-        /* Garante que o ícone de 'três pontos' (MainMenu) não seja visível */
-        header .css-1dp5vir {
-            visibility: hidden;
+            display: none !important;
         }
         
         /* Estilos adicionais para o corpo do app (mantidos) */
