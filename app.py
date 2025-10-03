@@ -3440,7 +3440,7 @@ def livro_caixa():
                         if isinstance(valor_em_aberto, pd.Series):
                             valor_em_aberto = valor_em_aberto.iloc[0]
                         # 3. Garante que é um float, trata NaN e pega o valor absoluto
-                        valor_em_aberto = abs(float(valor_em_aberto)) if pd.notna(valor_em_aberto) else 0.0
+                        valor_em_aberto = df_dividas_cliente["Valor"].abs().sum()
                         # 4. Arredonda para 2 casas decimais para evitar problemas de precisão do float
                         valor_em_aberto = round(valor_em_aberto, 2)
                     except Exception:
@@ -3611,3 +3611,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
