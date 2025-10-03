@@ -650,7 +650,7 @@ def cashback_system(): # NOVO NOME DA FUNÇÃO EXPORTADA
     }
     
     # --- RENDERIZAÇÃO USANDO ABAS NATIVAS (st.tabs) ---
-    # st.image(LOGO_DOCEBELLA_URL, width=200) # LOGO DUPLICADO REMOVIDO
+    # LOGO REMOVIDO: Nenhuma chamada de st.image é feita aqui.
     
     tab_list = ["Home", "Lançamento", "Cadastro", "Produtos Turbo", "Relatórios"]
     tabs = st.tabs(tab_list)
