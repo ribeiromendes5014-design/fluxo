@@ -23,7 +23,7 @@ except ImportError:
         def create_file(self, path, msg, content, sha, branch): pass
 
 # --- Nomes dos arquivos CSV e Configuração ---
-CLIENTES_CSV = 'clientes_cash.csv' 
+CLIENTES_CSV = 'clientes_cash.csv' # <<< CORRIGIDO PARA O NOME SOLICITADO
 LANÇAMENTOS_CSV = 'lancamentos.csv'
 PRODUTOS_TURBO_CSV = 'produtos_turbo.csv'
 BONUS_INDICACAO_PERCENTUAL = 0.03 # 3% para o indicador
@@ -610,7 +610,7 @@ def render_cadastro():
                 st.rerun()  
         
         with col_exclusao:
-            if st.button("🗑️ Excluir Cliente", use_container_width=True, type='primary'):
+            if st.button("🗑️ Excluir Cliente", use_container_width=True, key='btn_excluir', type='primary'):
                 st.session_state.deleting_client = cliente_selecionado_operacao
                 st.session_state.editing_client = False  
                 st.rerun()  
@@ -740,7 +740,7 @@ def render_relatorios():
         st.info("Nenhum lançamento registrado no histórico.")
     st.markdown("---")
     
-    # --- Excluir Lançamento (CORRIGIDO) ---
+    # --- Excluir Lançamento (RESTURADA) ---
     st.subheader("🗑️ Excluir Lançamento de Venda")
     vendas_df = st.session_state.lancamentos[st.session_state.lancamentos['Tipo'] == 'Venda'].copy()
     if vendas_df.empty:
@@ -748,14 +748,17 @@ def render_relatorios():
     else:
         vendas_df_sorted = vendas_df.sort_values(by="Data", ascending=False)
         
-        # CORREÇÃO FINAL DO ATTRIBUTEERROR: Formata o valor antes de criar o dicionário e usa a coluna formatada.
-        vendas_df_sorted['Valor_Formatado'] = pd.to_numeric(vendas_df_sorted['Valor Venda/Resgate'], errors='coerce').fillna(0).map('{:.2f}'.format)
+        # >>>>> INÍCIO DA CORREÇÃO <<<<<
+        # 1. Garante que a coluna de valor seja numérica antes do loop para evitar erros.
+        vendas_df_sorted['Valor Numerico'] = pd.to_numeric(vendas_df_sorted['Valor Venda/Resgate'], errors='coerce').fillna(0)
 
+        # 2. Cria o dicionário usando a nova coluna numérica, sem o '.iloc[0]'.
         options_map = {
-            f"ID {index}: {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {row['Valor_Formatado']}": index
+            f"ID {index}: {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {row['Valor Numerico']:.2f}": index
             for index, row in vendas_df_sorted.iterrows()
         }
-        
+        # >>>>> FIM DA CORREÇÃO <<<<<
+
         option_selecionada = st.selectbox(
             "Selecione a venda que deseja excluir:",
             options=[''] + list(options_map.keys())
@@ -808,6 +811,9 @@ def render_home():
     st.markdown("### Próximos Passos Rápidos")
     
     col_nav1, col_nav2, col_nav3 = st.columns(3)
+    
+    # Note: O sistema principal do app.py irá controlar a navegação.
+    # Aqui, a navegação é feita chamando render_home() e rerunning para a aba correta.
     
     # Mapeamento para permitir que o clique no botão atualize a aba interna (se for o caso)
     if 'cashback_tab_atual' not in st.session_state:
@@ -869,9 +875,20 @@ def cashback_system(): # NOVO NOME DA FUNÇÃO EXPORTADA
     
     tab_list = ["Home", "Lançamento", "Cadastro", "Produtos Turbo", "Relatórios"]
     
+    # Encontra o índice da aba atual (para setar como padrão)
+    default_index = tab_list.index(st.session_state.cashback_tab_atual) if st.session_state.cashback_tab_atual in tab_list else 0
+    
     tabs = st.tabs(tab_list)
     
     # Renderiza o conteúdo na aba correta
     for i, nome_tab in enumerate(tab_list):
         with tabs[i]:
-            PAGINAS_INTERNAS[nome_tab]()
+            # Se a aba atual no state for a aba que está sendo renderizada:
+            if nome_tab == st.session_state.cashback_tab_atual:
+                 PAGINAS_INTERNAS[nome_tab]()
+            else:
+                # Chama a função principal de renderização, mas não força a rerenderização completa
+                PAGINAS_INTERNAS[nome_tab]()
+
+
+# ⚠️ Nenhuma chamada de função deve estar aqui. O app.py chama cashback_system().
