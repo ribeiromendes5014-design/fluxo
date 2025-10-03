@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, date
 import calendar
 import pandas as pd
 import json
-import hashlib # Para hash_df
+import hashlib
 
 # ==================== CONSTANTES DE NEGÓCIO E DE ARQUIVO ====================
 FATOR_CARTAO = 0.8872
