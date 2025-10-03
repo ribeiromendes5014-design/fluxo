@@ -295,7 +295,7 @@ except KeyError:
     TOKEN = "TOKEN_FICTICIO"
     OWNER = "user"
     REPO_NAME = "repo_default"
-    CSV_PATH = "contas_a-pagar-receber.csv"
+    CSV_PATH = "contas_a_pagar_receber.csv"
     BRANCH = "main"
 
     GITHUB_TOKEN = TOKEN
@@ -669,6 +669,7 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             st.session_state.cad_preco_vista = "0,00"
             st.session_state.cad_validade = date.today()
             st.session_state.cad_foto_url = ""
+            st.session_state.cad_cb = ""
             if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
             return True
         return False
@@ -2389,13 +2390,19 @@ def livro_caixa():
             # FIM DA VERIFICAÇÃO DE SEGURANÇA
             
             # >> INÍCIO DA CORREÇÃO SOLICITADA PARA TRATAMENTO DE VALORES <<
-            valor_em_aberto = abs(pd.to_numeric(divida_para_quitar['Valor'], errors='coerce'))
-            if isinstance(valor_em_aberto, pd.Series):
-                 # Pega o primeiro elemento da série (garantindo que é um único valor) e trata NaN
-                valor_em_aberto = valor_em_aberto.fillna(0).iloc[0] 
-            else:
-                 # Trata caso não seja uma Série (caso o to_numeric retorne um único float/int)
-                valor_em_aberto = 0 if pd.isna(valor_em_aberto) else valor_em_aberto
+            # Nova lógica para garantir que o valor seja um float arredondado (Corrigindo a inconsistência de 50.00 vs 96.00)
+            try:
+                # 1. Tenta converter para numérico e pega o valor absoluto
+                valor_em_aberto = pd.to_numeric(divida_para_quitar['Valor'], errors='coerce')
+                # 2. Se for uma Série, pega o primeiro elemento e trata NaN
+                if isinstance(valor_em_aberto, pd.Series):
+                    valor_em_aberto = valor_em_aberto.iloc[0]
+                # 3. Garante que é um float, trata NaN e pega o valor absoluto
+                valor_em_aberto = abs(float(valor_em_aberto)) if pd.notna(valor_em_aberto) else 0.0
+                # 4. Arredonda para 2 casas decimais para evitar problemas de precisão do float
+                valor_em_aberto = round(valor_em_aberto, 2)
+            except Exception:
+                valor_em_aberto = 0.0
             # << FIM DA CORREÇÃO SOLICITADA PARA TRATAMENTO DE VALORES >>
 
             
@@ -2543,19 +2550,11 @@ def livro_caixa():
                         divida_mais_antiga = df_dividas_cliente.iloc[0]
                         original_idx_divida = divida_mais_antiga['original_index']
                         vencimento_str = divida_mais_antiga['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_mais_antiga['Data Pagamento']) else "S/ Data"
-                        
-                        # >> CORREÇÃO APLICADA: Usa o valor da dívida individual mais antiga para o alerta <<
-                        valor_para_quitar_individual = abs(divida_mais_antiga['Valor']) # Valor da dívida individual mais antiga
 
                         st.session_state.cliente_selecionado_divida = original_idx_divida # Salva o ID da dívida mais antiga
                         
                         st.warning(f"🚨 **{cliente.strip()}** possui **{num_dividas}** conta(s) a receber pendente(s)!")
-                        if num_dividas == 1:
-                            # Força o alerta a mostrar o valor que será quitado
-                            st.info(f"Total Pendente: **R$ {valor_para_quitar_individual:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
-                        else:
-                            st.info(f"Total Pendente: **R$ {total_divida:,.2f}** (Valor da 1ª a quitar: R$ {valor_para_quitar_individual:,.2f}). Mais antiga venceu/vence: **{vencimento_str}**")
-
+                        st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
 
                         col_btn_add, col_btn_conc, col_btn_canc = st.columns(3)
 
@@ -3433,11 +3432,19 @@ def livro_caixa():
 
                 if divida_para_concluir is not None:
                     # >> INÍCIO DA CORREÇÃO SOLICITADA PARA TRATAMENTO DE VALORES (2) <<
-                    valor_em_aberto = abs(pd.to_numeric(divida_para_concluir['Valor'], errors='coerce'))
-                    if isinstance(valor_em_aberto, pd.Series):
-                        valor_em_aberto = valor_em_aberto.fillna(0).iloc[0]
-                    else:
-                        valor_em_aberto = 0 if pd.isna(valor_em_aberto) else valor_em_aberto
+                    # Nova lógica para garantir que o valor seja um float arredondado (Corrigindo a inconsistência de 50.00 vs 96.00)
+                    try:
+                        # 1. Tenta converter para numérico e pega o valor absoluto
+                        valor_em_aberto = pd.to_numeric(divida_para_concluir['Valor'], errors='coerce')
+                        # 2. Se for uma Série, pega o primeiro elemento e trata NaN
+                        if isinstance(valor_em_aberto, pd.Series):
+                            valor_em_aberto = valor_em_aberto.iloc[0]
+                        # 3. Garante que é um float, trata NaN e pega o valor absoluto
+                        valor_em_aberto = abs(float(valor_em_aberto)) if pd.notna(valor_em_aberto) else 0.0
+                        # 4. Arredonda para 2 casas decimais para evitar problemas de precisão do float
+                        valor_em_aberto = round(valor_em_aberto, 2)
+                    except Exception:
+                        valor_em_aberto = 0.0
                     # << FIM DA CORREÇÃO SOLICITADA PARA TRATAMENTO DE VALORES (2) >>
 
                     st.markdown(f"**Valor em Aberto:** R$ {valor_em_aberto:,.2f}")
