@@ -364,8 +364,7 @@ def gestao_produtos():
         if produtos_filtrados.empty:
             st.info("Nenhum produto encontrado.")
         else:
-            # 🚨 CORREÇÃO CRÍTICA: INJETAMOS O CSS DA LISTA AQUI! 
-            # Ele não pode estar no nível da função para não interferir globalmente.
+            # 🚨 INJETANDO CSS LOCALMENTE AQUI PARA NÃO QUEBRAR O HEADER
             st.markdown("""
                 <style>
                 .custom-header, .custom-row {
@@ -383,21 +382,7 @@ def gestao_produtos():
                 .custom-price-block {
                     line-height: 1.2;
                 }
-                .stButton > button {
-                    height: 32px;
-                    width: 32px;
-                    padding: 0;
-                    margin: 0;
-                    border-radius: 5px;
-                    border: 1px solid #ddd;
-                    background-color: #f0f2f6;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                }
-                .stButton > button:hover {
-                    background-color: #e0e0e0;
-                }
+                /* NOTA: O CSS stButton > button foi movido para constants_and_css.py */
                 </style>
                 <div class="custom-header">
                     <div>Foto</div>
@@ -412,10 +397,12 @@ def gestao_produtos():
 
             produtos_filtrados["Quantidade"] = pd.to_numeric(produtos_filtrados["Quantidade"], errors='coerce').fillna(0).astype(int)
             
+            # CRÍTICO: Filtra apenas os produtos que NÃO são variações (PaiID é nulo ou vazio/NaN)
+            # Produtos que têm PaiID preenchido são listados *dentro* do expander do produto Pai.
             produtos_pai = produtos_filtrados[produtos_filtrados["PaiID"].isnull() | (produtos_filtrados["PaiID"] == '')]
             produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull() & (produtos_filtrados["PaiID"] != '')]
             
-            
+
             for index, pai in produtos_pai.iterrows():
                 # A partir daqui, a lógica de listagem funciona como o esperado, usando apenas os "produtos_pai" (que incluem produtos simples).
                 with st.container(border=True):
