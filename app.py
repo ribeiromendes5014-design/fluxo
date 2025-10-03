@@ -1216,7 +1216,6 @@ def gestao_promocoes():
     
     produtos_validade_sugeridos = produtos_validade_sugeridos[
         (produtos_validade_sugeridos["Quantidade"] > 0) &
-        # Compara a Série de Timestamps (Validade_dt) com o Timestamp do limite_validade_dt
         (produtos_validade_sugeridos["Validade_dt"].notna()) &
         (produtos_validade_sugeridos["Validade_dt"] <= limite_validade_dt)
     ].copy()
@@ -1484,7 +1483,7 @@ def relatorio_produtos():
     else:
         st.warning(f"🚨 **{len(df_parados_sugeridos)}** produto(s) parados. Considere fazer uma promoção!")
         st.dataframe(
-            df_parados_sugeridos[["ID", "Nome", "Marca", "Quantidade", "UltimaVenda"]].fillna({"UltimaVenda": "NUNCA VENDIDO"}),
+            df_parados_sugeridos[["ID", "Nome", "Quantidade", "UltimaVenda"]].fillna({"UltimaVenda": "NUNCA VENDIDO"}),
             use_container_width=True, hide_index=True
         )
 
@@ -2554,7 +2553,7 @@ def livro_caixa():
                         (df_exibicao["Cliente"].astype(str).str.lower() == cliente.strip().lower()) &
                         (df_exibicao["Status"] == "Pendente") &
                         (df_exibicao["Tipo"] == "Entrada")
-                    ].sort_values(by="Data Pagamento", ascending=True).copy()
+                    ].sort_values(by=["Data Pagamento", "Data_dt", "original_index"], ascending=[True, True, True]).copy() # ORDENAÇÃO MAIS ROBUSTA
 
                     if not df_dividas_cliente.empty:
                         
@@ -2571,7 +2570,7 @@ def livro_caixa():
 
                         st.session_state.cliente_selecionado_divida = divida_mais_antiga.name # Salva o índice original
 
-                        # Sua nova linha de alerta
+                        # Sua linha de alerta corrigida (agora com o valor que é usado para quitação)
                         st.warning(f"💰 Dívida em Aberto para {cliente}: R$ {valor_divida_antiga:,.2f}") 
                         
                         # ALERTA DE INFORMAÇÃO sobre o total
