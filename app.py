@@ -2419,7 +2419,7 @@ def livro_caixa():
                     valor_pago = st.number_input(
                         f"Valor Pago Agora (Máx: R$ {valor_em_aberto:,.2f})", 
                         min_value=0.01, 
-                        max_value=valor_em_aberto, # O max_value agora é um float simples e arredondado
+                        max_value=valor_em_aberto, 
                         value=valor_em_aberto, # Valor sugerido é o total
                         format="%.2f",
                         key="input_valor_pago_quitar"
@@ -2543,23 +2543,25 @@ def livro_caixa():
 
                     if not df_dividas_cliente.empty:
                         
-                        # CORREÇÃO: Arredonda o valor antes de somar
+                        # CORREÇÃO: Arredonda o valor antes de somar para evitar erros de float
                         total_divida = df_dividas_cliente["Valor"].abs().round(2).sum() 
                         num_dividas = df_dividas_cliente.shape[0]
                         divida_mais_antiga = df_dividas_cliente.iloc[0]
                         
-                        # Extrai o valor da dívida mais antiga (para o formulário de quitação)
-                        valor_divida_antiga = abs(divida_mais_antiga['Valor'])
+                        # Extrai o valor da dívida mais antiga (a que será editada/quitada)
+                        valor_divida_antiga_raw = pd.to_numeric(divida_mais_antiga['Valor'], errors='coerce')
+                        valor_divida_antiga = round(abs(float(valor_divida_antiga_raw)), 2)
                         
                         original_idx_divida = divida_mais_antiga['original_index']
                         vencimento_str = divida_mais_antiga['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_mais_antiga['Data Pagamento']) else "S/ Data"
 
                         st.session_state.cliente_selecionado_divida = divida_mais_antiga.name # Salva o índice original
 
-                        # ATUALIZAÇÃO DO ALERTA: Exibe o total e o valor da dívida mais antiga.
-                        st.warning(f"🚨 **{cliente.strip()}** possui **{num_dividas}** conta(s) a receber pendente(s)!")
-                        # ATENÇÃO: Se o problema era a soma, o valor correto para exibir aqui é o VALOR DA DÍVIDA MAIS ANTIGA, que é a que será quitada.
-                        st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga tem valor de: **R$ {valor_divida_antiga:,.2f}**. Vencimento: **{vencimento_str}**")
+                        # SUA NOVA LINHA AQUI
+                        st.warning(f"💰 Dívida em Aberto para {cliente}: R$ {valor_divida_antiga:,.2f}") 
+                        
+                        # ALERTA DE INFORMAÇÃO
+                        st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
 
                         col_btn_add, col_btn_conc, col_btn_canc = st.columns(3)
 
