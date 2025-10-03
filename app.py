@@ -36,19 +36,6 @@ URL_OFERTAS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-
 URL_NOVIDADES = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-novidades.png"
 
 
-
-def calcular_valor_em_aberto(linha):
-    try:
-        valor_raw = pd.to_numeric(linha['Valor'], errors='coerce')
-        if isinstance(valor_raw, pd.Series):
-            valor_raw = valor_raw.iloc[0]
-        return round(abs(float(valor_raw)) if pd.notna(valor_raw) else 0.0, 2)
-    except Exception:
-        return 0.0
-
-
-
-
 # Adiciona CSS para simular a navegação no topo e o tema pink/magenta
 st.markdown("""
     <style>
@@ -3634,4 +3621,3 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
-
