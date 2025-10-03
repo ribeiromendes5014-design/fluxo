@@ -2274,7 +2274,7 @@ def get_unique_clients(df):
     df_entradas['ClientID'] = pd.to_numeric(df_entradas['ClientID'], errors='coerce').fillna(0).astype(int)
     
     # 1. Pega o maior ID existente para iniciar a contagem para novos
-    max_id_existente = df_entradas['ClientID'].max() if not df_entradas.empty else 0
+    max_id_existente = df_com_id['ClientID'].max() if not df_com_id.empty else 0
     
     # 2. Cria um mapa para garantir unicidade Nome -> ClientID
     clientes_map = {}
@@ -3799,3 +3799,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
