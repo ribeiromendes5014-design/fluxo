@@ -3635,7 +3635,6 @@ def livro_caixa():
             with st.form("form_concluir_divida"):
                 st.markdown("##### ✅ Concluir Dívida Pendente (Pagamento Parcial ou Total)")
                 
-                # NOVO: Usa divida_parcial_id se vier da aba Nova Movimentação
                 default_concluir_idx = 0
                 divida_para_concluir = None
                 
@@ -3645,32 +3644,19 @@ def livro_caixa():
                 }
                 opcoes_keys = ["Selecione uma dívida..."] + list(opcoes_pendentes_map.keys())
 
+                # Seleção automática se veio da aba de Nova Movimentação
                 if 'divida_parcial_id' in st.session_state and st.session_state.divida_parcial_id is not None:
-                    # Encontra a chave da dívida selecionada
                     original_idx_para_selecionar = st.session_state.divida_parcial_id
                     try:
                         divida_row = df_pendentes_ordenado[df_pendentes_ordenado['original_index'] == original_idx_para_selecionar].iloc[0]
                         valor_row_formatado = calcular_valor_em_aberto(divida_row)
                         option_key = f"ID {divida_row['ID Visível']} | {divida_row['Tipo']} | R$ {valor_row_formatado:,.2f} | Venc.: {divida_row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_row['Data Pagamento']) else 'S/ Data'} | {divida_row['Cliente']}"
-                        
-                        opcoes_pendentes = {
-                            f"ID {row['ID Visível']} | {row['Tipo']} | R$ {calcular_valor_em_aberto(row):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
-                            for index, row in df_pendentes_ordenado.iterrows()
-                        }
-                        
-                        opcoes_keys = ["Selecione uma dívida..."] + list(opcoes_pendentes_map.keys())
-                        
                         if option_key in opcoes_keys:
                             default_concluir_idx = opcoes_keys.index(option_key)
-                        
-                        # Carrega os dados da dívida para exibição
                         divida_para_concluir = divida_row
                     except Exception:
-                        pass # Continua com o índice 0 (Selecione)
-                    
-                    # Limpa a chave após a seleção
+                        pass
                     st.session_state.divida_parcial_id = None
-                
                 
                 divida_selecionada_str = st.selectbox(
                     "Selecione a Dívida para Concluir:", 
@@ -3682,15 +3668,10 @@ def livro_caixa():
                 original_idx_concluir = opcoes_pendentes_map.get(divida_selecionada_str)
                 
                 if original_idx_concluir is not None and divida_para_concluir is None:
-                    # Carrega os dados da dívida se o usuário selecionar manualmente
                     divida_para_concluir = df_pendentes_ordenado[df_pendentes_ordenado['original_index'] == original_idx_concluir].iloc[0]
 
-
                 if divida_para_concluir is not None:
-                    # >> USO DA NOVA FUNÇÃO PARA GARANTIR VALOR CORRETO E ARREDONDADO <<
                     valor_em_aberto = calcular_valor_em_aberto(divida_para_concluir)
-                    # << FIM DO USO DA NOVA FUNÇÃO >>
-
                     st.markdown(f"**Valor em Aberto:** R$ {valor_em_aberto:,.2f}")
                     
                     col_c1, col_c2, col_c3 = st.columns(3)
@@ -3708,11 +3689,8 @@ def livro_caixa():
                     with col_c3:
                         forma_pagt_concluir = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="forma_pagt_concluir")
 
+                    # ✅ Botão de submissão correto
                     concluir = st.form_submit_button("✅ Registrar Pagamento", use_container_width=True, type="primary")
-                    
-                    # Botão de submissão de fallback para evitar o alerta "Missing Submit Button"
-                    st.form_submit_button("Submit Hidden (Fallback)", key="concluir_hidden_submit", disabled=True, type="secondary", help="Hidden button to prevent alert.")
-
 
                     if concluir:
                         valor_restante = round(valor_em_aberto - valor_pago, 2)
@@ -3724,11 +3702,9 @@ def livro_caixa():
                             return
 
                         row_original = st.session_state.df.loc[idx_original].copy()
-                        
-                        # 1. Cria a transação de pagamento (Realizada)
-                        # O valor deve ter o sinal correto (Entrada é positivo, Saída é negativo)
                         valor_pagamento_com_sinal = valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago
                         
+                        # Nova transação de pagamento (realizada)
                         nova_transacao_pagamento = {
                             "Data": data_conclusao,
                             "Loja": row_original['Loja'],
@@ -3736,46 +3712,37 @@ def livro_caixa():
                             "Valor": valor_pagamento_com_sinal, 
                             "Forma de Pagamento": forma_pagt_concluir,
                             "Tipo": row_original['Tipo'],
-                            "Produtos Vendidos": row_original['Produtos Vendidos'], # Mantém os produtos para rastreio
+                            "Produtos Vendidos": row_original['Produtos Vendidos'],
                             "Categoria": row_original['Categoria'],
                             "Status": "Realizada",
                             "Data Pagamento": data_conclusao,
                             "RecorrenciaID": row_original['RecorrenciaID'],
-                            "TransacaoPaiID": idx_original, # Rastreia o ID original (índice Pandas)
-                            "ClientID": row_original['ClientID'] # << NOVO: Mantém o ClientID
+                            "TransacaoPaiID": idx_original,
+                            "ClientID": row_original['ClientID']
                         }
                         
-                        # Adiciona o pagamento realizado
                         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_transacao_pagamento])], ignore_index=True)
                         
-                        # 2. Atualiza a dívida original
-                        if valor_restante > 0.01: # Pagamento parcial: atualiza a dívida original
-                            
-                            # Atualiza o valor restante (o sinal já foi definido no processamento)
+                        if valor_restante > 0.01:
+                            # Pagamento parcial
                             novo_valor_restante_com_sinal = valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
-
                             st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal
                             st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
-                            
                             commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f} da dívida {row_original['Cliente']}. Resta R$ {valor_restante:,.2f}."
-                            
-                        else: # Pagamento total (valor restante <= 0.01)
-                            
-                            # Exclui a linha original pendente (pois o pagamento total já foi registrado como nova transação)
+                        else:
+                            # Pagamento total
                             st.session_state.df = st.session_state.df.drop(idx_original, errors='ignore')
-                            
-                            # Débito de Estoque (Apenas para Entrada)
-                            # O débito de estoque só deve ocorrer se a transação original for a venda (Tipo Entrada)
                             if row_original["Tipo"] == "Entrada" and row_original["Produtos Vendidos"]:
                                 try:
                                     produtos_vendidos = ast.literal_eval(row_original['Produtos Vendidos'])
                                     for item in produtos_vendidos:
-                                        if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                                    if salvar_produtos_no_github(st.session_state.produtos, f"Débito de estoque por conclusão total {row_original['Cliente']}"): inicializar_produtos.clear()
-                                except: st.warning("⚠️ Venda concluída, mas falha no débito do estoque (JSON inválido).")
-                                
+                                        if item.get("Produto_ID"):
+                                            ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                                    if salvar_produtos_no_github(st.session_state.produtos, f"Débito de estoque por conclusão total {row_original['Cliente']}"):
+                                        inicializar_produtos.clear()
+                                except:
+                                    st.warning("⚠️ Venda concluída, mas falha no débito do estoque (JSON inválido).")
                             commit_msg = f"Pagamento total de R$ {valor_pago:,.2f} da dívida {row_original['Cliente'].split(' (')[0]}."
-                            
                         
                         if salvar_dados_no_github(st.session_state.df, commit_msg):
                             st.session_state.divida_parcial_id = None
@@ -3860,3 +3827,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
