@@ -128,7 +128,9 @@ def render_global_config():
 def render_header(paginas_ordenadas, paginas_map):
     """Renderiza o header customizado com a navegação em botões."""
     
-    col_logo, col_nav = st.columns([1, 4])
+    # A MUDANÇA CRÍTICA FOI AQUI:
+    # De [1, 4] para [1, 5], [1, 6] ou a proporção que for necessária
+    col_logo, col_nav = st.columns([1, 5.5]) # Exemplo: 1 para o logo, 5.5 para a navegação
     
     with col_logo:
         st.image(LOGO_DOCEBELLA_URL, width=150)
@@ -136,6 +138,8 @@ def render_header(paginas_ordenadas, paginas_map):
     with col_nav:
         # Garante que temos colunas suficientes para todos os botões
         cols_botoes = st.columns([1] * len(paginas_ordenadas))
+        
+        # ... (Restante do código de botões) ...
         
         for i, nome in enumerate(paginas_ordenadas):
             if nome in paginas_map:
@@ -160,3 +164,4 @@ def render_custom_header(paginas_ordenadas, paginas_map):
         st.markdown('<div class="header-container">', unsafe_allow_html=True)
         render_header(paginas_ordenadas, paginas_map)
         st.markdown('</div>', unsafe_allow_html=True)
+
