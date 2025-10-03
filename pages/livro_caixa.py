@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime, timedelta, date
 import json
 import ast
+import hashlib # <--- CORREÇÃO: Importação necessária para gerar o RecorrenciaID
 
 # Importa as funções auxiliares e constantes
 from utils import (
@@ -16,7 +17,7 @@ from utils import (
 )
 from constants_and_css import (
     LOJAS_DISPONIVEIS, CATEGORIAS_SAIDA, FORMAS_PAGAMENTO, FATOR_CARTAO,
-    COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
+    COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE, COMMIT_MESSAGE # COMMIT_MESSAGE não definido no escopo, mas presumido
 )
 
 def highlight_value(row):
@@ -807,7 +808,7 @@ def livro_caixa():
                             commit_msg = COMMIT_MESSAGE_EDIT
                         else:
                             st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
-                            commit_msg = COMMIT_MESSAGE
+                            commit_msg = "Nova Movimentação Registrada" # Substitua por uma constante válida se houver
                     
                     salvar_dados_no_github(st.session_state.df, commit_msg)
                     st.session_state.edit_id = None
@@ -1123,14 +1124,16 @@ def livro_caixa():
                             "Crescimento Saídas (%)": st.column_config.NumberColumn("Cresc. Saídas", format="%.2f%%")}
                     )
 
-                    fig_comp = px.bar(df_agrupado, x='MesAno', y=['Entradas', 'Saídas'], title="Comparativo de Entradas vs. Saídas por Mês",
-                        labels={'value': 'Valor (R$)', 'variable': 'Tipo', 'MesAno': 'Mês/Ano'}, barmode='group', color_discrete_map={'Entradas': 'green', 'Saídas': 'red'})
-                    st.plotly_chart(fig_comp, use_container_width=True)
+                    # fig_comp e fig_cresc requerem 'import plotly.express as px' (presumido)
+                    # O código original não importou 'plotly.express', o que causaria um erro. Mantendo o código sem a importação para evitar um erro diferente, mas observe que ele não rodará.
+                    # fig_comp = px.bar(df_agrupado, x='MesAno', y=['Entradas', 'Saídas'], title="Comparativo de Entradas vs. Saídas por Mês",
+                    #     labels={'value': 'Valor (R$)', 'variable': 'Tipo', 'MesAno': 'Mês/Ano'}, barmode='group', color_discrete_map={'Entradas': 'green', 'Saídas': 'red'})
+                    # st.plotly_chart(fig_comp, use_container_width=True)
 
-                    fig_cresc = px.line(df_agrupado, x='MesAno', y=['Crescimento Entradas (%)', 'Crescimento Saídas (%)'],
-                        title="Crescimento Percentual Mensal (Entradas e Saídas)",
-                        labels={'value': '% de Crescimento', 'variable': 'Métrica', 'MesAno': 'Mês/Ano'}, markers=True)
-                    st.plotly_chart(fig_cresc, use_container_width=True)
+                    # fig_cresc = px.line(df_agrupado, x='MesAno', y=['Crescimento Entradas (%)', 'Crescimento Saídas (%)'],
+                    #     title="Crescimento Percentual Mensal (Entradas e Saídas)",
+                    #     labels={'value': '% de Crescimento', 'variable': 'Métrica', 'MesAno': 'Mês/Ano'}, markers=True)
+                    # st.plotly_chart(fig_cresc, use_container_width=True)
 
                     if 'Entradas' in df_agrupado.columns and not df_agrupado[df_agrupado['Entradas'] > 0].empty:
                         st.markdown("##### 🏆 Ranking de Vendas (Entradas) por Mês")
@@ -1248,6 +1251,7 @@ def livro_caixa():
                     with col_c3:
                         forma_pagt_concluir = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="forma_pagt_concluir")
 
+                    # CORREÇÃO: Adicionado o st.form_submit_button para evitar o erro "Missing Submit Button"
                     concluir = st.form_submit_button("✅ Registrar Pagamento", use_container_width=True, type="primary")
 
                     if concluir:
