@@ -1,4 +1,4 @@
-# pages/cashback_system.py (SISTEMA DE CASHBACK - CORRIGIDO E ESTILIZADO)
+# pages/cashback_system.py (SISTEMA DE CASHBACK - FINAL CORRIGIDO)
 
 # -*- coding: utf-8 -*-
 import streamlit as st
@@ -636,13 +636,10 @@ def cashback_system(): # NOVO NOME DA FUNÇÃO EXPORTADA
     """, unsafe_allow_html=True)
     
     # --- EXECUÇÃO PRINCIPAL E CARREGAMENTO DE DADOS ---
-    # Inicializa variáveis de estado
     if 'editing_client' not in st.session_state: st.session_state.editing_client = False
     if 'deleting_client' not in st.session_state: st.session_state.deleting_client = False
     if 'valor_venda' not in st.session_state: st.session_state.valor_venda = 0.00
     if 'data_version' not in st.session_state: st.session_state.data_version = 0
-    
-    # Carrega dados
     if 'clientes' not in st.session_state:
         st.session_state.clientes, st.session_state.lancamentos, st.session_state.produtos_turbo = carregar_dados()
 
@@ -653,7 +650,7 @@ def cashback_system(): # NOVO NOME DA FUNÇÃO EXPORTADA
     }
     
     # --- RENDERIZAÇÃO USANDO ABAS NATIVAS (st.tabs) ---
-    # LOGO REMOVIDO: Agora o logo será exibido apenas no cabeçalho customizado.
+    # st.image(LOGO_DOCEBELLA_URL, width=200) # LOGO DUPLICADO REMOVIDO
     
     tab_list = ["Home", "Lançamento", "Cadastro", "Produtos Turbo", "Relatórios"]
     tabs = st.tabs(tab_list)
