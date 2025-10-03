@@ -23,7 +23,7 @@ except ImportError:
         def create_file(self, path, msg, content, sha, branch): pass
 
 # --- Nomes dos arquivos CSV e Configuração ---
-CLIENTES_CSV = 'clientes_cash.csv' # <<< CORRIGIDO PARA O NOME SOLICITADO
+CLIENTES_CSV = 'clientes_cash.csv' 
 LANÇAMENTOS_CSV = 'lancamentos.csv'
 PRODUTOS_TURBO_CSV = 'produtos_turbo.csv'
 BONUS_INDICACAO_PERCENTUAL = 0.03 # 3% para o indicador
@@ -740,15 +740,19 @@ def render_relatorios():
         st.info("Nenhum lançamento registrado no histórico.")
     st.markdown("---")
     
-    # --- Excluir Lançamento (RESTURADA) ---
+    # --- Excluir Lançamento (CORRIGIDO) ---
     st.subheader("🗑️ Excluir Lançamento de Venda")
     vendas_df = st.session_state.lancamentos[st.session_state.lancamentos['Tipo'] == 'Venda'].copy()
     if vendas_df.empty:
         st.warning("Nenhuma venda registrada para excluir.")
     else:
         vendas_df_sorted = vendas_df.sort_values(by="Data", ascending=False)
+        
+        # CORREÇÃO DO ATTRIBUTEERROR: Formata o valor antes de criar o dicionário
+        vendas_df_sorted['Valor_Formatado'] = pd.to_numeric(vendas_df_sorted['Valor Venda/Resgate'], errors='coerce').fillna(0).map('{:.2f}'.format)
+
         options_map = {
-            f"ID {index}: {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {pd.to_numeric(row['Valor Venda/Resgate'], errors='coerce').iloc[0]:.2f}": index
+            f"ID {index}: {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {row['Valor_Formatado']}": index
             for index, row in vendas_df_sorted.iterrows()
         }
         
@@ -869,19 +873,13 @@ def cashback_system(): # NOVO NOME DA FUNÇÃO EXPORTADA
     tab_list = ["Home", "Lançamento", "Cadastro", "Produtos Turbo", "Relatórios"]
     
     # Encontra o índice da aba atual (para setar como padrão)
-    default_index = tab_list.index(st.session_state.cashback_tab_atual) if st.session_state.cashback_tab_atual in tab_list else 0
+    # A variável default_index não é estritamente necessária aqui, já que estamos usando st.tabs
     
     tabs = st.tabs(tab_list)
     
     # Renderiza o conteúdo na aba correta
     for i, nome_tab in enumerate(tab_list):
         with tabs[i]:
-            # Se a aba atual no state for a aba que está sendo renderizada:
-            if nome_tab == st.session_state.cashback_tab_atual:
-                 PAGINAS_INTERNAS[nome_tab]()
-            else:
-                # Chama a função principal de renderização, mas não força a rerenderização completa
-                PAGINAS_INTERNAS[nome_tab]()
-
-
-# ⚠️ Nenhuma chamada de função deve estar aqui. O app.py chama cashback_system().
+            # Mantemos a lógica de chamar a função, mas garantimos que o estado seja atualizado
+            # no clique dos botões internos (render_home) e que a página correta seja exibida.
+            PAGINAS_INTERNAS[nome_tab]()
