@@ -1,4 +1,4 @@
-# pages/cashback_system.py (SISTEMA DE CASHBACK - FINAL CORRIGIDO)
+# pages/cashback_system.py (SISTEMA DE CASHBACK - LÓGICA RESTAURADA)
 
 # -*- coding: utf-8 -*-
 import streamlit as st
@@ -23,11 +23,11 @@ except ImportError:
         def create_file(self, path, msg, content, sha, branch): pass
 
 # --- Nomes dos arquivos CSV e Configuração ---
-CLIENTES_CSV = 'clientes_cash.csv' # <<< CORRIGIDO PARA O NOVO NOME
+CLIENTES_CSV = 'clientes_cash.csv' # <<< CORRIGIDO PARA O NOME SOLICITADO
 LANÇAMENTOS_CSV = 'lancamentos.csv'
 PRODUTOS_TURBO_CSV = 'produtos_turbo.csv'
 BONUS_INDICACAO_PERCENTUAL = 0.03 # 3% para o indicador
-CASHBACK_INDICADO_PRIMEIRA_COMPRA = 0.05 # 3% para o indicado
+CASHBACK_INDICADO_PRIMEIRA_COMPRA = 0.05 # 5% para o indicado (na primeira compra)
 
 # Configuração do logo para o novo layout
 LOGO_DOCEBELLA_URL = "https://i.ibb.co/fYCWBKTm/Logo-Doce-Bella-Cosm-tico.png" # Link do logo
@@ -144,9 +144,11 @@ def carregar_dados():
             except pd.errors.EmptyDataError: pass
         for col in df_columns:
             if col not in df.columns: df[col] = ""
+        # Adicione colunas de controle de Nível/Gasto/Primeira Compra, se não existirem
         if 'Cashback Disponível' in df.columns: df['Cashback Disponível'] = df['Cashback Disponível'].fillna('0.0')
         if 'Gasto Acumulado' in df.columns: df['Gasto Acumulado'] = df['Gasto Acumulado'].fillna('0.0')
         if 'Nivel Atual' in df.columns: df['Nivel Atual'] = df['Nivel Atual'].fillna('Prata')
+        if 'Indicado Por' in df.columns: df['Indicado Por'] = df['Indicado Por'].fillna('')
         if 'Primeira Compra Feita' in df.columns: df['Primeira Compra Feita'] = df['Primeira Compra Feita'].fillna('False')
         if 'Venda Turbo' in df.columns: df['Venda Turbo'] = df['Venda Turbo'].fillna('Não')
         return df[df_columns]
@@ -155,6 +157,7 @@ def carregar_dados():
     df_clientes = carregar_dados_do_csv(CLIENTES_CSV, CLIENTES_COLS)
     df_clientes['Cashback Disponível'] = pd.to_numeric(df_clientes['Cashback Disponível'], errors='coerce').fillna(0.0)
     df_clientes['Gasto Acumulado'] = pd.to_numeric(df_clientes['Gasto Acumulado'], errors='coerce').fillna(0.0)
+    # Garante que a coluna 'Primeira Compra Feita' seja booleana
     df_clientes['Primeira Compra Feita'] = df_clientes['Primeira Compra Feita'].astype(str).str.lower().map({'true': True, 'false': False}).fillna(False).astype(bool)
     df_clientes['Nivel Atual'] = df_clientes['Nivel Atual'].fillna('Prata')
 
@@ -238,6 +241,7 @@ def excluir_cliente(nome_cliente):
 def cadastrar_cliente(nome, apelido, telefone, indicado_por=''):
     if nome in st.session_state.clientes['Nome'].values:
         st.error("Erro: Já existe um cliente com este nome."); return
+    # LÓGICA DE INDICAÇÃO RESTAURADA
     if indicado_por and indicado_por not in st.session_state.clientes['Nome'].values:
         st.warning(f"Atenção: Cliente indicador '{indicado_por}' não encontrado."); indicado_por = ''
     novo_cliente = pd.DataFrame([{'Nome': nome, 'Apelido/Descrição': apelido, 'Telefone': telefone,
@@ -252,12 +256,11 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
     idx_cliente = st.session_state.clientes[st.session_state.clientes['Nome'] == cliente_nome].index
     if idx_cliente.empty: st.error(f"Erro: Cliente '{cliente_nome}' não encontrado."); return
     
-    # --- LÓGICA CORRIGIDA ---
-    # 1. Captura o estado ANTES de qualquer modificação
+    # --- LÓGICA COMPLETA DE CASHBACK E INDICAÇÃO ---
     cliente_data_antes = st.session_state.clientes.loc[idx_cliente].iloc[0].copy()
     nivel_antigo = cliente_data_antes['Nivel Atual']
     era_primeira_compra = not cliente_data_antes['Primeira Compra Feita']
-
+    
     # 2. Aplica as atualizações de valores
     st.session_state.clientes.loc[idx_cliente, 'Cashback Disponível'] += valor_cashback
     st.session_state.clientes.loc[idx_cliente, 'Gasto Acumulado'] += valor_venda
@@ -267,7 +270,7 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
     novo_nivel, _, _ = calcular_nivel_e_beneficios(novo_gasto_acumulado)
     st.session_state.clientes.loc[idx_cliente, 'Nivel Atual'] = novo_nivel
     
-    # 4. Verifica se a condição para bônus é atendida USANDO O ESTADO CAPTURADO ANTERIORMENTE
+    # 4. BÔNUS DE INDICAÇÃO (RESTURADA)
     if era_primeira_compra and cliente_data_antes['Indicado Por']:
         indicador_nome = cliente_data_antes['Indicado Por']
         idx_indicador = st.session_state.clientes[st.session_state.clientes['Nome'] == indicador_nome].index
@@ -278,7 +281,7 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
             st.session_state.lancamentos = pd.concat([st.session_state.lancamentos, bonus_lanc], ignore_index=True)
             st.success(f"🎁 Bônus de R$ {bonus:.2f} creditado para {indicador_nome}!")
 
-            # LÓGICA DE MENSAGEM PARA O INDICADOR
+            # LÓGICA DE MENSAGEM PARA O INDICADOR (RESTAURADA)
             if TELEGRAM_ENABLED:
                 nivel_indicador = st.session_state.clientes.loc[idx_indicador, 'Nivel Atual'].iloc[0]
                 bonus_str = f"R$ {bonus:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -297,7 +300,7 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
     novo_lancamento = pd.DataFrame([{'Data': data_venda, 'Cliente': cliente_nome, 'Tipo': 'Venda', 'Valor Venda/Resgate': valor_venda, 'Valor Cashback': valor_cashback, 'Venda Turbo': 'Sim' if venda_turbo_selecionada else 'Não'}])
     st.session_state.lancamentos = pd.concat([st.session_state.lancamentos, novo_lancamento], ignore_index=True)
 
-    # 6. LÓGICA DE MENSAGEM PARA O CLIENTE QUE COMPROU
+    # 6. LÓGICA DE MENSAGEM PARA O CLIENTE QUE COMPROU (RESTAURADA)
     if TELEGRAM_ENABLED:
         saldo_atualizado = st.session_state.clientes.loc[idx_cliente, 'Cashback Disponível'].iloc[0]
         fuso_horario_brasil = pytz.timezone('America/Sao_Paulo')
@@ -350,6 +353,26 @@ def resgatar_cashback(cliente_nome, valor_resgate, valor_venda_atual, data_resga
     st.session_state.lancamentos = pd.concat([st.session_state.lancamentos, novo_lancamento], ignore_index=True)
     salvar_dados()
     st.success(f"Resgate de R$ {valor_resgate:.2f} realizado para {cliente_nome}.")
+    
+    # LÓGICA DE MENSAGEM PARA O CLIENTE APÓS RESGATE (RESTAURADA)
+    if TELEGRAM_ENABLED:
+        saldo_apos_resgate = st.session_state.clientes.loc[st.session_state.clientes['Nome'] == cliente_nome, 'Cashback Disponível'].iloc[0]
+        fuso_horario_brasil = pytz.timezone('America/Sao_Paulo')
+        agora_brasil = datetime.now(fuso_horario_brasil)
+        data_hora_lancamento = agora_brasil.strftime('%d/%m/%Y às %H:%M')
+        
+        valor_resgate_str = f"R$ {valor_resgate:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        saldo_apos_resgate_str = f"R$ {saldo_apos_resgate:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        
+        mensagem_telegram = (
+            f"🛒 *Loja Doce&Bella: RESGATE DE CASHBACK*\n\n"
+            f"Você (*{cliente_nome}*) resgatou *{valor_resgate_str}* em *{data_hora_lancamento}*.\n\n"
+            f"❤ Seu saldo em conta é de *{saldo_apos_resgate_str}*.\n\n"
+            f"Obrigado pela preferência! :)\n\n"
+            f"========================="
+        )
+        enviar_mensagem_telegram(mensagem_telegram)
+
     st.rerun()
 
 def excluir_lancamento_venda(lancamento_index: int):
@@ -415,57 +438,97 @@ def render_lancamento():
     st.markdown("---")
     operacao = st.radio("Selecione a Operação:", ["Lançar Nova Venda", "Resgatar Cashback"], key='op_selecionada', horizontal=True)
     if operacao == "Lançar Nova Venda":
-        st.subheader("Nova Venda (Cashback por Nível)")
+        st.subheader("Nova Venda (Cashback por Nível e Indicação)")
         clientes_nomes = [''] + sorted(st.session_state.clientes['Nome'].tolist())
         cliente_selecionado = st.selectbox("Nome da Cliente:", options=clientes_nomes, key='nome_cliente_venda')
+        
+        # Lógica de cálculo de taxa restaurada
         nivel_cliente, cb_normal_rate, cb_turbo_rate = 'Prata', NIVEIS['Prata']['cashback_normal'], NIVEIS['Prata']['cashback_turbo']
+        venda_turbo_selecionada = False # Inicializa a variável
+        
         if cliente_selecionado:
             cliente_data = st.session_state.clientes[st.session_state.clientes['Nome'] == cliente_selecionado].iloc[0]
             nivel_cliente, cb_normal_rate, cb_turbo_rate = calcular_nivel_e_beneficios(cliente_data['Gasto Acumulado'])
+            
+            # Aplica a taxa de PRIMEIRA COMPRA (5%) se for o caso
             if not cliente_data['Primeira Compra Feita'] and cliente_data['Indicado Por']:
                 taxa_ind = CASHBACK_INDICADO_PRIMEIRA_COMPRA
-                st.info(f"✨ INDICAÇÃO ATIVA! Cashback de {int(taxa_ind * 100)}% aplicado.")
+                st.info(f"✨ INDICAÇÃO ATIVA! Cashback de {int(taxa_ind * 100)}% aplicado na primeira compra.")
                 cb_normal_rate = cb_turbo_rate = taxa_ind
+                
             col1, col2, col3 = st.columns(3)
             col1.metric("Nível Atual", nivel_cliente)
             col2.metric("Cashback Normal", f"{int(cb_normal_rate * 100)}%")
             col3.metric("Cashback Turbo", f"{int(cb_turbo_rate * 100)}%" if cb_turbo_rate > 0 else "N/A")
             st.markdown(f"**Saldo Disponível:** R$ {cliente_data['Cashback Disponível']:.2f}")
             st.markdown("---")
+        
         valor_venda = st.number_input("Valor da Venda (R$):", min_value=0.00, step=50.0, format="%.2f", key='valor_venda')
+        
         produtos_ativos = get_produtos_turbo_ativos()
-        venda_turbo = False
+        
         if produtos_ativos:
             st.warning(f"⚠️ PRODUTOS TURBO ATIVOS: {', '.join(produtos_ativos)}", icon="⚡")
             if cb_turbo_rate > 0:
-                venda_turbo = st.checkbox(f"Venda contém Produtos Turbo (aplica taxa de {int(cb_turbo_rate * 100)}%)?", key='venda_turbo_check')
-        taxa_final = cb_turbo_rate if venda_turbo and cb_turbo_rate > 0 else cb_normal_rate
-        cashback_calculado = st.session_state.valor_venda * taxa_final
+                # O checkbox agora define a variável que será usada na função `lancar_venda`
+                venda_turbo_selecionada = st.checkbox(f"Venda contém Produtos Turbo (aplica taxa de {int(cb_turbo_rate * 100)}%)?", key='venda_turbo_check')
+        
+        taxa_final = cb_turbo_rate if venda_turbo_selecionada and cb_turbo_rate > 0 else cb_normal_rate
+        cashback_calculado = valor_venda * taxa_final # Usa valor_venda local para cálculo
         st.metric(label=f"Cashback a Gerar ({int(taxa_final * 100)}%):", value=f"R$ {cashback_calculado:.2f}")
+        
         with st.form("form_venda", clear_on_submit=True):
-            data_venda = st.date_input("Data da Venda:", value=date.today(), key='data_venda_form') # Renomeado key para evitar conflito
+            data_venda = st.date_input("Data da Venda:", value=date.today(), key='data_venda_form')
+            
             if st.form_submit_button("Lançar Venda e Gerar Cashback"):
                 if not cliente_selecionado: st.error("Por favor, selecione uma cliente.")
-                elif st.session_state.valor_venda <= 0: st.error("O valor da venda deve ser maior que R$ 0,00.")
-                else: lancar_venda(cliente_selecionado, st.session_state.valor_venda, cashback_calculado, data_venda, venda_turbo)
+                elif valor_venda <= 0: st.error("O valor da venda deve ser maior que R$ 0,00.")
+                else: 
+                    # Passa o estado de venda_turbo_selecionada para a função de lançamento
+                    lancar_venda(cliente_selecionado, valor_venda, cashback_calculado, data_venda, venda_turbo_selecionada)
+
     elif operacao == "Resgatar Cashback":
         st.subheader("Resgate de Cashback")
-        clientes_com_cashback = st.session_state.clientes[st.session_state.clientes['Cashback Disponível'] >= 20.00]
+        
+        clientes_com_cashback = st.session_state.clientes[st.session_state.clientes['Cashback Disponível'] >= 20.00].copy()
         clientes_options = [''] + sorted(clientes_com_cashback['Nome'].tolist())
+        
         with st.form("form_resgate", clear_on_submit=True):
+            
             cliente_resgate = st.selectbox("Cliente para Resgate:", options=clientes_options)
             saldo_atual = 0.0
+            
             valor_venda_resgate = st.number_input("Valor da Venda Atual (para cálculo do limite):", min_value=0.01, step=50.0, format="%.2f")
             valor_resgate = st.number_input("Valor do Resgate (Mínimo R$20,00):", min_value=0.00, step=1.00, format="%.2f")
             data_resgate = st.date_input("Data do Resgate:", value=date.today())
+
             if cliente_resgate:
-                saldo_atual = st.session_state.clientes.loc[st.session_state.clientes['Nome'] == cliente_resgate, 'Cashback Disponível'].iloc[0]
-                st.info(f"Saldo Disponível para {cliente_resgate}: R$ {saldo_atual:.2f}")
-                st.warning(f"Resgate Máximo Permitido (50% da venda): R$ {valor_venda_resgate * 0.50:.2f}")
-            if st.form_submit_button("Confirmar Resgate"):
-                if not cliente_resgate: st.error("Por favor, selecione a cliente para resgate.")
-                elif valor_resgate <= 0: st.error("O valor do resgate deve ser maior que zero.")
-                else: resgatar_cashback(cliente_resgate, valor_resgate, valor_venda_resgate, data_resgate, saldo_atual)
+                if cliente_resgate in st.session_state.clientes['Nome'].values:
+                    saldo_atual = st.session_state.clientes.loc[st.session_state.clientes['Nome'] == cliente_resgate, 'Cashback Disponível'].iloc[0]
+                    st.info(f"Saldo Disponível para {cliente_resgate}: R$ {saldo_atual:.2f}")
+                    
+                    max_resgate_disp = valor_venda_resgate * 0.50
+                    st.warning(f"Resgate Máximo Permitido (50% da venda): R$ {max_resgate_disp:.2f}")
+                else:
+                    st.warning("Cliente não encontrado ou saldo insuficiente para resgate.")
+            else:
+                st.info("Selecione um cliente acima para visualizar o saldo disponível e limites de resgate.")
+
+            submitted_resgate = st.form_submit_button("Confirmar Resgate")
+            
+            if submitted_resgate:
+                if cliente_resgate == '':
+                    st.error("Por favor, selecione a cliente para resgate.")
+                elif valor_resgate <= 0:
+                    st.error("O valor do resgate deve ser maior que zero.")
+                else:
+                    # Recalcula saldo atual para garantir que o saldo_disponivel passado à função esteja correto
+                    if cliente_resgate in st.session_state.clientes['Nome'].values:
+                        saldo_atual = st.session_state.clientes.loc[st.session_state.clientes['Nome'] == cliente_resgate, 'Cashback Disponível'].iloc[0]
+                        resgatar_cashback(cliente_resgate, valor_resgate, valor_venda_resgate, data_resgate, saldo_atual)
+                    else:
+                        st.error("Erro ao calcular saldo. Cliente não encontrado.")
+
 
 def render_produtos_turbo():
     st.header("Gestão de Produtos Turbo (Cashback Extra)")
@@ -485,6 +548,10 @@ def render_produtos_turbo():
     else:
         df_display = st.session_state.produtos_turbo.copy()
         hoje = date.today()
+        # Garante que as colunas sejam datetime antes de comparar datas
+        df_display['Data Início'] = pd.to_datetime(df_display['Data Início']) 
+        df_display['Data Fim'] = pd.to_datetime(df_display['Data Fim'])
+        
         df_display['Status'] = df_display.apply(lambda row: 'ATIVO' if (pd.notna(row['Data Início']) and pd.notna(row['Data Fim']) and row['Data Início'].date() <= hoje and row['Data Fim'].date() >= hoje) else 'INATIVO', axis=1)
         st.dataframe(df_display[['Nome Produto', 'Data Início', 'Data Fim', 'Status']], use_container_width=True, hide_index=True)
         st.subheader("Excluir Produto")
@@ -499,74 +566,181 @@ def render_cadastro():
     if 'is_indicado_check' not in st.session_state: st.session_state.is_indicado_check = False
     st.checkbox("Esta cliente foi indicada por outra?", key='is_indicado_check')
     indicado_por = ''
+    
+    # LÓGICA DE INDICAÇÃO RESTAURADA
     if st.session_state.is_indicado_check:
         st.markdown("##### 🎁 Programa Indique e Ganhe")
         clientes_indicadores = [''] + sorted(st.session_state.clientes['Nome'].tolist())
         indicado_por = st.selectbox("Nome da Cliente Indicadora:", options=clientes_indicadores, key='indicador_nome_select')
+    
     with st.form("form_cadastro_cliente", clear_on_submit=True):
         st.markdown("##### Dados Pessoais")
         col1, col2 = st.columns(2)
         nome = col1.text_input("Nome da Cliente (Obrigatório)", key='cadastro_nome')
         telefone = col2.text_input("Número de Telefone", key='cadastro_telefone')
         apelido = st.text_input("Apelido ou Descrição (Opcional)", key='cadastro_apelido')
-        if st.form_submit_button("Cadastrar Cliente"):
+        
+        submitted_cadastro = st.form_submit_button("Cadastrar Cliente")
+        
+        if submitted_cadastro:
             if nome:
-                indicado_final = st.session_state.get('indicador_nome_select', '') if st.session_state.get('is_indicado_check', False) else ''
+                # O valor de 'indicado_por' é passado para a função, mesmo que vazio
+                indicado_final = indicado_por if st.session_state.is_indicado_check else ''
                 cadastrar_cliente(nome.strip(), apelido.strip(), telefone.strip(), indicado_final.strip())
             else: st.error("O campo 'Nome da Cliente' é obrigatório.")
+            
     st.markdown("---")
     st.subheader("Operações de Edição e Exclusão")
+    
     clientes_para_operacao = [''] + sorted(st.session_state.clientes['Nome'].tolist())
     cliente_selecionado_operacao = st.selectbox("Selecione a Cliente para Editar ou Excluir:", options=clientes_para_operacao, key='cliente_selecionado_operacao')
+    
     if cliente_selecionado_operacao:
         cliente_data = st.session_state.clientes[st.session_state.clientes['Nome'] == cliente_selecionado_operacao].iloc[0]
-        col1, col2 = st.columns([1, 1])
-        if col1.button("✏️ Editar Cadastro", use_container_width=True): st.session_state.editing_client = cliente_selecionado_operacao; st.rerun()
-        if col2.button("🗑️ Excluir Cliente", use_container_width=True, type='primary'): st.session_state.deleting_client = cliente_selecionado_operacao; st.rerun()
-        if st.session_state.get('editing_client') == cliente_selecionado_operacao:
+        
+        # Lógica de edição e exclusão (mantida da correção anterior)
+        st.markdown("##### Dados do Cliente Selecionado")
+
+        col_edicao, col_exclusao = st.columns([1, 1])
+        
+        with col_edicao:
+            if st.button("✏️ Editar Cadastro", use_container_width=True, key='btn_editar'):
+                st.session_state.editing_client = cliente_selecionado_operacao
+                st.session_state.deleting_client = False  
+                st.rerun()  
+        
+        with col_exclusao:
+            if st.button("🗑️ Excluir Cliente", use_container_width=True, key='btn_excluir', type='primary'):
+                st.session_state.deleting_client = cliente_selecionado_operacao
+                st.session_state.editing_client = False  
+                st.rerun()  
+        
+        st.markdown("---")
+        
+        if st.session_state.editing_client == cliente_selecionado_operacao:
             st.subheader(f"Editando: {cliente_selecionado_operacao}")
-            with st.form("form_edicao_cliente"):
-                novo_nome = st.text_input("Nome:", value=cliente_data['Nome'])
-                novo_apelido = st.text_input("Apelido/Descrição:", value=cliente_data['Apelido/Descrição'])
-                novo_telefone = st.text_input("Telefone:", value=cliente_data['Telefone'])
-                if st.form_submit_button("✅ Concluir Edição"): editar_cliente(cliente_selecionado_operacao, novo_nome.strip(), novo_apelido.strip(), novo_telefone.strip())
-        if st.session_state.get('deleting_client') == cliente_selecionado_operacao:
-            st.error(f"ATENÇÃO: Você está prestes a excluir **{cliente_selecionado_operacao}** e todo o seu histórico.")
-            col1, col2 = st.columns(2)
-            if col1.button(f"🔴 Tenho Certeza! Excluir {cliente_selecionado_operacao}", use_container_width=True, type='primary'): excluir_cliente(cliente_selecionado_operacao)
-            if col2.button("↩️ Cancelar Exclusão", use_container_width=True): st.session_state.deleting_client = False; st.rerun()
+            
+            with st.form("form_edicao_cliente", clear_on_submit=False):
+                
+                novo_nome = st.text_input("Nome (Chave de Identificação):",  
+                                          value=cliente_data['Nome'],  
+                                          key='edicao_nome')
+                
+                novo_apelido = st.text_input("Apelido ou Descrição:",  
+                                             value=cliente_data['Apelido/Descrição'],  
+                                             key='edicao_apelido')
+                
+                novo_telefone = st.text_input("Número de Telefone:",  
+                                              value=cliente_data['Telefone'],  
+                                              key='edicao_telefone')
+                
+                st.info(f"Cashback Disponível: R$ {cliente_data['Cashback Disponível']:.2f} (Não editável)")
+
+                submitted_edicao = st.form_submit_button("✅ Concluir Edição", use_container_width=True, type="secondary")
+            
+            if submitted_edicao:
+                editar_cliente(cliente_selecionado_operacao, st.session_state.edicao_nome.strip(), st.session_state.edicao_apelido.strip(), st.session_state.edicao_telefone.strip())
+            
+            col_concluir_placeholder, col_cancelar = st.columns(2)
+            
+            with col_cancelar:
+                if st.button("❌ Cancelar Edição", use_container_width=True, type='primary', key='cancelar_edicao_btn_final'):
+                    st.session_state.editing_client = False
+                    st.rerun()
+        
+        elif st.session_state.deleting_client == cliente_selecionado_operacao:
+            st.error(f"ATENÇÃO: Você está prestes a excluir **{cliente_selecionado_operacao}**.")
+            st.warning("Esta ação é irreversível e removerá todos os lançamentos de venda/resgate associados a esta cliente.")
+            
+            col_confirma, col_cancela_del = st.columns(2)
+            with col_confirma:
+                if st.button(f"🔴 Tenho Certeza! Excluir {cliente_selecionado_operacao}", use_container_width=True, key='confirmar_exclusao', type='primary'):
+                    excluir_cliente(cliente_selecionado_operacao)
+            with col_cancela_del:
+                if st.button("↩️ Cancelar Exclusão", use_container_width=True, key='cancelar_exclusao'):
+                    st.session_state.deleting_client = False
+                    st.rerun()  
+                    
     st.markdown("---")
-    st.subheader("Clientes Cadastrados (Visualização Completa)")
-    st.dataframe(st.session_state.clientes.drop(columns=['Primeira Compra Feita'], errors='ignore'), hide_index=True, use_container_width=True)
+    st.subheader("Clientes Cadastrados (Visualização)")
+    # Inclui a coluna Gasto Acumulado para visualização
+    st.dataframe(st.session_state.clientes[['Nome', 'Apelido/Descrição', 'Telefone', 'Cashback Disponível', 'Gasto Acumulado', 'Nivel Atual']], hide_index=True, use_container_width=True)
+
 
 def render_relatorios():
     st.header("Relatórios e Rankings")
+    st.markdown("---")
+
+    # --- Ranking de Níveis de Fidelidade (RESTURADA) ---
     st.subheader("💎 Ranking de Níveis de Fidelidade")
     df_niveis = st.session_state.clientes.copy()
+    
+    # Recalcula níveis para garantir precisão
     df_niveis['Nivel Atual'] = df_niveis['Gasto Acumulado'].apply(lambda x: calcular_nivel_e_beneficios(x)[0])
     df_niveis['Falta p/ Próximo Nível'] = df_niveis.apply(lambda row: calcular_falta_para_proximo_nivel(row['Gasto Acumulado'], row['Nivel Atual']), axis=1)
+    
     ordenacao_nivel = {'Diamante': 3, 'Ouro': 2, 'Prata': 1}
     df_niveis['Ordem'] = df_niveis['Nivel Atual'].map(ordenacao_nivel)
     df_niveis = df_niveis.sort_values(by=['Ordem', 'Gasto Acumulado'], ascending=[False, False])
+    
     df_display = df_niveis[['Nome', 'Nivel Atual', 'Gasto Acumulado', 'Falta p/ Próximo Nível']].reset_index(drop=True)
     st.dataframe(df_display, use_container_width=True)
     st.markdown("---")
-    st.subheader("💰 Ranking: Maior Saldo de Cashback Disponível")
+
+
+    # --- Ranking de Cashback e Compras (RESTURADA) ---
+    st.subheader("🏆 Ranking: Maior Saldo de Cashback Disponível")
     ranking_cashback = st.session_state.clientes.sort_values(by='Cashback Disponível', ascending=False).reset_index(drop=True)
-    st.dataframe(ranking_cashback[['Nome', 'Cashback Disponível']].head(10), hide_index=True, use_container_width=True)
+    ranking_cashback.index += 1  
+    st.dataframe(ranking_cashback[['Nome', 'Cashback Disponível']], use_container_width=True)
     st.markdown("---")
-    st.subheader("📄 Histórico de Lançamentos")
-    col1, col2 = st.columns(2)
-    data_selecionada = col1.date_input("Filtrar por Data:", value=None)
-    tipo_selecionado = col2.selectbox("Filtrar por Tipo:", ['Todos', 'Venda', 'Resgate', 'Bônus Indicação'])
-    df_historico = st.session_state.lancamentos.copy()
-    if data_selecionada: df_historico = df_historico[df_historico['Data'].dt.date == data_selecionada]
-    if tipo_selecionado != 'Todos': df_historico = df_historico[df_historico['Tipo'] == tipo_selecionado]
-    if not df_historico.empty:
-        st.dataframe(df_historico.sort_values(by="Data", ascending=False), hide_index=True, use_container_width=True)
-    else: st.info("Nenhum lançamento encontrado com os filtros selecionados.")
     
+    st.subheader("💰 Ranking: Maior Volume de Compras (Vendas)")
+    
+    vendas_df = st.session_state.lancamentos[st.session_state.lancamentos['Tipo'] == 'Venda'].copy()
+    if not vendas_df.empty:
+        vendas_df['Valor Venda/Resgate'] = pd.to_numeric(vendas_df['Valor Venda/Resgate'], errors='coerce').fillna(0)
+        ranking_compras = vendas_df.groupby('Cliente')['Valor Venda/Resgate'].sum().reset_index()
+        ranking_compras.columns = ['Cliente', 'Total Compras (R$)']
+        ranking_compras = ranking_compras.sort_values(by='Total Compras (R$)', ascending=False).reset_index(drop=True)
+        ranking_compras['Total Compras (R$)'] = ranking_compras['Total Compras (R$)'].map('R$ {:.2f}'.format)
+        ranking_compras.index += 1
+        st.dataframe(ranking_compras, hide_index=False, use_container_width=True)
+    else:
+        st.info("Nenhuma venda registrada ainda para calcular o ranking de compras.")
     st.markdown("---")
+    
+    
+    # --- Histórico de Lançamentos ---
+    st.subheader("📄 Histórico de Lançamentos")
+    
+    col_data, col_tipo = st.columns(2)
+    with col_data:
+        data_selecionada = st.date_input("Filtrar por Data:", value=None)
+    with col_tipo:
+        # Adicionado Tipo 'Bônus Indicação' ao filtro
+        tipo_selecionado = st.selectbox("Filtrar por Tipo:", ['Todos', 'Venda', 'Resgate', 'Bônus Indicação'], index=0)
+
+    df_historico = st.session_state.lancamentos.copy()
+    
+    if not df_historico.empty:
+        if data_selecionada:
+            df_historico = df_historico[df_historico['Data'].apply(lambda x: x == data_selecionada if pd.notna(x) else False)]
+
+        if tipo_selecionado != 'Todos':
+            df_historico = df_historico[df_historico['Tipo'] == tipo_selecionado]
+
+        if not df_historico.empty:
+            df_historico['Valor Venda/Resgate'] = pd.to_numeric(df_historico['Valor Venda/Resgate'], errors='coerce').fillna(0).map('R$ {:.2f}'.format)
+            df_historico['Valor Cashback'] = pd.to_numeric(df_historico['Valor Cashback'], errors='coerce').fillna(0).map('R$ {:.2f}'.format)
+            st.dataframe(df_historico.sort_values(by="Data", ascending=False), hide_index=True, use_container_width=True)
+        else:
+            st.info("Nenhum lançamento encontrado com os filtros selecionados.")
+    else:
+        st.info("Nenhum lançamento registrado no histórico.")
+    st.markdown("---")
+    
+    # --- Excluir Lançamento (RESTURADA) ---
     st.subheader("🗑️ Excluir Lançamento de Venda")
     vendas_df = st.session_state.lancamentos[st.session_state.lancamentos['Tipo'] == 'Venda'].copy()
     if vendas_df.empty:
@@ -574,7 +748,7 @@ def render_relatorios():
     else:
         vendas_df_sorted = vendas_df.sort_values(by="Data", ascending=False)
         options_map = {
-            f"ID {index}: {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {row['Valor Venda/Resgate']}": index
+            f"ID {index}: {row['Data'].strftime('%d/%m/%Y')} - {row['Cliente']} - R$ {pd.to_numeric(row['Valor Venda/Resgate'], errors='coerce').iloc[0]:.2f}": index
             for index, row in vendas_df_sorted.iterrows()
         }
         
@@ -585,29 +759,71 @@ def render_relatorios():
         
         if option_selecionada:
             index_para_excluir = options_map[option_selecionada]
-            st.warning(f"**Atenção:** Você está prestes a excluir a venda selecionada. Esta ação irá estornar o valor e o cashback da conta do cliente. A ação não pode ser desfeita.")
+            st.warning(f"**Atenção:** Você está prestes a excluir a venda selecionada. Esta ação irá estornar o valor e o cashback da conta do cliente, incluindo bônus de indicação.")
             if st.button("🔴 Confirmar Exclusão da Venda", type="primary"):
                 excluir_lancamento_venda(index_para_excluir)
+
 
 def render_home():
     st.header("Seja Bem-Vinda ao Painel de Gestão de Cashback Doce&Bella!")
     st.markdown("---")
+
     total_clientes = len(st.session_state.clientes)
     total_cashback_pendente = st.session_state.clientes['Cashback Disponível'].sum()
-    vendas_df = st.session_state.lancamentos[st.session_state.lancamentos['Tipo'] == 'Venda'].copy()
+    
+    # Filtra vendas
+    vendas_df = st.session_state.lancamentos[st.session_state.lancamentos['Tipo'] == 'Venda']
+    
     total_vendas_mes = 0.0
+    
     if not vendas_df.empty:
-        vendas_df['Data'] = pd.to_datetime(vendas_df['Data'], errors='coerce')
-        vendas_mes = vendas_df[vendas_df['Data'].dt.month == date.today().month]
+        # Garante que a coluna 'Data' seja tratada corretamente
+        vendas_df_copy = vendas_df.copy()
+        vendas_df_copy['Data'] = pd.to_datetime(vendas_df_copy['Data'], errors='coerce')
+        
+        vendas_mes = vendas_df_copy[
+            vendas_df_copy['Data'].apply(
+                # Filtra pelo mês atual
+                lambda x: x.month == date.today().month if pd.notna(x) else False
+            )
+        ]
+        
         if not vendas_mes.empty:
-            total_vendas_mes = pd.to_numeric(vendas_mes['Valor Venda/Resgate'], errors='coerce').sum()
+            # Garante que a coluna de valor é numérica antes de somar
+            vendas_mes['Valor Venda/Resgate'] = pd.to_numeric(vendas_mes['Valor Venda/Resgate'], errors='coerce').fillna(0)
+            total_vendas_mes = vendas_mes['Valor Venda/Resgate'].sum()
+
+
     col1, col2, col3 = st.columns(3)
+    
     col1.metric("Clientes Cadastrados", total_clientes)
     col2.metric("Total de Cashback Devido", f"R$ {total_cashback_pendente:,.2f}")
     col3.metric("Volume de Vendas (Mês Atual)", f"R$ {total_vendas_mes:,.2f}")
+
     st.markdown("---")
-    st.markdown("### Acesso Rápido")
-    # Removidos botões de navegação interna para evitar conflito com app.py
+    st.markdown("### Próximos Passos Rápidos")
+    
+    col_nav1, col_nav2, col_nav3 = st.columns(3)
+    
+    # Note: O sistema principal do app.py irá controlar a navegação.
+    # Aqui, a navegação é feita chamando render_home() e rerunning para a aba correta.
+    
+    # Mapeamento para permitir que o clique no botão atualize a aba interna (se for o caso)
+    if 'cashback_tab_atual' not in st.session_state:
+        st.session_state.cashback_tab_atual = "Home"
+
+    # Estes botões dependem de uma variável de estado interna para mudar a aba.
+    if col_nav1.button("▶️ Lançar Nova Venda", use_container_width=True):
+        st.session_state.cashback_tab_atual = "Lançamento"
+        st.rerun()
+    
+    if col_nav2.button("👥 Cadastrar Nova Cliente", use_container_width=True):
+        st.session_state.cashback_tab_atual = "Cadastro"
+        st.rerun()
+
+    if col_nav3.button("📈 Ver Relatórios de Vendas", use_container_width=True):
+        st.session_state.cashback_tab_atual = "Relatórios"
+        st.rerun()
 
 # ==============================================================================
 # FUNÇÃO CASHBACK PRINCIPAL (ISOLADA)
@@ -616,12 +832,9 @@ def render_home():
 def cashback_system(): # NOVO NOME DA FUNÇÃO EXPORTADA
     st.markdown("""
         <style>
-        /* CSS INTERNO MANTIDO APENAS PARA ESTILO E NÃO PARA NAVEGAÇÃO */
-        .stApp { background-color: #f7f7f7; }
-        .nivel-diamante { color: #3f51b5; font-weight: bold; }
-        .nivel-ouro { color: #ffc107; font-weight: bold; }
-        .nivel-prata { color: #607d8b; font-weight: bold; }
-        /* AUMENTA O TAMANHO DAS ABAS INTERNAS (st.tabs) */
+        /* CSS LOCAL: Remove o Logo Duplicado e Corrige o Tamanho da Fonte das Abas Internas */
+        
+        /* Aumenta o tamanho das abas internas (st.tabs) */
         button[data-baseweb="tab"] {
             min-width: 150px !important;
             padding: 10px 20px !important;
@@ -640,8 +853,10 @@ def cashback_system(): # NOVO NOME DA FUNÇÃO EXPORTADA
     if 'deleting_client' not in st.session_state: st.session_state.deleting_client = False
     if 'valor_venda' not in st.session_state: st.session_state.valor_venda = 0.00
     if 'data_version' not in st.session_state: st.session_state.data_version = 0
-    if 'clientes' not in st.session_state:
+    if 'clientes' not in st.session_state or 'cashback_tab_atual' not in st.session_state:
+        # Carregamos os dados aqui
         st.session_state.clientes, st.session_state.lancamentos, st.session_state.produtos_turbo = carregar_dados()
+        st.session_state.cashback_tab_atual = "Home"
 
     # --- MAPEAMENTO DE FUNÇÕES INTERNAS ---
     PAGINAS_INTERNAS = {
@@ -650,13 +865,23 @@ def cashback_system(): # NOVO NOME DA FUNÇÃO EXPORTADA
     }
     
     # --- RENDERIZAÇÃO USANDO ABAS NATIVAS (st.tabs) ---
-    # LOGO REMOVIDO: Nenhuma chamada de st.image é feita aqui.
     
     tab_list = ["Home", "Lançamento", "Cadastro", "Produtos Turbo", "Relatórios"]
+    
+    # Encontra o índice da aba atual (para setar como padrão)
+    default_index = tab_list.index(st.session_state.cashback_tab_atual) if st.session_state.cashback_tab_atual in tab_list else 0
+    
     tabs = st.tabs(tab_list)
     
+    # Renderiza o conteúdo na aba correta
     for i, nome_tab in enumerate(tab_list):
         with tabs[i]:
-            PAGINAS_INTERNAS[nome_tab]()
+            # Se a aba atual no state for a aba que está sendo renderizada:
+            if nome_tab == st.session_state.cashback_tab_atual:
+                 PAGINAS_INTERNAS[nome_tab]()
+            else:
+                # Chama a função principal de renderização, mas não força a rerenderização completa
+                PAGINAS_INTERNAS[nome_tab]()
+
 
 # ⚠️ Nenhuma chamada de função deve estar aqui. O app.py chama cashback_system().
