@@ -578,7 +578,7 @@ def processar_dataframe(df):
     )
     
     # 4. Cria a coluna final de exibição do cliente (prioriza o Nome Completo do cliente.csv)
-    # Se o ClientID for válido e o Nome Completo existir, usa ele. Caso contrário, usa a coluna 'Cliente' original.
+    # Se o ClientID for válido (> 0) e o Nome Completo existir, usa ele. Caso contrário, usa a coluna 'Cliente' original.
     df_proc['Nome Completo Cliente'] = df_proc['Nome Completo Cliente'].fillna('')
     df_proc['Cliente'] = df_proc.apply(
         lambda row: row['Nome Completo Cliente'] if row['ClientID'] > 0 and row['Nome Completo Cliente'] else row['Cliente'],
@@ -2323,12 +2323,8 @@ def historico_compras():
                         st.rerun()
             else:
                 st.info("Selecione um item no menu acima para editar ou excluir.")
-                
-# ==============================================================================
-# NOVA FUNÇÃO DE LÓGICA DE CLIENTES PARA LIVRO CAIXA
-# ==============================================================================
 
-def gerenciar_cliente_venda(cliente_str, clientes_df): # << NOVO: Gerenciamento de cliente com ID
+def gerenciar_cliente_venda(cliente_str, clientes_df): # << MANTIDA A LÓGICA DE GERENCIAR CLIENTES
     """
     Busca cliente por ClientID ou Nome. Adiciona novo cliente se necessário.
     Retorna o ClientID e o Nome do cliente.
@@ -2761,16 +2757,26 @@ def livro_caixa():
                     cliente_id_final = 0
                     cliente_nome_final = ""
                 
-                # Alerta de Dívida (Ajustada para usar o ClientID/Nome Completo)
-                if cliente_id_final > 0 and not edit_mode:
-                    cliente_display = cliente_nome_final
+                # **BLOCO CORRIGIDO**: Lógica de Alerta de Dívida (AGORA BUSCA PELO ClientID OU NOME) # << CORREÇÃO APLICADA AQUI
+                if (cliente_id_final > 0 or cliente_nome_final) and not edit_mode:
                     
-                    # Filtra por ClientID no dataframe de exibição
-                    df_dividas_cliente = df_exibicao[
-                        (df_exibicao["ClientID"] == cliente_id_final) &
-                        (df_exibicao["Status"] == "Pendente") &
-                        (df_exibicao["Tipo"] == "Entrada")
-                    ].sort_values(by="Data Pagamento", ascending=True).copy()
+                    cliente_display = cliente_nome_final # Nome a ser exibido
+                    
+                    # CORREÇÃO CRÍTICA: Prioriza o ClientID, mas cai para o filtro por nome se ClientID for 0 (para dados antigos)
+                    if cliente_id_final > 0:
+                        df_dividas_cliente = df_exibicao[
+                            (df_exibicao["ClientID"] == cliente_id_final) &
+                            (df_exibicao["Status"] == "Pendente") &
+                            (df_exibicao["Tipo"] == "Entrada")
+                        ].sort_values(by="Data Pagamento", ascending=True).copy()
+                    else: 
+                        # Fallback para filtro por NOME, essencial para dívidas antigas
+                        df_dividas_cliente = df_exibicao[
+                            (df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente_nome_final.strip().lower())) &
+                            (df_exibicao["Status"] == "Pendente") &
+                            (df_exibicao["Tipo"] == "Entrada")
+                        ].sort_values(by="Data Pagamento", ascending=True).copy()
+
 
                     if not df_dividas_cliente.empty:
                         
@@ -2785,7 +2791,7 @@ def livro_caixa():
 
                         st.session_state.cliente_selecionado_divida = divida_mais_antiga.name 
 
-                        st.warning(f"💰 Dívida em Aberto para {cliente_display}: R$ {valor_divida_antiga:,.2f}") 
+                        st.warning(f"💰 Dívida em Aberto para **{cliente_display}**: R$ {valor_divida_antiga:,.2f}") 
                         st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
 
                         col_btn_add, col_btn_conc, col_btn_canc = st.columns(3)
@@ -3236,7 +3242,7 @@ def livro_caixa():
                             "Data Pagamento": data_pagamento_final,
                             "RecorrenciaID": "",
                             "TransacaoPaiID": "",
-                            "ClientID": cliente_id_final # << NOVO: ClientID (0 para Saída)
+                            "ClientID": cliente_id_final # << NOVO: ClientID (0 para Saída ou para clientes antigos)
                         }
                         
                         if edit_mode:
