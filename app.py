@@ -538,6 +538,33 @@ def calcular_resumo(df):
     saldo = df_realizada["Valor"].sum()
     return total_entradas, total_saidas, saldo
 
+# ==============================================================================
+# NOVA FUNÇÃO: Tratamento rigoroso de valor em aberto
+# ==============================================================================
+def calcular_valor_em_aberto(linha):
+    """
+    Calcula o valor absoluto e arredondado para 2 casas decimais de uma linha do DataFrame.
+    Essencial para resolver problemas de float em campos de input do Streamlit.
+    """
+    try:
+        # A linha pode ser um DataFrame de 1 linha ou uma Series
+        if isinstance(linha, pd.DataFrame) and not linha.empty:
+            valor_raw = pd.to_numeric(linha['Valor'].iloc[0], errors='coerce')
+        elif isinstance(linha, pd.Series):
+            valor_raw = pd.to_numeric(linha['Valor'], errors='coerce')
+        else:
+            return 0.0
+            
+        # Garante que é um float único e não NaN
+        valor_float = float(valor_raw) if pd.notna(valor_raw) and not isinstance(valor_raw, pd.Series) else 0.0
+        
+        # Retorna o valor absoluto e arredondado
+        return round(abs(valor_float), 2)
+    except Exception:
+        return 0.0
+# ==============================================================================
+
+
 def format_produtos_resumo(produtos_json):
     if pd.isna(produtos_json) or produtos_json == "": return ""
     if produtos_json:
@@ -669,7 +696,6 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             st.session_state.cad_preco_vista = "0,00"
             st.session_state.cad_validade = date.today()
             st.session_state.cad_foto_url = ""
-            st.session_state.cad_cb = ""
             if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
             return True
         return False
@@ -1392,9 +1418,9 @@ def relatorio_produtos():
     
     # Calcula dias restantes
     def calcular_dias_restantes(x):
-        if pd.notna(x) and isinstance(x, date):
-            return (x - date.today()).days
-        return float('inf')
+            if pd.notna(x) and isinstance(x, date):
+                return (x - date.today()).days
+            return float('inf')
 
     df_vencimento['Dias Restantes'] = df_vencimento['Validade'].apply(calcular_dias_restantes)
     df_vencimento = df_vencimento.sort_values("Dias Restantes")
@@ -2389,20 +2415,9 @@ def livro_caixa():
 
             # FIM DA VERIFICAÇÃO DE SEGURANÇA
             
-            # >> CORREÇÃO FINAL PARA VALOR DA DÍVIDA NA QUITAÇÃO RÁPIDA (Linhas 1303-1313) <<
-            try:
-                # 1. Tenta converter para numérico e pega o valor absoluto
-                valor_em_aberto_raw = pd.to_numeric(divida_para_quitar['Valor'], errors='coerce')
-                # 2. Se for uma Série, pega o primeiro elemento
-                if isinstance(valor_em_aberto_raw, pd.Series):
-                    valor_em_aberto_raw = valor_em_aberto_raw.iloc[0]
-                # 3. Garante que é um float, trata NaN e pega o valor absoluto
-                valor_em_aberto = abs(float(valor_em_aberto_raw)) if pd.notna(valor_em_aberto_raw) else 0.0
-                # 4. Arredonda para 2 casas decimais para evitar problemas de precisão do float no number_input
-                valor_em_aberto = round(valor_em_aberto, 2)
-            except Exception:
-                valor_em_aberto = 0.0
-            # << FIM DA CORREÇÃO >>
+            # >> USO DA NOVA FUNÇÃO PARA GARANTIR VALOR CORRETO E ARREDONDADO <<
+            valor_em_aberto = calcular_valor_em_aberto(divida_para_quitar)
+            # << FIM DO USO DA NOVA FUNÇÃO >>
             
             if valor_em_aberto <= 0.01:
                 st.session_state.divida_a_quitar = None
@@ -2548,19 +2563,18 @@ def livro_caixa():
                         num_dividas = df_dividas_cliente.shape[0]
                         divida_mais_antiga = df_dividas_cliente.iloc[0]
                         
-                        # Extrai o valor da dívida mais antiga (a que será editada/quitada)
-                        valor_divida_antiga_raw = pd.to_numeric(divida_mais_antiga['Valor'], errors='coerce')
-                        valor_divida_antiga = round(abs(float(valor_divida_antiga_raw)), 2)
+                        # Extrai o valor da dívida mais antiga (a que será editada/quitada) usando a nova função
+                        valor_divida_antiga = calcular_valor_em_aberto(divida_mais_antiga)
                         
                         original_idx_divida = divida_mais_antiga['original_index']
                         vencimento_str = divida_mais_antiga['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_mais_antiga['Data Pagamento']) else "S/ Data"
 
                         st.session_state.cliente_selecionado_divida = divida_mais_antiga.name # Salva o índice original
 
-                        # SUA NOVA LINHA AQUI
+                        # Sua nova linha de alerta
                         st.warning(f"💰 Dívida em Aberto para {cliente}: R$ {valor_divida_antiga:,.2f}") 
                         
-                        # ALERTA DE INFORMAÇÃO
+                        # ALERTA DE INFORMAÇÃO sobre o total
                         st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
 
                         col_btn_add, col_btn_conc, col_btn_canc = st.columns(3)
@@ -3392,7 +3406,7 @@ def livro_caixa():
                 divida_para_concluir = None
                 
                 opcoes_pendentes_map = {
-                    f"ID {row['ID Visível']} | {row['Tipo']} | R$ {row['Valor'] if row['Tipo'] == 'Entrada' else abs(row['Valor']):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
+                    f"ID {row['ID Visível']} | {row['Tipo']} | R$ {calcular_valor_em_aberto(row):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
                     for index, row in df_pendentes_ordenado.iterrows()
                 }
                 opcoes_keys = ["Selecione uma dívida..."] + list(opcoes_pendentes_map.keys())
@@ -3402,10 +3416,11 @@ def livro_caixa():
                     original_idx_para_selecionar = st.session_state.divida_parcial_id
                     try:
                         divida_row = df_pendentes_ordenado[df_pendentes_ordenado['original_index'] == original_idx_para_selecionar].iloc[0]
-                        option_key = f"ID {divida_row['ID Visível']} | {divida_row['Tipo']} | R$ {divida_row['Valor'] if divida_row['Tipo'] == 'Entrada' else abs(divida_row['Valor']):,.2f} | Venc.: {divida_row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_row['Data Pagamento']) else 'S/ Data'} | {divida_row['Cliente']}"
+                        valor_row_formatado = calcular_valor_em_aberto(divida_row)
+                        option_key = f"ID {divida_row['ID Visível']} | {divida_row['Tipo']} | R$ {valor_row_formatado:,.2f} | Venc.: {divida_row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_row['Data Pagamento']) else 'S/ Data'} | {divida_row['Cliente']}"
                         
                         opcoes_pendentes = {
-                            f"ID {row['ID Visível']} | {row['Tipo']} | R$ {row['Valor'] if row['Tipo'] == 'Entrada' else abs(row['Valor']):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
+                            f"ID {row['ID Visível']} | {row['Tipo']} | R$ {calcular_valor_em_aberto(row):,.2f} | Venc.: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'} | {row['Cliente']}": row['original_index']
                             for index, row in df_pendentes_ordenado.iterrows()
                         }
                         
@@ -3438,20 +3453,9 @@ def livro_caixa():
 
 
                 if divida_para_concluir is not None:
-                    # >> CORREÇÃO FINAL PARA VALOR DA DÍVIDA NA QUITAÇÃO DE RELATÓRIOS (Linhas 2033-2043) <<
-                    try:
-                        # 1. Tenta converter para numérico e pega o valor absoluto
-                        valor_em_aberto_raw = pd.to_numeric(divida_para_concluir['Valor'], errors='coerce')
-                        # 2. Se for uma Série, pega o primeiro elemento
-                        if isinstance(valor_em_aberto_raw, pd.Series):
-                            valor_em_aberto_raw = valor_em_aberto_raw.iloc[0]
-                        # 3. Garante que é um float, trata NaN e pega o valor absoluto
-                        valor_em_aberto = abs(float(valor_em_aberto_raw)) if pd.notna(valor_em_aberto_raw) else 0.0
-                        # 4. Arredonda para 2 casas decimais para evitar problemas de precisão do float no number_input
-                        valor_em_aberto = round(valor_em_aberto, 2)
-                    except Exception:
-                        valor_em_aberto = 0.0
-                    # << FIM DA CORREÇÃO >>
+                    # >> USO DA NOVA FUNÇÃO PARA GARANTIR VALOR CORRETO E ARREDONDADO <<
+                    valor_em_aberto = calcular_valor_em_aberto(divida_para_concluir)
+                    # << FIM DO USO DA NOVA FUNÇÃO >>
 
                     st.markdown(f"**Valor em Aberto:** R$ {valor_em_aberto:,.2f}")
                     
