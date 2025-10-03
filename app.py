@@ -208,7 +208,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# --- Funções e Constantes de Persistência (Mantidas do original) ---
+# --- Funções e Constantes de Persistência (Mantidos do original) ---
 
 # Importa a biblioteca PyGithub para gerenciamento de persistência
 try:
@@ -2183,6 +2183,11 @@ def historico_compras():
                 salvar_compra = st.form_submit_button("💾 Adicionar Compra", type="primary", use_container_width=True)
                 cancelar_edicao = False
 
+            # --- CORREÇÃO: Botão de submissão de fallback para evitar o alerta "Missing Submit Button" ---
+            # Este botão é sempre renderizado e desabilitado, garantindo a submissão no fluxo do Streamlit.
+            st.form_submit_button("Submit Hidden (Fallback)", key="compra_hidden_submit", disabled=True, type="secondary", help="Hidden button to prevent alert.")
+            # --- FIM DA CORREÇÃO ---
+
 
             if salvar_compra:
                 if not nome_produto or valor_total_calculado <= 0 or quantidade <= 0:
@@ -2597,6 +2602,10 @@ def livro_caixa():
 
                 concluir = st.form_submit_button("✅ Registrar Pagamento e Quitar", type="primary", use_container_width=True)
                 cancelar_quitacao = st.form_submit_button("❌ Cancelar Quitação", type="secondary", use_container_width=True)
+                
+                # Botão de submissão de fallback para evitar o alerta "Missing Submit Button"
+                st.form_submit_button("Submit Hidden (Fallback)", key="quitar_hidden_submit", disabled=True, type="secondary", help="Hidden button to prevent alert.")
+
 
                 if cancelar_quitacao:
                     st.session_state.divida_a_quitar = None
@@ -3128,6 +3137,12 @@ def livro_caixa():
                 label_btn = "Adicionar Recorrência e Salvar" if is_recorrente else "Adicionar e Salvar"
                 enviar = st.form_submit_button(label_btn, type="primary", use_container_width=True, help=label_btn)
                 cancelar = False 
+
+            # --- CORREÇÃO: Botão de submissão de fallback para evitar o alerta "Missing Submit Button" ---
+            # Este botão é sempre renderizado e desabilitado, garantindo a submissão no fluxo do Streamlit.
+            st.form_submit_button("Submit Hidden (Fallback)", key="movimentacao_hidden_submit", disabled=True, type="secondary", help="Hidden button to prevent alert.")
+            # --- FIM DA CORREÇÃO ---
+
 
             if enviar:
                 # [Lógica de validação e salvamento do código original, movida aqui]
@@ -3694,6 +3709,10 @@ def livro_caixa():
                         forma_pagt_concluir = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="forma_pagt_concluir")
 
                     concluir = st.form_submit_button("✅ Registrar Pagamento", use_container_width=True, type="primary")
+                    
+                    # Botão de submissão de fallback para evitar o alerta "Missing Submit Button"
+                    st.form_submit_button("Submit Hidden (Fallback)", key="concluir_hidden_submit", disabled=True, type="secondary", help="Hidden button to prevent alert.")
+
 
                     if concluir:
                         valor_restante = round(valor_em_aberto - valor_pago, 2)
