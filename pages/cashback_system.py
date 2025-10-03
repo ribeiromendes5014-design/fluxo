@@ -1,4 +1,4 @@
-# pages/cashback_system.py (SISTEMA DE CASHBACK - CORRIGIDO)
+# pages/cashback_system.py (SISTEMA DE CASHBACK - CORRIGIDO E ESTILIZADO)
 
 # -*- coding: utf-8 -*-
 import streamlit as st
@@ -621,15 +621,28 @@ def cashback_system(): # NOVO NOME DA FUNÇÃO EXPORTADA
         .nivel-diamante { color: #3f51b5; font-weight: bold; }
         .nivel-ouro { color: #ffc107; font-weight: bold; }
         .nivel-prata { color: #607d8b; font-weight: bold; }
-        /* Outros estilos de componente específicos */
+        /* AUMENTA O TAMANHO DAS ABAS INTERNAS (st.tabs) */
+        button[data-baseweb="tab"] {
+            min-width: 150px !important;
+            padding: 10px 20px !important;
+            font-size: 16px !important;
+            font-weight: bold !important;
+        }
+        /* ESTILO DA BARRA DE NAVEGAÇÃO INTERNA */
+        div[role="tablist"] {
+            border-bottom: 2px solid #E91E63;
+        }
         </style>
     """, unsafe_allow_html=True)
     
     # --- EXECUÇÃO PRINCIPAL E CARREGAMENTO DE DADOS ---
+    # Inicializa variáveis de estado
     if 'editing_client' not in st.session_state: st.session_state.editing_client = False
     if 'deleting_client' not in st.session_state: st.session_state.deleting_client = False
     if 'valor_venda' not in st.session_state: st.session_state.valor_venda = 0.00
     if 'data_version' not in st.session_state: st.session_state.data_version = 0
+    
+    # Carrega dados
     if 'clientes' not in st.session_state:
         st.session_state.clientes, st.session_state.lancamentos, st.session_state.produtos_turbo = carregar_dados()
 
@@ -640,7 +653,7 @@ def cashback_system(): # NOVO NOME DA FUNÇÃO EXPORTADA
     }
     
     # --- RENDERIZAÇÃO USANDO ABAS NATIVAS (st.tabs) ---
-    st.image(LOGO_DOCEBELLA_URL, width=200) # Mantém o logo no topo da página
+    # LOGO REMOVIDO: Agora o logo será exibido apenas no cabeçalho customizado.
     
     tab_list = ["Home", "Lançamento", "Cadastro", "Produtos Turbo", "Relatórios"]
     tabs = st.tabs(tab_list)
