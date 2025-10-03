@@ -1,4 +1,4 @@
-# constants_and_css.py
+# constants_and_css.py (VERSÃO FINAL E CORRIGIDA)
 
 import streamlit as st
 from datetime import datetime, timedelta, date
@@ -109,9 +109,10 @@ def render_global_config():
             text-overflow: ellipsis !important;
         }
         
-        /* Remove a Sidebar do Streamlit padrão, pois usaremos a navegação customizada no topo */
+        /* CRÍTICO: ESCONDE A BARRA LATERAL ESQUERDA QUE LISTA OS ARQUIVOS */
         [data-testid="stSidebar"] {
-            width: 350px; 
+            visibility: hidden; 
+            width: 0px !important; 
         }
         
         /* Estilos adicionais para o corpo do app (mantidos) */
