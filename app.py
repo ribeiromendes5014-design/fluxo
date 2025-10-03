@@ -2389,22 +2389,20 @@ def livro_caixa():
 
             # FIM DA VERIFICAÇÃO DE SEGURANÇA
             
-            # >> INÍCIO DA CORREÇÃO SOLICITADA PARA TRATAMENTO DE VALORES <<
-            # Nova lógica para garantir que o valor seja um float arredondado (Corrigindo a inconsistência de 50.00 vs 96.00)
+            # >> CORREÇÃO FINAL PARA VALOR DA DÍVIDA NA QUITAÇÃO RÁPIDA (Linhas 1303-1313) <<
             try:
                 # 1. Tenta converter para numérico e pega o valor absoluto
-                valor_em_aberto = pd.to_numeric(divida_para_quitar['Valor'], errors='coerce')
-                # 2. Se for uma Série, pega o primeiro elemento e trata NaN
-                if isinstance(valor_em_aberto, pd.Series):
-                    valor_em_aberto = valor_em_aberto.iloc[0]
+                valor_em_aberto_raw = pd.to_numeric(divida_para_quitar['Valor'], errors='coerce')
+                # 2. Se for uma Série, pega o primeiro elemento
+                if isinstance(valor_em_aberto_raw, pd.Series):
+                    valor_em_aberto_raw = valor_em_aberto_raw.iloc[0]
                 # 3. Garante que é um float, trata NaN e pega o valor absoluto
-                valor_em_aberto = abs(float(valor_em_aberto)) if pd.notna(valor_em_aberto) else 0.0
-                # 4. Arredonda para 2 casas decimais para evitar problemas de precisão do float
+                valor_em_aberto = abs(float(valor_em_aberto_raw)) if pd.notna(valor_em_aberto_raw) else 0.0
+                # 4. Arredonda para 2 casas decimais para evitar problemas de precisão do float no number_input
                 valor_em_aberto = round(valor_em_aberto, 2)
             except Exception:
                 valor_em_aberto = 0.0
-            # << FIM DA CORREÇÃO SOLICITADA PARA TRATAMENTO DE VALORES >>
-
+            # << FIM DA CORREÇÃO >>
             
             if valor_em_aberto <= 0.01:
                 st.session_state.divida_a_quitar = None
@@ -2421,7 +2419,7 @@ def livro_caixa():
                     valor_pago = st.number_input(
                         f"Valor Pago Agora (Máx: R$ {valor_em_aberto:,.2f})", 
                         min_value=0.01, 
-                        max_value=valor_em_aberto, 
+                        max_value=valor_em_aberto, # O max_value agora é um float simples e arredondado
                         value=valor_em_aberto, # Valor sugerido é o total
                         format="%.2f",
                         key="input_valor_pago_quitar"
@@ -2545,16 +2543,23 @@ def livro_caixa():
 
                     if not df_dividas_cliente.empty:
                         
-                        total_divida = df_dividas_cliente["Valor"].abs().sum()
+                        # CORREÇÃO: Arredonda o valor antes de somar
+                        total_divida = df_dividas_cliente["Valor"].abs().round(2).sum() 
                         num_dividas = df_dividas_cliente.shape[0]
                         divida_mais_antiga = df_dividas_cliente.iloc[0]
+                        
+                        # Extrai o valor da dívida mais antiga (para o formulário de quitação)
+                        valor_divida_antiga = abs(divida_mais_antiga['Valor'])
+                        
                         original_idx_divida = divida_mais_antiga['original_index']
                         vencimento_str = divida_mais_antiga['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_mais_antiga['Data Pagamento']) else "S/ Data"
 
-                        st.session_state.cliente_selecionado_divida = original_idx_divida # Salva o ID da dívida mais antiga
-                        
+                        st.session_state.cliente_selecionado_divida = divida_mais_antiga.name # Salva o índice original
+
+                        # ATUALIZAÇÃO DO ALERTA: Exibe o total e o valor da dívida mais antiga.
                         st.warning(f"🚨 **{cliente.strip()}** possui **{num_dividas}** conta(s) a receber pendente(s)!")
-                        st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
+                        # ATENÇÃO: Se o problema era a soma, o valor correto para exibir aqui é o VALOR DA DÍVIDA MAIS ANTIGA, que é a que será quitada.
+                        st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga tem valor de: **R$ {valor_divida_antiga:,.2f}**. Vencimento: **{vencimento_str}**")
 
                         col_btn_add, col_btn_conc, col_btn_canc = st.columns(3)
 
@@ -3431,21 +3436,20 @@ def livro_caixa():
 
 
                 if divida_para_concluir is not None:
-                    # >> INÍCIO DA CORREÇÃO SOLICITADA PARA TRATAMENTO DE VALORES (2) <<
-                    # Nova lógica para garantir que o valor seja um float arredondado (Corrigindo a inconsistência de 50.00 vs 96.00)
+                    # >> CORREÇÃO FINAL PARA VALOR DA DÍVIDA NA QUITAÇÃO DE RELATÓRIOS (Linhas 2033-2043) <<
                     try:
                         # 1. Tenta converter para numérico e pega o valor absoluto
-                        valor_em_aberto = pd.to_numeric(divida_para_concluir['Valor'], errors='coerce')
-                        # 2. Se for uma Série, pega o primeiro elemento e trata NaN
-                        if isinstance(valor_em_aberto, pd.Series):
-                            valor_em_aberto = valor_em_aberto.iloc[0]
+                        valor_em_aberto_raw = pd.to_numeric(divida_para_concluir['Valor'], errors='coerce')
+                        # 2. Se for uma Série, pega o primeiro elemento
+                        if isinstance(valor_em_aberto_raw, pd.Series):
+                            valor_em_aberto_raw = valor_em_aberto_raw.iloc[0]
                         # 3. Garante que é um float, trata NaN e pega o valor absoluto
-                        valor_em_aberto = df_dividas_cliente["Valor"].abs().sum()
-                        # 4. Arredonda para 2 casas decimais para evitar problemas de precisão do float
+                        valor_em_aberto = abs(float(valor_em_aberto_raw)) if pd.notna(valor_em_aberto_raw) else 0.0
+                        # 4. Arredonda para 2 casas decimais para evitar problemas de precisão do float no number_input
                         valor_em_aberto = round(valor_em_aberto, 2)
                     except Exception:
                         valor_em_aberto = 0.0
-                    # << FIM DA CORREÇÃO SOLICITADA PARA TRATAMENTO DE VALORES (2) >>
+                    # << FIM DA CORREÇÃO >>
 
                     st.markdown(f"**Valor em Aberto:** R$ {valor_em_aberto:,.2f}")
                     
@@ -3611,4 +3615,3 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
-
