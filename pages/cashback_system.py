@@ -610,7 +610,7 @@ def render_cadastro():
                 st.rerun()  
         
         with col_exclusao:
-            if st.button("🗑️ Excluir Cliente", use_container_width=True, key='btn_excluir', type='primary'):
+            if st.button("🗑️ Excluir Cliente", use_container_width=True, type='primary'):
                 st.session_state.deleting_client = cliente_selecionado_operacao
                 st.session_state.editing_client = False  
                 st.rerun()  
@@ -748,7 +748,7 @@ def render_relatorios():
     else:
         vendas_df_sorted = vendas_df.sort_values(by="Data", ascending=False)
         
-        # CORREÇÃO DO ATTRIBUTEERROR: Formata o valor antes de criar o dicionário
+        # CORREÇÃO FINAL DO ATTRIBUTEERROR: Formata o valor antes de criar o dicionário e usa a coluna formatada.
         vendas_df_sorted['Valor_Formatado'] = pd.to_numeric(vendas_df_sorted['Valor Venda/Resgate'], errors='coerce').fillna(0).map('{:.2f}'.format)
 
         options_map = {
@@ -808,9 +808,6 @@ def render_home():
     st.markdown("### Próximos Passos Rápidos")
     
     col_nav1, col_nav2, col_nav3 = st.columns(3)
-    
-    # Note: O sistema principal do app.py irá controlar a navegação.
-    # Aqui, a navegação é feita chamando render_home() e rerunning para a aba correta.
     
     # Mapeamento para permitir que o clique no botão atualize a aba interna (se for o caso)
     if 'cashback_tab_atual' not in st.session_state:
@@ -872,14 +869,9 @@ def cashback_system(): # NOVO NOME DA FUNÇÃO EXPORTADA
     
     tab_list = ["Home", "Lançamento", "Cadastro", "Produtos Turbo", "Relatórios"]
     
-    # Encontra o índice da aba atual (para setar como padrão)
-    # A variável default_index não é estritamente necessária aqui, já que estamos usando st.tabs
-    
     tabs = st.tabs(tab_list)
     
     # Renderiza o conteúdo na aba correta
     for i, nome_tab in enumerate(tab_list):
         with tabs[i]:
-            # Mantemos a lógica de chamar a função, mas garantimos que o estado seja atualizado
-            # no clique dos botões internos (render_home) e que a página correta seja exibida.
             PAGINAS_INTERNAS[nome_tab]()
