@@ -240,7 +240,7 @@ def livro_caixa():
                     if idx_original not in st.session_state.df.index:
                         st.error("Erro interno ao localizar dívida. O registro original foi perdido.")
                         st.rerun()
-                        # return # Comentado para evitar erro, st.rerun() já para a execução
+                        return
 
                     row_original = divida_para_quitar
 
@@ -1340,7 +1340,7 @@ def livro_caixa():
                 original_idx_concluir = opcoes_pendentes_map.get(divida_selecionada_str)
 
                 if original_idx_concluir is not None and divida_para_concluir is None:
-                    # Carrega os dados da dívida se o usuário selecionar manually
+                    # Carrega os dados da dívida se o usuário selecionar manualmente
                     divida_para_concluir = df_pendentes_ordenado[df_pendentes_ordenado['original_index'] == original_idx_concluir].iloc[0]
 
 
@@ -1376,7 +1376,7 @@ def livro_caixa():
                         if idx_original not in st.session_state.df.index:
                             st.error("Erro interno ao localizar dívida. O registro original foi perdido.")
                             st.rerun()
-                            # return # Comentado para evitar erro
+                            return
 
                         row_original = st.session_state.df.loc[idx_original].copy()
 
@@ -1449,3 +1449,5 @@ def livro_caixa():
             df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
 
             st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+
+}
