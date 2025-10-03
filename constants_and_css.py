@@ -7,7 +7,7 @@ import pandas as pd
 import json
 import hashlib
 
-# ==================== CONSTANTES DE NEGÓCIO E DE ARQUIVO ====================
+# ==================== CONSTANTES DE NEGÓCIO E ARQUIVOS ====================
 FATOR_CARTAO = 0.8872
 LOJAS_DISPONIVEIS = ["Doce&bella", "Papelaria", "Fotografia", "Outro"]
 CATEGORIAS_SAIDA = ["Aluguel", "Salários/Pessoal", "Marketing/Publicidade", "Fornecedores/Matéria Prima", "Despesas Fixas", "Impostos/Taxas", "Outro/Diversos", "Não Categorizado"]
