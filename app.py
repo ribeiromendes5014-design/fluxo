@@ -309,7 +309,6 @@ ARQ_LOCAL = "livro_caixa.csv" # Usado para backup local e constante
 PATH_DIVIDAS = CSV_PATH
 ARQ_COMPRAS = "historico_compras.csv"
 ARQ_PROMOCOES = "promocoes.csv" 
-ARQ_CLIENTES = "clientes.csv" # << NOVO: ARQUIVO DE CLIENTES
 COLUNAS_COMPRAS = ["Data", "Produto", "Quantidade", "Valor Total", "Cor", "FotoURL"] 
 
 COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit (com produtos/categorias)"
@@ -319,10 +318,9 @@ COMMIT_MESSAGE_DEBT_REALIZED = "Conclui dívidas pendentes"
 COMMIT_MESSAGE_PROD = "Atualização automática de estoque/produtos"
 
 COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo", "Produtos Vendidos", "Categoria", "Status", "Data Pagamento"]
-# Adicionando TransacaoPaiID e ClientID para rastrear pagamentos parciais e clientes
-COLUNAS_PADRAO_COMPLETO = COLUNAS_PADRAO + ["RecorrenciaID", "TransacaoPaiID", "ClientID"] # << NOVO: ClientID
-# Incluindo Nome Completo Cliente para o merge
-COLUNAS_COMPLETAS_PROCESSADAS = COLUNAS_PADRAO + ["ID Visível", "original_index", "Data_dt", "Saldo Acumulado", "Cor_Valor", "ClientID", "Nome Completo Cliente"] # << NOVO: ClientID e Nome
+# Adicionando TransacaoPaiID para rastrear pagamentos parciais
+COLUNAS_PADRAO_COMPLETO = COLUNAS_PADRAO + ["RecorrenciaID", "TransacaoPaiID"]
+COLUNAS_COMPLETAS_PROCESSADAS = COLUNAS_PADRAO + ["ID Visível", "original_index", "Data_dt", "Saldo Acumulado", "Cor_Valor"]
 
 FATOR_CARTAO = 0.8872
 LOJAS_DISPONIVEIS = ["Doce&bella", "Papelaria", "Fotografia", "Outro"]
@@ -348,16 +346,6 @@ def prox_id(df, coluna_id="ID"):
             return str(pd.to_numeric(df[coluna_id], errors='coerce').fillna(0).astype(int).max() + 1)
         except:
             return str(len(df) + 1)
-            
-def prox_id_cliente(df): # << NOVO: Próximo ID para clientes
-    """Retorna o próximo ID numérico para a tabela de clientes."""
-    if df.empty:
-        return 1
-    else:
-        try:
-            return pd.to_numeric(df["ClientID"], errors='coerce').fillna(0).astype(int).max() + 1
-        except:
-            return len(df) + 1
 
 def hash_df(df):
     df_temp = df.copy()
@@ -411,47 +399,6 @@ def norm_promocoes(df):
     df = df[df["DataFim"] >= date.today()] 
     return df
 
-@st.cache_data(show_spinner="Carregando clientes...") # << NOVO: Função para carregar clientes
-def carregar_clientes():
-    """Carrega o DataFrame de clientes do GitHub."""
-    COLUNAS_CLIENTES = ["ClientID", "Nome Completo Cliente", "Telefone", "Email", "DataCadastro"]
-    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CLIENTES}"
-    df = load_csv_github(url_raw)
-    if df is None or df.empty:
-        df = pd.DataFrame(columns=COLUNAS_CLIENTES)
-    for col in COLUNAS_CLIENTES:
-        if col not in df.columns:
-            df[col] = "" 
-            
-    df['ClientID'] = pd.to_numeric(df['ClientID'], errors='coerce').fillna(0).astype(int)
-    return df
-
-def salvar_clientes_no_github(df: pd.DataFrame, commit_message: str): # << NOVO: Função para salvar clientes
-    """Salva o DataFrame de clientes no GitHub."""
-    try:
-        g = Github(TOKEN)
-        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        # Garante que ClientID é int/str antes de salvar
-        df_temp = df.copy()
-        df_temp['ClientID'] = df_temp['ClientID'].astype(str) 
-        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
-
-        try:
-            contents = repo.get_contents(ARQ_CLIENTES, ref=BRANCH)
-            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
-            if 'streamlit' in globals(): st.toast("📁 Clientes salvos no GitHub!")
-        except Exception:
-            repo.create_file(ARQ_CLIENTES, commit_message, csv_string, branch=BRANCH)
-            if 'streamlit' in globals(): st.toast("📁 Clientes criados no GitHub!")
-
-        carregar_clientes.clear() 
-        return True
-
-    except Exception as e:
-        if 'streamlit' in globals():
-            st.error(f"❌ Erro ao salvar clientes no GitHub: {e}")
-        return False
-
 @st.cache_data(show_spinner="Carregando histórico de compras...")
 def carregar_historico_compras():
     url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_COMPRAS}"
@@ -491,8 +438,8 @@ def carregar_livro_caixa():
         if col not in df.columns:
             df[col] = "Realizada" if col == "Status" else "" 
             
-    # Adiciona RecorrenciaID, TransacaoPaiID e ClientID se não existirem
-    for col in ["RecorrenciaID", "TransacaoPaiID", "ClientID"]: # << NOVO: ClientID
+    # Adiciona RecorrenciaID, TransacaoPaiID se não existirem
+    for col in ["RecorrenciaID", "TransacaoPaiID"]:
         if col not in df.columns:
             df[col] = ''
         
@@ -553,40 +500,11 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
 def processar_dataframe(df):
     for col in COLUNAS_PADRAO:
         if col not in df.columns: df[col] = ""
-    for col in ["RecorrenciaID", "TransacaoPaiID", "ClientID"]: # << NOVO: ClientID
+    for col in ["RecorrenciaID", "TransacaoPaiID"]:
         if col not in df.columns: df[col] = ''
-    
-    if df.empty: 
-        return pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
-        
-    df_proc = df.copy()
-    
-    # 1. Carrega e prepara clientes # << NOVO: Lógica de merge de clientes
-    df_clientes = carregar_clientes()
-    df_clientes['ClientID'] = pd.to_numeric(df_clientes['ClientID'], errors='coerce').fillna(0).astype(int)
-    
-    # 2. Prepara o ClientID da transação
-    df_proc['ClientID'] = pd.to_numeric(df_proc['ClientID'], errors='coerce').fillna(0).astype(int)
-    
-    # 3. Merge para trazer o nome real do cliente
-    df_proc = pd.merge(
-        df_proc, 
-        df_clientes[['ClientID', 'Nome Completo Cliente']], 
-        on='ClientID', 
-        how='left',
-        suffixes=('_mov', '_cli')
-    )
-    
-    # 4. Cria a coluna final de exibição do cliente (prioriza o Nome Completo do cliente.csv)
-    # Se o ClientID for válido (> 0) e o Nome Completo existir, usa ele. Caso contrário, usa a coluna 'Cliente' original.
-    df_proc['Nome Completo Cliente'] = df_proc['Nome Completo Cliente'].fillna('')
-    df_proc['Cliente'] = df_proc.apply(
-        lambda row: row['Nome Completo Cliente'] if row['ClientID'] > 0 and row['Nome Completo Cliente'] else row['Cliente'],
-        axis=1
-    )
-    # Limpa a coluna temporária
-    df_proc.drop(columns=['Nome Completo Cliente_cli'], inplace=True, errors='ignore')
 
+    if df.empty: return pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
+    df_proc = df.copy()
     df_proc["Valor"] = pd.to_numeric(df_proc["Valor"], errors="coerce").fillna(0.0)
     df_proc["Data"] = pd.to_datetime(df_proc["Data"], errors='coerce').dt.date
     df_proc["Data_dt"] = pd.to_datetime(df_proc["Data"], errors='coerce')
@@ -609,10 +527,6 @@ def processar_dataframe(df):
     # Adiciona TransacaoPaiID para processamento
     if 'TransacaoPaiID' not in df_proc.columns:
         df_proc['TransacaoPaiID'] = ''
-    if 'ClientID' not in df_proc.columns:
-        df_proc['ClientID'] = 0
-    if 'Nome Completo Cliente' not in df_proc.columns:
-        df_proc['Nome Completo Cliente'] = df_proc['Cliente']
         
     return df_proc
 
@@ -2324,59 +2238,6 @@ def historico_compras():
             else:
                 st.info("Selecione um item no menu acima para editar ou excluir.")
 
-def gerenciar_cliente_venda(cliente_str, clientes_df): # << MANTIDA A LÓGICA DE GERENCIAR CLIENTES
-    """
-    Busca cliente por ClientID ou Nome. Adiciona novo cliente se necessário.
-    Retorna o ClientID e o Nome do cliente.
-    """
-    
-    cliente_str = cliente_str.strip()
-    
-    # 1. Cliente já selecionado pelo ClientID
-    if "|" in cliente_str and cliente_str.split("|")[0].strip().isdigit():
-        try:
-            client_id_str, nome_cliente_str = cliente_str.split("|", 1)
-            client_id = int(client_id_str.strip())
-            return client_id, nome_cliente_str.strip()
-        except Exception:
-            # Falha na leitura do ClientID/Nome
-            return 0, cliente_str
-        
-    # 2. Cliente NÃO selecionado (Apenas nome digitado - deve ser novo)
-    elif cliente_str and not cliente_str.startswith('Selecione') and not cliente_str.startswith("Buscar"):
-        
-        # Procura por correspondência exata para evitar recadastro
-        match = clientes_df[clientes_df['Nome Completo Cliente'].str.lower() == cliente_str.lower()]
-        
-        if not match.empty:
-             # Se for um nome digitado que já existe, retorna o ID existente
-            return match.iloc[0]['ClientID'], match.iloc[0]['Nome Completo Cliente']
-            
-        # Se não existe, cria novo cliente
-        novo_id = prox_id_cliente(clientes_df)
-        novo_cliente = {
-            "ClientID": novo_id,
-            "Nome Completo Cliente": cliente_str,
-            "Telefone": "", 
-            "Email": "",
-            "DataCadastro": str(date.today())
-        }
-        
-        # Concatena e salva no GitHub
-        clientes_df = pd.concat([clientes_df, pd.DataFrame([novo_cliente])], ignore_index=True)
-        if salvar_clientes_no_github(clientes_df, f"Novo cliente: {cliente_str} (ID {novo_id})"):
-             st.session_state.clientes_df = clientes_df # Atualiza o state
-             st.toast(f"🎉 Novo cliente '{cliente_str}' cadastrado!")
-             return novo_id, cliente_str
-        else:
-            # Falha ao salvar no GitHub (usa o ID 0 e nome original)
-            st.error("Falha ao salvar o novo cliente no repositório. Usando nome temporário.")
-            return 0, cliente_str
-            
-    # 3. Cliente não fornecido ou busca inicial
-    return 0, ""
-
-
 def livro_caixa():
     
     st.header("📘 Livro Caixa - Gerenciamento de Movimentações") 
@@ -2385,12 +2246,8 @@ def livro_caixa():
 
     if "df" not in st.session_state: st.session_state.df = carregar_livro_caixa()
     # Garante que todas as colunas de controle existam
-    for col in ['RecorrenciaID', 'TransacaoPaiID', 'ClientID']: # << NOVO: ClientID
+    for col in ['RecorrenciaID', 'TransacaoPaiID']:
         if col not in st.session_state.df.columns: st.session_state.df[col] = ''
-    
-    # CARREGA CLIENTES # << NOVO: Carrega e armazena clientes
-    if "clientes_df" not in st.session_state:
-        st.session_state.clientes_df = carregar_clientes()
         
     if "produtos" not in st.session_state: st.session_state.produtos = produtos
     if "lista_produtos" not in st.session_state: st.session_state.lista_produtos = []
@@ -2402,10 +2259,6 @@ def livro_caixa():
     if "divida_parcial_id" not in st.session_state: st.session_state.divida_parcial_id = None
     # NOVA CHAVE: Para controlar a quitação rápida na aba Nova Movimentação
     if "divida_a_quitar" not in st.session_state: st.session_state.divida_a_quitar = None 
-    
-    # NOVAS CHAVES DE ESTADO PARA O GERENCIAMENTO DE CLIENTES # << NOVO
-    if "cliente_selecionado_id" not in st.session_state: st.session_state.cliente_selecionado_id = 0
-    if "cliente_input_busca" not in st.session_state: st.session_state.cliente_input_busca = ""
     
     # CORREÇÃO CRÍTICA: Inicializa a aba ativa com um valor padrão válido
     abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
@@ -2453,7 +2306,6 @@ def livro_caixa():
     default_loja = LOJAS_DISPONIVEIS[0]
     default_data = datetime.now().date()
     default_cliente = ""
-    default_client_id = 0 # << NOVO
     default_valor = 0.01
     default_forma = "Dinheiro"
     default_tipo = "Entrada"
@@ -2470,8 +2322,7 @@ def livro_caixa():
             movimentacao_para_editar = linha_df_exibicao.iloc[0]
             default_loja = movimentacao_para_editar['Loja']
             default_data = movimentacao_para_editar['Data'] if pd.notna(movimentacao_para_editar['Data']) else datetime.now().date()
-            default_cliente = movimentacao_para_editar['Cliente'] # Cliente já mergeado
-            default_client_id = int(movimentacao_para_editar.get('ClientID', 0)) # << NOVO
+            default_cliente = movimentacao_para_editar['Cliente']
             default_valor = abs(movimentacao_para_editar['Valor']) if movimentacao_para_editar['Valor'] != 0 else 0.01 
             default_forma = movimentacao_para_editar['Forma de Pagamento']
             default_tipo = movimentacao_para_editar['Tipo']
@@ -2521,9 +2372,6 @@ def livro_caixa():
         # NOVO: Limpa o alerta de dívida, exceto se houver um re-run imediato
         if st.session_state.cliente_selecionado_divida and st.session_state.cliente_selecionado_divida != "CHECKED":
              st.session_state.cliente_selecionado_divida = None
-        # NOVO: Limpa as chaves de cliente
-        st.session_state.cliente_selecionado_id = 0
-        st.session_state.cliente_input_busca = ""
 
 
     # --- CRIAÇÃO DAS NOVAS ABAS ---
@@ -2629,8 +2477,7 @@ def livro_caixa():
                         "Status": "Realizada",
                         "Data Pagamento": data_conclusao,
                         "RecorrenciaID": row_original['RecorrenciaID'],
-                        "TransacaoPaiID": idx_original,
-                        "ClientID": row_original['ClientID'] # << NOVO: Mantém o ClientID
+                        "TransacaoPaiID": idx_original 
                     }
                     
                     st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_transacao_pagamento])], ignore_index=True)
@@ -2687,96 +2534,31 @@ def livro_caixa():
         valor_calculado = 0.0
         produtos_vendidos_json = ""
         categoria_selecionada = ""
-        
-        # Variáveis de Cliente para Salvar # << NOVO
-        cliente_id_final = default_client_id
-        cliente_nome_final = default_cliente
 
         # --- Seção de Entrada (Venda/Produtos) ---
         if tipo == "Entrada":
             
-            # NOVO: LÓGICA DE BUSCA INTELIGENTE DE CLIENTE (Substitui o text_input)
+            # Campo de Cliente (precisa ser definido antes para a lógica de dívida)
             with col_principal_2:
-                st.markdown("#### 👤 Seleção de Cliente")
+                cliente = st.text_input("Nome do Cliente (ou Descrição)", 
+                                        value=default_cliente, 
+                                        key="input_cliente_form",
+                                        on_change=lambda: st.session_state.update(cliente_selecionado_divida="CHECKED", edit_id=None, divida_a_quitar=None), # Gatilho de busca
+                                        disabled=edit_mode)
                 
-                # 1. Combobox de busca/seleção
-                opcoes_clientes = ["Buscar/Adicionar Novo Cliente"] + [
-                    f"{row['ClientID']} | {row['Nome Completo Cliente']}" 
-                    for _, row in st.session_state.clientes_df.iterrows()
-                ]
-                
-                # Pre-seleção em modo edição
-                default_index_cliente = 0
-                if edit_mode and default_client_id > 0:
-                    opcao_padrao = f"{default_client_id} | {default_cliente}"
-                    if opcao_padrao in opcoes_clientes:
-                        default_index_cliente = opcoes_clientes.index(opcao_padrao)
-                
-                # O selectbox armazena a seleção no estado
-                cliente_selecionado_str = st.selectbox(
-                    "Cliente (Busque pelo nome ou selecione ID)",
-                    opcoes_clientes,
-                    index=default_index_cliente,
-                    key="cliente_busca_selectbox",
-                    disabled=edit_mode
-                )
-                
-                cliente_input = "" # Nome digitado no text_input
-
-                # 2. Lógica para Adicionar Novo Cliente se a opção for "Buscar/Adicionar Novo Cliente"
-                if cliente_selecionado_str == "Buscar/Adicionar Novo Cliente":
-                    cliente_input = st.text_input("Digite o nome completo do Cliente:", 
-                                                  value=st.session_state.cliente_input_busca, 
-                                                  key="cliente_input_nome_busca")
+                # NOVO: Lógica de Alerta Inteligente de Dívida
+                if cliente.strip() and not edit_mode:
                     
-                    if cliente_input and not edit_mode:
-                        # Se houver input, simula a busca para sugerir a criação/uso de existente
-                        df_match = st.session_state.clientes_df[
-                            st.session_state.clientes_df['Nome Completo Cliente'].str.lower().str.contains(cliente_input.lower(), na=False)
-                        ]
+                    df_dividas_cliente = df_exibicao[
+                        # ANTES (INCORRETO):
+                        # (df_exibicao["Cliente"].astype(str).str.lower() == cliente.strip().lower()) &
                         
-                        if df_match.empty:
-                            st.info(f"Cliente '{cliente_input}' não encontrado. Ele será cadastrado automaticamente com a venda.")
-                        else:
-                            st.warning(f"Clientes com '{cliente_input}' encontrados. Selecione acima para evitar duplicidade.")
-
-                # 3. Processa a seleção/input para definir as variáveis finais (ID e Nome)
-                if edit_mode:
-                    # Em modo edição, usa o ID e nome da transação original
-                    cliente_id_final = default_client_id
-                    cliente_nome_final = default_cliente
-                elif cliente_selecionado_str != "Buscar/Adicionar Novo Cliente" and "|" in cliente_selecionado_str:
-                    # Cliente selecionado no selectbox (existente)
-                    cliente_id_final, cliente_nome_final = gerenciar_cliente_venda(cliente_selecionado_str, st.session_state.clientes_df)
-                elif cliente_selecionado_str == "Buscar/Adicionar Novo Cliente" and cliente_input:
-                    # Novo cliente ou cliente existente digitado (será cadastrado/encontrado no salvamento)
-                    st.session_state.cliente_input_busca = cliente_input
-                    cliente_id_final, cliente_nome_final = gerenciar_cliente_venda(cliente_input, st.session_state.clientes_df)
-                else:
-                    # Nenhum cliente selecionado/digitado
-                    cliente_id_final = 0
-                    cliente_nome_final = ""
-                
-                # **BLOCO CORRIGIDO**: Lógica de Alerta de Dívida (AGORA BUSCA PELO ClientID OU NOME) # << CORREÇÃO APLICADA AQUI
-                if (cliente_id_final > 0 or cliente_nome_final) and not edit_mode:
-                    
-                    cliente_display = cliente_nome_final # Nome a ser exibido
-                    
-                    # CORREÇÃO CRÍTICA: Prioriza o ClientID, mas cai para o filtro por nome se ClientID for 0 (para dados antigos)
-                    if cliente_id_final > 0:
-                        df_dividas_cliente = df_exibicao[
-                            (df_exibicao["ClientID"] == cliente_id_final) &
-                            (df_exibicao["Status"] == "Pendente") &
-                            (df_exibicao["Tipo"] == "Entrada")
-                        ].sort_values(by="Data Pagamento", ascending=True).copy()
-                    else: 
-                        # Fallback para filtro por NOME, essencial para dívidas antigas
-                        df_dividas_cliente = df_exibicao[
-                            (df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente_nome_final.strip().lower())) &
-                            (df_exibicao["Status"] == "Pendente") &
-                            (df_exibicao["Tipo"] == "Entrada")
-                        ].sort_values(by="Data Pagamento", ascending=True).copy()
-
+                        # DEPOIS (CORRETO):
+                        (df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente.strip().lower())) &
+                        
+                        (df_exibicao["Status"] == "Pendente") &
+                        (df_exibicao["Tipo"] == "Entrada")
+                    ].sort_values(by="Data Pagamento", ascending=True).copy()
 
                     if not df_dividas_cliente.empty:
                         
@@ -2785,22 +2567,28 @@ def livro_caixa():
                         num_dividas = df_dividas_cliente.shape[0]
                         divida_mais_antiga = df_dividas_cliente.iloc[0]
                         
+                        # Extrai o valor da dívida mais antiga (a que será editada/quitada) usando a nova função
                         valor_divida_antiga = calcular_valor_em_aberto(divida_mais_antiga)
+                        
                         original_idx_divida = divida_mais_antiga['original_index']
                         vencimento_str = divida_mais_antiga['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_mais_antiga['Data Pagamento']) else "S/ Data"
 
-                        st.session_state.cliente_selecionado_divida = divida_mais_antiga.name 
+                        st.session_state.cliente_selecionado_divida = divida_mais_antiga.name # Salva o índice original
 
-                        st.warning(f"💰 Dívida em Aberto para **{cliente_display}**: R$ {valor_divida_antiga:,.2f}") 
+                        # Sua linha de alerta corrigida (agora com o valor que é usado para quitação)
+                        st.warning(f"💰 Dívida em Aberto para {cliente}: R$ {valor_divida_antiga:,.2f}") 
+                        
+                        # ALERTA DE INFORMAÇÃO sobre o total
                         st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
 
                         col_btn_add, col_btn_conc, col_btn_canc = st.columns(3)
 
                         if col_btn_add.button("➕ Adicionar Mais Produtos à Dívida", key="btn_add_produtos", use_container_width=True, type="secondary"):
                             st.session_state.edit_id = original_idx_divida
-                            st.session_state.edit_id_loaded = None 
+                            st.session_state.edit_id_loaded = None # Força o recarregamento dos dados na próxima execução
                             st.rerun()
 
+                        # ALTERADO: Este botão agora define a nova chave de estado para abrir o formulário de quitação rápida
                         if col_btn_conc.button("✅ Concluir/Pagar Dívida", key="btn_concluir_divida", use_container_width=True, type="primary"):
                             st.session_state.divida_a_quitar = divida_mais_antiga['original_index']
                             st.session_state.edit_id = None 
@@ -2809,15 +2597,16 @@ def livro_caixa():
                             st.rerun()
 
                         if col_btn_canc.button("🗑️ Cancelar Dívida", key="btn_cancelar_divida", use_container_width=True):
+                            # Lógica simplificada de exclusão (cancelamento)
                             df_to_delete = df_dividas_cliente.copy()
                             for idx in df_to_delete['original_index'].tolist():
                                 st.session_state.df = st.session_state.df.drop(idx, errors='ignore')
                             
-                            if salvar_dados_no_github(st.session_state.df, f"Cancelamento de {num_dividas} dívida(s) de {cliente_display}"):
+                            if salvar_dados_no_github(st.session_state.df, f"Cancelamento de {num_dividas} dívida(s) de {cliente.strip()}"):
                                 st.session_state.cliente_selecionado_divida = None
                                 st.session_state.edit_id_loaded = None 
                                 st.cache_data.clear()
-                                st.success(f"{num_dividas} dívida(s) de {cliente_display} cancelada(s) com sucesso!")
+                                st.success(f"{num_dividas} dívida(s) de {cliente.strip()} cancelada(s) com sucesso!")
                                 st.rerun()
                     else:
                         st.session_state.cliente_selecionado_divida = None # Limpa a chave se não houver dívida
@@ -3007,9 +2796,6 @@ def livro_caixa():
                     status_selecionado = "Pendente" 
                     st.caption(f"Status forçado para **Pendente**. Serão geradas {int(num_parcelas)} parcelas de R$ {valor_final_movimentacao:,.2f}.")
                     
-                    cliente_id_final = 0
-                    cliente_nome_final = nome_despesa_recorrente
-                    
                 else:
                     status_selecionado = st.radio(
                         "Status", 
@@ -3026,13 +2812,10 @@ def livro_caixa():
                         key="input_valor_saida"
                     )
                     valor_final_movimentacao = valor_input_manual
-                    cliente_saida = st.text_input("Nome do Fornecedor/Gasto (ou Descrição)", 
+                    cliente = st.text_input("Nome do Cliente (ou Descrição)", 
                                         value=default_cliente, 
-                                        key="input_cliente_form_saida_simples",
+                                        key="input_cliente_form_saida",
                                         disabled=edit_mode)
-                    
-                    cliente_id_final = 0
-                    cliente_nome_final = cliente_saida
 
 
         data_pagamento_final = None 
@@ -3095,9 +2878,16 @@ def livro_caixa():
                 data_input = st.date_input("Data da Transação (Lançamento)", value=default_data, key="input_data_form", disabled=is_recorrente and not edit_mode)
             
             with col_f2:
-                # O campo Cliente aqui é uma duplicata, pois o cliente_nome_final já está sendo usado.
+                # O campo Cliente aqui é uma duplicata, pois o input_cliente_form já está sendo usado. 
+                if tipo == "Entrada" and not edit_mode:
+                    cliente_final = cliente
+                elif tipo == "Saída" and is_recorrente and not edit_mode:
+                    cliente_final = nome_despesa_recorrente
+                else:
+                    cliente_final = default_cliente
+                
                 st.text_input("Cliente/Descrição (Final)", 
-                                        value=cliente_nome_final, # << NOVO: Usa o nome final determinado
+                                        value=cliente_final, 
                                         key="input_cliente_form_display",
                                         disabled=True)
                 
@@ -3139,9 +2929,6 @@ def livro_caixa():
                     st.error("Por favor, especifique o 'Outro/Diversos' para Saída.")
                 elif is_recorrente and not edit_mode and not nome_despesa_recorrente:
                     st.error("O nome da Despesa Recorrente é obrigatório.")
-                # NOVO: Validação de Cliente
-                elif tipo == "Entrada" and cliente_id_final == 0 and not edit_mode and cliente_nome_final == "":
-                    st.error("Selecione um cliente ou digite o nome para cadastro/busca.")
                 else:
                     valor_armazenado = valor_final_movimentacao if tipo == "Entrada" else -valor_final_movimentacao
                     
@@ -3219,8 +3006,7 @@ def livro_caixa():
                                 "Status": "Pendente",
                                 "Data Pagamento": data_vencimento_parcela, 
                                 "RecorrenciaID": recorrencia_id,
-                                "TransacaoPaiID": "",
-                                "ClientID": 0 # << NOVO: ClientID 0 para Saída Recorrente
+                                "TransacaoPaiID": "" 
                             }
                             novas_movimentacoes.append(nova_linha_parcela)
                         
@@ -3232,7 +3018,7 @@ def livro_caixa():
                         nova_linha_data = {
                             "Data": data_input,
                             "Loja": loja_selecionada, 
-                            "Cliente": cliente_nome_final, # Cliente/Descrição (Nome completo ou Fornecedor)
+                            "Cliente": cliente_final,
                             "Valor": valor_armazenado, 
                             "Forma de Pagamento": forma_pagamento,
                             "Tipo": tipo,
@@ -3241,8 +3027,7 @@ def livro_caixa():
                             "Status": status_selecionado, 
                             "Data Pagamento": data_pagamento_final,
                             "RecorrenciaID": "",
-                            "TransacaoPaiID": "",
-                            "ClientID": cliente_id_final # << NOVO: ClientID (0 para Saída ou para clientes antigos)
+                            "TransacaoPaiID": "" 
                         }
                         
                         if edit_mode:
@@ -3722,8 +3507,7 @@ def livro_caixa():
                             "Status": "Realizada",
                             "Data Pagamento": data_conclusao,
                             "RecorrenciaID": row_original['RecorrenciaID'],
-                            "TransacaoPaiID": idx_original, # Rastreia o ID original (índice Pandas)
-                            "ClientID": row_original['ClientID'] # << NOVO: Mantém o ClientID
+                            "TransacaoPaiID": idx_original # Rastreia o ID original (índice Pandas)
                         }
                         
                         # Adiciona o pagamento realizado
