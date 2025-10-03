@@ -126,7 +126,7 @@ def render_global_config():
         }
         
         /* 2. OCULTA O BOTÃO DE AÇÃO/DEPLOY (COROA/FEEDBACK NO CANTO INFERIOR) */
-        /* Usa o seletor mais genérico para o container flutuante de botões de ação fixos */
+        /* Usa o seletor universal para o contêiner de elementos fixos (COROA) */
         div[style*="flex-direction: column-reverse;"] {
             display: none !important;
         }
