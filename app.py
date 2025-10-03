@@ -2550,10 +2550,15 @@ def livro_caixa():
                 if cliente.strip() and not edit_mode:
                     
                     df_dividas_cliente = df_exibicao[
-                        (df_exibicao["Cliente"].astype(str).str.lower() == cliente.strip().lower()) &
+                        # ANTES (INCORRETO):
+                        # (df_exibicao["Cliente"].astype(str).str.lower() == cliente.strip().lower()) &
+                        
+                        # DEPOIS (CORRETO):
+                        (df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente.strip().lower())) &
+                        
                         (df_exibicao["Status"] == "Pendente") &
                         (df_exibicao["Tipo"] == "Entrada")
-                    ].sort_values(by=["Data Pagamento", "Data_dt", "original_index"], ascending=[True, True, True]).copy() # ORDENAÇÃO MAIS ROBUSTA
+                    ].sort_values(by="Data Pagamento", ascending=True).copy()
 
                     if not df_dividas_cliente.empty:
                         
@@ -3620,5 +3625,6 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
