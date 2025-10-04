@@ -158,7 +158,7 @@ def precificacao_completa():
     # ==========================================================
     # 🔒 Verificação de Token (com depuração segura)
     # ==========================================================
-    is_token_valid = GITHUB_TOKEN != "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"
+    is_token_valid = GITHUB_TOKEN != "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"
 
     # Mostra um pequeno log para confirmar se o token foi lido (sem expor o valor)
     st.write("🔑 Token carregado:", ("✅ Sim" if is_token_valid else "❌ Não encontrado"))
@@ -693,3 +693,4 @@ def precificacao_completa():
 # ==================================
 # FIM DO CÓDIGO CORRIGIDO
 # ==================================
+
