@@ -160,7 +160,7 @@ imagens_dict = {}
 # ==========================================================
 # 🔒 Verificação de Token (com depuração segura)
 # ==========================================================
-is_token_valid = GITHUB_TOKEN != "TOKEN_FICTICIO"
+is_token_valid = GITHUB_TOKEN != "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"
 
 # Mostra um pequeno log para confirmar se o token foi lido (sem expor o valor)
 st.write("🔑 Token carregado:", ("✅ Sim" if is_token_valid else "❌ Não encontrado"))
@@ -691,6 +691,7 @@ else:
                     st.rerun()
                 else:
                     st.error("❌ Erro ao carregar o CSV. Verifique o caminho e permissões.")
+
 
 
 
