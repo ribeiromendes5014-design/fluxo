@@ -1,5 +1,5 @@
 # ==================================
-# INÍCIO DO CÓDIGO COMPLETO
+# INÍCIO DO CÓDIGO CORRIGIDO
 # ==================================
 
 import streamlit as st
@@ -266,7 +266,8 @@ def precificacao_completa():
     # ----------------------------------------------------
     
     # Prepara o DataFrame para salvar: remove a coluna 'Imagem' que contém bytes
-    df_to_hash = st.session_state.produtos_manuais.drop(columns=["Imagem"], errors='ignore')
+    # === CORREÇÃO APLICADA AQUI ===
+    df_to_hash = st.session_state.df_produtos_geral.drop(columns=["Imagem"], errors='ignore')
 
     # 1. Inicializa o hash para o estado da precificação
     if "hash_precificacao" not in st.session_state:
@@ -282,7 +283,7 @@ def precificacao_completa():
                     GITHUB_TOKEN,
                     GITHUB_REPO,
                     PATH_PRECFICACAO,
-                    df_to_hash, # Salva o df sem a coluna 'Imagem'
+                    df_to_hash, # Salva o df COMPLETO sem a coluna 'Imagem'
                     GITHUB_BRANCH,
                     mensagem="♻️ Alteração automática na precificação"
                 )
@@ -542,7 +543,8 @@ def precificacao_completa():
                         # BLOCO: FORÇAR O SALVAMENTO NO GITHUB APÓS ADIÇÃO (COM TRATAMENTO DE ERRO)
                         # ==========================================================
                         if is_token_valid: # Adiciona a verificação do token
-                            df_to_save = st.session_state.produtos_manuais.drop(columns=["Imagem"], errors='ignore')
+                            # === CORREÇÃO APLICADA AQUI ===
+                            df_to_save = st.session_state.df_produtos_geral.drop(columns=["Imagem"], errors='ignore')
                             novo_hash_salvar = hash_df(df_to_save)
                             
                             if novo_hash_salvar != "error":
@@ -689,7 +691,5 @@ def precificacao_completa():
                     st.error("❌ Erro ao carregar o CSV. Verifique o caminho e permissões.")
 
 # ==================================
-# FIM DO CÓDIGO COMPLETO
+# FIM DO CÓDIGO CORRIGIDO
 # ==================================
-
-
