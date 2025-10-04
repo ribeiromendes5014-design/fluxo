@@ -139,10 +139,10 @@ def precificacao_completa():
     # --- Configurações do GitHub para SALVAR ---
     # Usando o get para priorizar a chave mais comum 'github_token'
     GITHUB_TOKEN = st.secrets.get("github_token") or st.secrets.get("GITHUB_TOKEN", "TOKEN_FICTICIO")
-    GITHUB_REPO = "ribeiromendes5014-design/Precificar"
+    GITHUB_REPO = "ribeiromendes5014-design/fluxo"
     GITHUB_BRANCH = "main"
     PATH_PRECFICACAO = "precificacao.csv"
-    ARQ_CAIXAS = f"https://raw.githubusercontent.com/{GITHUB_REPO} + PATH_PRECFICACAO
+    ARQ_CAIXAS = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/{PATH_PRECFICACAO}"
     imagens_dict = {}
     
     # =========================================================================
@@ -672,5 +672,6 @@ def precificacao_completa():
                     st.rerun()
                 else:
                     st.error("❌ Erro ao carregar o CSV. Verifique o caminho e permissões.")
+
 
 
