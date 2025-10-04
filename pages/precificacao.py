@@ -137,25 +137,44 @@ def precificacao_completa():
     st.title("📊 Precificador de Produtos")
     
     # --- Configurações do GitHub para SALVAR ---
-    # Usando o get para priorizar a chave mais comum 'github_token'
-    GITHUB_TOKEN = st.secrets.get("github_token") or st.secrets.get("GITHUB_TOKEN", "TOKEN_FICTICIO")
-    GITHUB_REPO = "ribeiromendes5014-design/fluxo"
-    GITHUB_BRANCH = "main"
-    PATH_PRECFICACAO = "precificacao.csv"
-    ARQ_CAIXAS = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/{PATH_PRECFICACAO}"
-    imagens_dict = {}
-    
-    # =========================================================================
-    # BLOCO: Alerta de Configuração de Token (ESSENCIAL)
-    # =========================================================================
-    is_token_valid = github_token = "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"
-    if not is_token_valid:
-        st.error(
-            "🛑 **ERRO DE AUTENTICAÇÃO:** O token do GitHub não está configurado. "
-            "Você precisa definir `github_token` nos Streamlit Secrets. "
-            "A persistência de dados (salvamento no `precificacao.csv`) **não funcionará** até que isso seja corrigido. "
-            "O erro `401 Bad Credentials` é causado por isso."
-        )
+import streamlit as st
+from datetime import date
+
+# ==========================================================
+# ⚙️ CONFIGURAÇÃO DO GITHUB (SEGURA)
+# ==========================================================
+# 1️⃣ Lê o token do Streamlit Secrets (sem expor valor)
+GITHUB_TOKEN = st.secrets.get("github_token") or st.secrets.get("GITHUB_TOKEN", "TOKEN_FICTICIO")
+
+# 2️⃣ Define repositório e branch corretos
+GITHUB_REPO = "ribeiromendes5014-design/fluxo"
+GITHUB_BRANCH = "main"
+PATH_PRECFICACAO = "precificacao.csv"
+
+# 3️⃣ Monta URL completa para leitura do CSV remoto
+ARQ_CAIXAS = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/{PATH_PRECFICACAO}"
+
+# 4️⃣ Dicionário de imagens (mantido do seu código original)
+imagens_dict = {}
+
+# ==========================================================
+# 🔒 Verificação de Token (com depuração segura)
+# ==========================================================
+is_token_valid = GITHUB_TOKEN != "TOKEN_FICTICIO"
+
+# Mostra um pequeno log para confirmar se o token foi lido (sem expor o valor)
+st.write("🔑 Token carregado:", ("✅ Sim" if is_token_valid else "❌ Não encontrado"))
+
+if not is_token_valid:
+    st.error(
+        "🛑 **ERRO DE AUTENTICAÇÃO:** O token do GitHub não está configurado ou é inválido.\n\n"
+        "➡️ Vá até o painel de *Secrets* do Streamlit Cloud (ou o arquivo `.streamlit/secrets.toml`) "
+        "e adicione a chave `github_token` com um token pessoal do GitHub.\n\n"
+        "Sem isso, o app **não conseguirá salvar o arquivo** `precificacao.csv` no repositório."
+    )
+else:
+    st.success("✅ Token do GitHub encontrado. Salvamento no repositório habilitado.")
+
     # =========================================================================
 
     
@@ -672,6 +691,7 @@ def precificacao_completa():
                     st.rerun()
                 else:
                     st.error("❌ Erro ao carregar o CSV. Verifique o caminho e permissões.")
+
 
 
 
