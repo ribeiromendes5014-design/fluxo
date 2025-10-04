@@ -1,4 +1,6 @@
-# pages/precificacao.py
+# ==================================
+# INÍCIO DO CÓDIGO COMPLETO
+# ==================================
 
 import streamlit as st
 import pandas as pd
@@ -73,7 +75,7 @@ def exibir_relatorios(df):
     Calcula e exibe as métricas de precificação, incluindo filtros por data.
     """
     st.header("Análise Detalhada de Precificação")
-
+    
     # === CORREÇÃO DE ERRO: Garante que a coluna 'Data Cadastro' exista para relatórios ===
     if 'Data Cadastro' not in df.columns:
         st.warning("⚠️ **Erro na Estrutura de Dados:** A coluna 'Data Cadastro' não foi encontrada. Relatórios baseados em data não podem ser gerados. Por favor, certifique-se de que o CSV carregado ou os produtos manuais possuem esta coluna.")
@@ -83,18 +85,18 @@ def exibir_relatorios(df):
 
     # 1. Filtro de Data
     df['Data Cadastro'] = pd.to_datetime(df['Data Cadastro'])
-
+    
     # Configura o filtro de data
     data_minima = df['Data Cadastro'].min().date()
     data_maxima = df['Data Cadastro'].max().date()
-
+    
     # Adiciona a subaba de filtro com datas
     col_f1, col_f2 = st.columns(2)
     with col_f1:
         data_inicio = st.date_input("🗓️ Data Inicial", value=data_minima, min_value=data_minima, max_value=data_maxima)
     with col_f2:
         data_fim = st.date_input("🗓️ Data Final", value=data_maxima, min_value=data_minima, max_value=data_maxima)
-
+        
     df_filtrado = df[(df['Data Cadastro'].dt.date >= data_inicio) & (df['Data Cadastro'].dt.date <= data_fim)].copy()
 
     if df_filtrado.empty:
@@ -103,48 +105,48 @@ def exibir_relatorios(df):
 
     # 2. Métricas Principais (Média de Lucro, Preços, etc.)
     st.subheader("Métricas de Desempenho")
-
+    
     df_filtrado["Lucro Unitário"] = df_filtrado["Preço à Vista"] - df_filtrado["Custo Total Unitário"]
     df_filtrado["Lucro Total"] = df_filtrado["Lucro Unitário"] * df_filtrado["Qtd"]
-
+    
     margem_media = df_filtrado["Margem (%)"].mean()
     preco_medio_vista = df_filtrado["Preço à Vista"].mean()
     preco_medio_cartao = df_filtrado["Preço no Cartão"].mean()
     lucro_total_estimado = df_filtrado["Lucro Total"].sum()
-
+    
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     col_m1.metric("Margem Média (%)", f"{margem_media:.2f}%")
     col_m2.metric("Preço Médio à Vista (R$)", f"R$ {preco_medio_vista:,.2f}")
     col_m3.metric("Preço Médio no Cartão (R$)", f"R$ {preco_medio_cartao:,.2f}")
     col_m4.metric("Lucro Total Estimado (R$)", f"R$ {lucro_total_estimado:,.2f}")
-
+    
     # 3. Distribuição de Margem (Gráfico)
     st.markdown("---")
     st.subheader("Distribuição da Margem de Lucro")
-
+    
     # Cria um histograma
     st.bar_chart(df_filtrado.groupby(pd.cut(df_filtrado["Margem (%)"], bins=10, right=False)).size(), use_container_width=True)
     st.caption("Frequência de produtos por faixa de Margem de Lucro (%).")
-
+    
     # 4. Tabela Top/Bottom Performers (por Lucro Total)
     st.markdown("---")
     st.subheader("Produtos Mais/Menos Lucrativos (por Volume Total)")
-
+    
     df_rank = df_filtrado.sort_values(by="Lucro Total", ascending=False).reset_index(drop=True)
-
+    
     col_t1, col_t2 = st.columns(2)
-
+    
     format_mapping = {
-        "Preço à Vista": "R$ {:,.2f}",
-        "Custo Total Unitário": "R$ {:,.2f}",
+        "Preço à Vista": "R$ {:,.2f}", 
+        "Custo Total Unitário": "R$ {:,.2f}", 
         "Margem (%)": "{:.2f}%",
         "Lucro Total": "R$ {:,.2f}"
     }
-
+    
     with col_t1:
         st.write("**Top 5 Produtos por Lucro Total**")
         st.dataframe(df_rank.head(5)[["Produto", "Qtd", "Preço à Vista", "Margem (%)", "Lucro Total"]].style.format(format_mapping), use_container_width=True)
-
+        
     with col_t2:
         st.write("**Bottom 5 Produtos por Lucro Total**")
         st.dataframe(df_rank.tail(5)[["Produto", "Qtd", "Preço à Vista", "Margem (%)", "Lucro Total"]].style.format(format_mapping), use_container_width=True)
@@ -152,11 +154,11 @@ def exibir_relatorios(df):
 
 def precificacao_completa():
     st.title("📊 Precificador de Produtos")
-
+    
     # ==========================================================
     # 🔒 Verificação de Token (com depuração segura)
     # ==========================================================
-    is_token_valid = GITHUB_TOKEN != "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"
+    is_token_valid = GITHUB_TOKEN != "TOKEN_FICTICIO" and GITHUB_TOKEN != "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"
 
     # Mostra um pequeno log para confirmar se o token foi lido (sem expor o valor)
     st.write("🔑 Token carregado:", ("✅ Sim" if is_token_valid else "❌ Não encontrado"))
@@ -171,51 +173,51 @@ def precificacao_completa():
     else:
         st.success("✅ Token do GitHub encontrado. Salvamento no repositório habilitado.")
 
-
+    
     # ----------------------------------------------------
     # Inicialização e Carregamento Automático
     # ----------------------------------------------------
-
+    
     # 1. Inicialização de variáveis de estado, incluindo a nova coluna "Data Cadastro"
     if "produtos_manuais" not in st.session_state:
         st.session_state.produtos_manuais = pd.DataFrame(columns=[
             "Produto", "Qtd", "Custo Unitário", "Custos Extras Produto", "Margem (%)", "Imagem", "Imagem_URL", "Data Cadastro"
         ])
-
+    
     # Garante a nova coluna Data Cadastro nos produtos manuais, se não existir
     if "Data Cadastro" not in st.session_state.produtos_manuais.columns:
         st.session_state.produtos_manuais["Data Cadastro"] = date.today().isoformat()
-
+    
     # 2. Lógica de Carregamento Automático do CSV do GitHub (se o DF estiver vazio)
     if st.session_state.produtos_manuais.empty:
         df_inicial = load_csv_github(ARQ_CAIXAS)
         if not df_inicial.empty:
-
+            
             # Garante a nova coluna 'Data Cadastro'
             if "Data Cadastro" not in df_inicial.columns:
                 df_inicial["Data Cadastro"] = date.today().isoformat()
-
+            
             # Garante outras colunas de inicialização
             df_inicial["Custos Extras Produto"] = df_inicial.get("Custos Extras Produto", 0.0)
             df_inicial["Imagem"] = None
             df_inicial["Imagem_URL"] = df_inicial.get("Imagem_URL", "")
-
+            
             st.session_state.produtos_manuais = df_inicial.copy()
             # Processa o DataFrame com custos e margens padrão (0.0/30.0) para iniciar
             st.session_state.df_produtos_geral = processar_dataframe(
                 df_inicial, 0.0, 0.0, "Margem fixa", 30.0
             )
-
+            
             # === GARANTIA ADICIONAL: Cria 'Data Cadastro' antes do merge ===
             st.session_state.produtos_manuais = _garantir_data_cadastro(st.session_state.produtos_manuais)
             st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
 
             st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                st.session_state.produtos_manuais[['Produto', 'Data Cadastro']],
-                on='Produto',
+                st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+                on='Produto', 
                 how='left'
             )
-
+            
             st.toast("✅ Dados de precificação carregados automaticamente do GitHub!", icon="🚀")
 
 
@@ -232,14 +234,14 @@ def precificacao_completa():
 
         st.session_state.df_produtos_geral = processar_dataframe(df_base, 0.0, 0.0, "Margem fixa", 30.0)
         st.session_state.produtos_manuais = df_base.copy()
-
+        
         # Garante Data Cadastro
         st.session_state.produtos_manuais = _garantir_data_cadastro(st.session_state.produtos_manuais)
         st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
 
         st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']],
-            on='Produto',
+            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+            on='Produto', 
             how='left'
         )
 
@@ -257,12 +259,12 @@ def precificacao_completa():
     custos_extras = st.session_state.get("extras_manual", 0.0)
     modo_margem = st.session_state.get("modo_margem", "Margem fixa")
     margem_fixa = st.session_state.get("margem_fixa", 30.0)
-
-
+    
+    
     # ----------------------------------------------------
     # Lógica de Salvamento Automático (Mantida para edições e exclusões)
     # ----------------------------------------------------
-
+    
     # Prepara o DataFrame para salvar: remove a coluna 'Imagem' que contém bytes
     df_to_hash = st.session_state.produtos_manuais.drop(columns=["Imagem"], errors='ignore')
 
@@ -294,9 +296,9 @@ def precificacao_completa():
     # Tabela Geral (com Edição e Exclusão)
     # ----------------------------------------------------
     st.subheader("Produtos cadastrados (Clique no índice da linha e use DEL para excluir)")
-
+    
     cols_display = [
-        "Produto", "Qtd", "Custo Unitário", "Custos Extras Produto",
+        "Produto", "Qtd", "Custo Unitário", "Custos Extras Produto", 
         "Custo Total Unitário", "Margem (%)", "Preço à Vista", "Preço no Cartão", "Data Cadastro"
     ]
     cols_to_show = [col for col in cols_display if col in st.session_state.df_produtos_geral.columns]
@@ -311,14 +313,14 @@ def precificacao_completa():
 
     original_len = len(st.session_state.df_produtos_geral)
     edited_len = len(editado_df)
-
+    
     # Lógica de Sincronização e Edição
     if edited_len < original_len:
         # Exclusão
         produtos_manuais_filtrado = st.session_state.produtos_manuais[
             st.session_state.produtos_manuais['Produto'].isin(editado_df['Produto'])
         ].copy()
-
+        
         st.session_state.produtos_manuais = produtos_manuais_filtrado.reset_index(drop=True)
         st.session_state.df_produtos_geral = processar_dataframe(
             st.session_state.produtos_manuais, frete_total, custos_extras, modo_margem, margem_fixa
@@ -328,23 +330,23 @@ def precificacao_completa():
         st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
 
         st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']],
-            on='Produto',
+            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+            on='Produto', 
             how='left'
         )
         # =======================================================================================================
         st.success("✅ Produto excluído da lista e sincronizado.")
         st.rerun()
-
+        
     elif not editado_df.equals(st.session_state.df_produtos_geral[cols_to_show]):
         # Edição de Dados
         for idx, row in editado_df.iterrows():
             produto_nome = str(row.get('Produto'))
             manual_idx = st.session_state.produtos_manuais[st.session_state.produtos_manuais['Produto'] == produto_nome].index
-
+            
             if not manual_idx.empty:
                 manual_idx = manual_idx[0]
-
+                
                 # Sincroniza campos editáveis
                 st.session_state.produtos_manuais.loc[manual_idx, "Produto"] = produto_nome
                 st.session_state.produtos_manuais.loc[manual_idx, "Qtd"] = row.get("Qtd", 1)
@@ -352,7 +354,7 @@ def precificacao_completa():
                 st.session_state.produtos_manuais.loc[manual_idx, "Margem (%)"] = row.get("Margem (%)", margem_fixa)
                 st.session_state.produtos_manuais.loc[manual_idx, "Custos Extras Produto"] = row.get("Custos Extras Produto", 0.0)
                 # Mantém a data de cadastro original
-
+                
         # Recalcula
         st.session_state.df_produtos_geral = processar_dataframe(
             st.session_state.produtos_manuais, frete_total, custos_extras, modo_margem, margem_fixa
@@ -362,19 +364,19 @@ def precificacao_completa():
         st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
 
         st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']],
-            on='Produto',
+            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+            on='Produto', 
             how='left'
         )
         # =======================================================================================================
-
+        
         st.success("✅ Dados editados e precificação recalculada!")
         st.rerun()
 
     elif edited_len > original_len:
         st.warning("⚠️ Use o formulário 'Novo Produto Manual' para adicionar produtos.")
         st.session_state.df_produtos_geral = st.session_state.df_produtos_geral
-        st.rerun()
+        st.rerun() 
 
 
     if st.button("📤 Gerar PDF e enviar para Telegram", key='precificacao_pdf_button'):
@@ -383,13 +385,13 @@ def precificacao_completa():
         else:
             pdf_io = gerar_pdf(st.session_state.df_produtos_geral)
             enviar_pdf_telegram(pdf_io, st.session_state.df_produtos_geral, thread_id=TOPICO_ID)
-
+    
     st.markdown("---")
-
+    
     # ----------------------------------------------------
     # Abas de Precificação (Remoção da aba PDF e adição de Relatórios)
     # ----------------------------------------------------
-
+    
     tab_manual, tab_relatorios, tab_github = st.tabs([
         "✍️ Precificador Manual",
         "📈 Relatórios Detalhados",
@@ -411,7 +413,7 @@ def precificacao_completa():
             with col_r3:
                 qtd_total_produtos = st.session_state.df_produtos_geral["Qtd"].sum() if "Qtd" in st.session_state.df_produtos_geral.columns else 0
                 st.markdown(f"📦 **Qtd. Total de Produtos no DF:** {qtd_total_produtos}")
-
+                
             qtd_total_manual = st.number_input("📦 Qtd. Total para Rateio (ajuste)", min_value=1, step=1, value=qtd_total_produtos or 1, key="qtd_total_manual_override")
 
 
@@ -422,7 +424,7 @@ def precificacao_completa():
 
             st.session_state["rateio_manual"] = round(rateio_calculado, 4)
             st.markdown(f"💰 **Rateio Unitário Calculado:** R$ {rateio_calculado:,.4f}")
-
+            
             if st.button("🔄 Aplicar Novo Rateio aos Produtos Existentes", key="aplicar_rateio_btn"):
                 st.session_state.df_produtos_geral = processar_dataframe(
                     st.session_state.produtos_manuais,
@@ -436,13 +438,13 @@ def precificacao_completa():
                 st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
 
                 st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                    st.session_state.produtos_manuais[['Produto', 'Data Cadastro']],
-                    on='Produto',
+                    st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+                    on='Produto', 
                     how='left'
                 )
                 # =======================================================================================================
                 st.success("✅ Rateio aplicado! Verifique a tabela principal.")
-                st.rerun()
+                st.rerun() 
 
         with aba_prec_manual:
             if st.session_state.get("rerun_after_add"):
@@ -457,7 +459,7 @@ def precificacao_completa():
                 quantidade = st.number_input("📦 Quantidade", min_value=1, step=1, key="input_quantidade_manual")
                 valor_pago = st.number_input("💰 Valor Pago (Custo Unitário Base R$)", min_value=0.0, step=0.01, key="input_valor_pago_manual")
                 imagem_url = st.text_input("🔗 URL da Imagem (opcional)", key="input_imagem_url_manual")
-
+                
             with col2:
                 valor_default_rateio = st.session_state.get("rateio_manual", 0.0)
                 custo_extra_produto = st.number_input(
@@ -497,7 +499,7 @@ def precificacao_completa():
                         if imagem_file is not None:
                             imagem_bytes = imagem_file.read()
                             imagens_dict[produto] = imagem_bytes
-
+                        
                         elif imagem_url.strip():
                             url_salvar = imagem_url.strip()
 
@@ -517,7 +519,7 @@ def precificacao_completa():
                             [st.session_state.produtos_manuais, novo_produto],
                             ignore_index=True
                         ).reset_index(drop=True)
-
+                        
                         st.session_state.df_produtos_geral = processar_dataframe(
                             st.session_state.produtos_manuais,
                             frete_total,
@@ -530,19 +532,19 @@ def precificacao_completa():
                         st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
 
                         st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']],
-                            on='Produto',
+                            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+                            on='Produto', 
                             how='left'
                         )
                         # =======================================================================================================
-
+                        
                         # ==========================================================
                         # BLOCO: FORÇAR O SALVAMENTO NO GITHUB APÓS ADIÇÃO (COM TRATAMENTO DE ERRO)
                         # ==========================================================
                         if is_token_valid: # Adiciona a verificação do token
                             df_to_save = st.session_state.produtos_manuais.drop(columns=["Imagem"], errors='ignore')
                             novo_hash_salvar = hash_df(df_to_save)
-
+                            
                             if novo_hash_salvar != "error":
                                 try: # Tenta salvar no GitHub
                                     salvar_csv_no_github(
@@ -571,7 +573,7 @@ def precificacao_completa():
                         # ==========================================================
 
                         st.success("✅ Produto adicionado!")
-                        st.session_state["rerun_after_add"] = True
+                        st.session_state["rerun_after_add"] = True 
                     else:
                         st.warning("⚠️ Preencha todos os campos obrigatórios.")
 
@@ -585,7 +587,7 @@ def precificacao_completa():
             else:
                 if "produto_para_excluir" not in st.session_state:
                     st.session_state["produto_para_excluir"] = None
-
+                
                 for i, row in produtos.iterrows():
                     cols = st.columns([4, 1])
                     with cols[0]:
@@ -594,14 +596,14 @@ def precificacao_completa():
                     with cols[1]:
                         if st.button(f"❌ Excluir", key=f"excluir_{i}"):
                             st.session_state["produto_para_excluir"] = i
-                            break
+                            break 
 
                 if st.session_state["produto_para_excluir"] is not None:
                     i = st.session_state["produto_para_excluir"]
                     produto_nome_excluido = produtos.loc[i, "Produto"]
-
+                    
                     st.session_state.produtos_manuais = produtos.drop(i).reset_index(drop=True)
-
+                    
                     st.session_state.df_produtos_geral = processar_dataframe(
                         st.session_state.produtos_manuais,
                         frete_total,
@@ -614,12 +616,12 @@ def precificacao_completa():
                     st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
 
                     st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                        st.session_state.produtos_manuais[['Produto', 'Data Cadastro']],
-                        on='Produto',
+                        st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+                        on='Produto', 
                         how='left'
                     )
                     # =======================================================================================================
-
+                    
                     st.session_state["produto_para_excluir"] = None
                     st.success(f"✅ Produto '{produto_nome_excluido}' removido da lista manual.")
                     st.rerun()
@@ -643,15 +645,15 @@ def precificacao_completa():
     with tab_github:
         st.markdown("---")
         st.header("⚙️ Status de Sincronização e Configuração")
-
+        
         # Indica o status real do token usado
         if is_token_valid:
             st.success("✅ O Token do GitHub está presente e pronto para salvar.")
         else:
             st.warning("⚠️ O Token do GitHub está usando um placeholder. Não será possível salvar no repositório.")
-
+            
         st.info("O arquivo **precificacao.csv** do GitHub agora é carregado **automaticamente** ao iniciar a aplicação.")
-
+        
         if st.session_state.df_produtos_geral.empty:
              st.warning("⚠️ Nenhum dado carregado. Verifique a aba 'Precificador Manual' para cadastrar ou tente recarregar.")
         else:
@@ -675,8 +677,8 @@ def precificacao_completa():
                     st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
 
                     st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                        st.session_state.produtos_manuais[['Produto', 'Data Cadastro']],
-                        on='Produto',
+                        st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+                        on='Produto', 
                         how='left'
                     )
                     # =======================================================================================================
@@ -685,3 +687,7 @@ def precificacao_completa():
                     st.rerun()
                 else:
                     st.error("❌ Erro ao carregar o CSV. Verifique o caminho e permissões.")
+
+# ==================================
+# FIM DO CÓDIGO COMPLETO
+# ==================================
