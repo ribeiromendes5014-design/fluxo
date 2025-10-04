@@ -148,7 +148,7 @@ def precificacao_completa():
     # =========================================================================
     # BLOCO: Alerta de Configuração de Token (ESSENCIAL)
     # =========================================================================
-    is_token_valid = github_token = "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"
+    is_token_valid = github_token = "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"
     if not is_token_valid:
         st.error(
             "🛑 **ERRO DE AUTENTICAÇÃO:** O token do GitHub não está configurado. "
@@ -672,6 +672,7 @@ def precificacao_completa():
                     st.rerun()
                 else:
                     st.error("❌ Erro ao carregar o CSV. Verifique o caminho e permissões.")
+
 
 
 
