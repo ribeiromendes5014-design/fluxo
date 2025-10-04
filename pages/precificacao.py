@@ -232,7 +232,7 @@ def precificacao_completa():
     
     
     # ----------------------------------------------------
-    # Lógica de Salvamento Automático
+    # Lógica de Salvamento Automático (Mantida para edições e exclusões)
     # ----------------------------------------------------
     
     # Prepara o DataFrame para salvar: remove a coluna 'Imagem' que contém bytes
@@ -502,6 +502,30 @@ def precificacao_completa():
                             how='left'
                         )
                         # =======================================================================================================
+                        
+                        # ==========================================================
+                        # NOVO BLOCO: FORÇAR O SALVAMENTO NO GITHUB APÓS ADIÇÃO
+                        # ISSO GARANTE A PERSISTÊNCIA ANTES DO RERUN
+                        # ==========================================================
+                        df_to_save = st.session_state.produtos_manuais.drop(columns=["Imagem"], errors='ignore')
+                        novo_hash_salvar = hash_df(df_to_save)
+                        
+                        if novo_hash_salvar != "error":
+                            salvar_csv_no_github(
+                                GITHUB_TOKEN,
+                                GITHUB_REPO,
+                                PATH_PRECFICACAO,
+                                df_to_save,
+                                GITHUB_BRANCH,
+                                mensagem="➕ Produto adicionado manualmente via formulário"
+                            )
+                            # Atualiza o hash de controle após o salvamento
+                            st.session_state.hash_precificacao = novo_hash_salvar
+                            st.toast("💾 Produto salvo no GitHub!", icon="✅")
+                        else:
+                            st.error("❌ Falha ao calcular o hash para salvar no GitHub.")
+                        # ==========================================================
+
                         st.success("✅ Produto adicionado!")
                         st.session_state["rerun_after_add"] = True 
                     else:
@@ -610,5 +634,3 @@ def precificacao_completa():
                     st.rerun()
                 else:
                     st.error("❌ Erro ao carregar o CSV. Verifique o caminho e permissões.")
-
-
