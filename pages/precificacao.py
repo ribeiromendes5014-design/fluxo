@@ -24,14 +24,31 @@ def _garantir_data_cadastro(df):
     Garante que o DataFrame tenha a coluna 'Data Cadastro'.
     Se ausente, adiciona com a data de hoje (ISO).
     Retorna o mesmo DataFrame (ou um novo válido se for None).
+    Totalmente à prova de erro.
     """
+    try:
+        hoje = date.today().isoformat()
+    except Exception:
+        hoje = "2025-01-01"  # fallback seguro
+
+    # Caso não haja DataFrame
     if df is None:
-        return pd.DataFrame({"Data Cadastro": [date.today().isoformat()]})
+        return pd.DataFrame({"Produto": [], "Data Cadastro": [hoje]})
+
+    # Caso seja um tipo inesperado
     if not isinstance(df, pd.DataFrame):
-        return pd.DataFrame({"Data Cadastro": [date.today().isoformat()]})
-    if 'Data Cadastro' not in df.columns:
-        df['Data Cadastro'] = date.today().isoformat()
+        return pd.DataFrame({"Produto": [], "Data Cadastro": [hoje]})
+
+    # Garante coluna
+    if "Data Cadastro" not in df.columns:
+        df["Data Cadastro"] = hoje
+
+    # Se for completamente vazio, garante estrutura mínima
+    if df.empty and "Produto" not in df.columns:
+        df["Produto"] = []
+
     return df
+
 
 
 def exibir_relatorios(df):
@@ -593,4 +610,5 @@ def precificacao_completa():
                     st.rerun()
                 else:
                     st.error("❌ Erro ao carregar o CSV. Verifique o caminho e permissões.")
+
 
