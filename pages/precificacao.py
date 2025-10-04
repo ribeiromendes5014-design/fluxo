@@ -142,7 +142,7 @@ def precificacao_completa():
     GITHUB_REPO = "ribeiromendes5014-design/Precificar"
     GITHUB_BRANCH = "main"
     PATH_PRECFICACAO = "precificacao.csv"
-    ARQ_CAIXAS = "https://raw.githubusercontent.com/ribeiromendes5014-design/Precificar/main/" + PATH_PRECFICACAO
+    ARQ_CAIXAS = f"https://raw.githubusercontent.com/{GITHUB_REPO} + PATH_PRECFICACAO
     imagens_dict = {}
     
     # =========================================================================
@@ -672,4 +672,5 @@ def precificacao_completa():
                     st.rerun()
                 else:
                     st.error("❌ Erro ao carregar o CSV. Verifique o caminho e permissões.")
+
 
