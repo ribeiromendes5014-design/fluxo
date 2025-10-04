@@ -19,6 +19,20 @@ from precificar_utils import (
 from constants_and_css import FATOR_CARTAO 
 
 
+def _garantir_data_cadastro(df):
+    """
+    Auxiliar: garante que o DataFrame tenha a coluna 'Data Cadastro'.
+    Se ausente, adiciona com a data de hoje (ISO).
+    Retorna o DataFrame (pode ser o mesmo objeto modificado).
+    """
+    if df is None:
+        return pd.DataFrame(columns=["Data Cadastro"])
+    if 'Data Cadastro' not in df.columns:
+        df = df.copy()
+        df['Data Cadastro'] = date.today().isoformat()
+    return df
+
+
 def exibir_relatorios(df):
     """
     Calcula e exibe as métricas de precificação, incluindo filtros por data.
@@ -146,15 +160,15 @@ def precificacao_completa():
                 df_inicial, 0.0, 0.0, "Margem fixa", 30.0
             )
             
-            # === CORREÇÃO DE ERRO: Garante que a coluna 'Data Cadastro' é mantida no DF geral após processamento ===
-            # Isso é necessário caso processar_dataframe remova colunas não usadas no cálculo.
-            if 'Data Cadastro' not in st.session_state.df_produtos_geral.columns:
-                 st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                    st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
-                    on='Produto', 
-                    how='left'
-                )
-            # =======================================================================================================
+            # === GARANTIA ADICIONAL: Cria 'Data Cadastro' antes do merge ===
+            st.session_state.produtos_manuais = _garantir_data_cadastro(st.session_state.produtos_manuais)
+            st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
+
+            st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
+                st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+                on='Produto', 
+                how='left'
+            )
             
             st.toast("✅ Dados de precificação carregados automaticamente do GitHub!", icon="🚀")
 
@@ -173,15 +187,15 @@ def precificacao_completa():
         st.session_state.df_produtos_geral = processar_dataframe(df_base, 0.0, 0.0, "Margem fixa", 30.0)
         st.session_state.produtos_manuais = df_base.copy()
         
-        # === CORREÇÃO DE ERRO: Garante que a coluna 'Data Cadastro' é mantida no DF geral após processamento (Exemplo) ===
-        if 'Data Cadastro' not in st.session_state.df_produtos_geral.columns:
-            st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
-                on='Produto', 
-                how='left'
-            )
-        # =================================================================================================================
+        # Garante Data Cadastro
+        st.session_state.produtos_manuais = _garantir_data_cadastro(st.session_state.produtos_manuais)
+        st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
 
+        st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
+            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+            on='Produto', 
+            how='left'
+        )
 
     # Carrega estados de custos e margem
     if "frete_manual" not in st.session_state:
@@ -259,12 +273,14 @@ def precificacao_completa():
             st.session_state.produtos_manuais, frete_total, custos_extras, modo_margem, margem_fixa
         )
         # === CORREÇÃO DE ERRO: Garante que a coluna 'Data Cadastro' é mantida no DF geral após processamento ===
-        if 'Data Cadastro' not in st.session_state.df_produtos_geral.columns:
-            st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
-                on='Produto', 
-                how='left'
-            )
+        st.session_state.produtos_manuais = _garantir_data_cadastro(st.session_state.produtos_manuais)
+        st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
+
+        st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
+            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+            on='Produto', 
+            how='left'
+        )
         # =======================================================================================================
         st.success("✅ Produto excluído da lista e sincronizado.")
         st.rerun()
@@ -291,12 +307,14 @@ def precificacao_completa():
             st.session_state.produtos_manuais, frete_total, custos_extras, modo_margem, margem_fixa
         )
         # === CORREÇÃO DE ERRO: Garante que a coluna 'Data Cadastro' é mantida no DF geral após processamento ===
-        if 'Data Cadastro' not in st.session_state.df_produtos_geral.columns:
-            st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
-                on='Produto', 
-                how='left'
-            )
+        st.session_state.produtos_manuais = _garantir_data_cadastro(st.session_state.produtos_manuais)
+        st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
+
+        st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
+            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+            on='Produto', 
+            how='left'
+        )
         # =======================================================================================================
         
         st.success("✅ Dados editados e precificação recalculada!")
@@ -363,12 +381,14 @@ def precificacao_completa():
                     margem_fixa
                 )
                 # === CORREÇÃO DE ERRO: Garante que a coluna 'Data Cadastro' é mantida no DF geral após processamento ===
-                if 'Data Cadastro' not in st.session_state.df_produtos_geral.columns:
-                    st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                        st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
-                        on='Produto', 
-                        how='left'
-                    )
+                st.session_state.produtos_manuais = _garantir_data_cadastro(st.session_state.produtos_manuais)
+                st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
+
+                st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
+                    st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+                    on='Produto', 
+                    how='left'
+                )
                 # =======================================================================================================
                 st.success("✅ Rateio aplicado! Verifique a tabela principal.")
                 st.rerun() 
@@ -455,12 +475,14 @@ def precificacao_completa():
                             margem_fixa
                         )
                         # === CORREÇÃO DE ERRO: Garante que a coluna 'Data Cadastro' é mantida no DF geral após processamento ===
-                        if 'Data Cadastro' not in st.session_state.df_produtos_geral.columns:
-                            st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                                st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
-                                on='Produto', 
-                                how='left'
-                            )
+                        st.session_state.produtos_manuais = _garantir_data_cadastro(st.session_state.produtos_manuais)
+                        st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
+
+                        st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
+                            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+                            on='Produto', 
+                            how='left'
+                        )
                         # =======================================================================================================
                         st.success("✅ Produto adicionado!")
                         st.session_state["rerun_after_add"] = True 
@@ -502,12 +524,14 @@ def precificacao_completa():
                         margem_fixa
                     )
                     # === CORREÇÃO DE ERRO: Garante que a coluna 'Data Cadastro' é mantida no DF geral após processamento ===
-                    if 'Data Cadastro' not in st.session_state.df_produtos_geral.columns:
-                        st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
-                            on='Produto', 
-                            how='left'
-                        )
+                    st.session_state.produtos_manuais = _garantir_data_cadastro(st.session_state.produtos_manuais)
+                    st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
+
+                    st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
+                        st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+                        on='Produto', 
+                        how='left'
+                    )
                     # =======================================================================================================
                     
                     st.session_state["produto_para_excluir"] = None
@@ -554,12 +578,14 @@ def precificacao_completa():
                         df_exemplo, frete_total, custos_extras, modo_margem, margem_fixa
                     )
                     # === CORREÇÃO DE ERRO: Garante que a coluna 'Data Cadastro' é mantida no DF geral após processamento ===
-                    if 'Data Cadastro' not in st.session_state.df_produtos_geral.columns:
-                        st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
-                            st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
-                            on='Produto', 
-                            how='left'
-                        )
+                    st.session_state.produtos_manuais = _garantir_data_cadastro(st.session_state.produtos_manuais)
+                    st.session_state.df_produtos_geral = _garantir_data_cadastro(st.session_state.df_produtos_geral)
+
+                    st.session_state.df_produtos_geral = st.session_state.df_produtos_geral.merge(
+                        st.session_state.produtos_manuais[['Produto', 'Data Cadastro']], 
+                        on='Produto', 
+                        how='left'
+                    )
                     # =======================================================================================================
 
                     st.success("✅ CSV recarregado e processado com sucesso!")
