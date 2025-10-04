@@ -146,7 +146,7 @@ def precificacao_completa():
     imagens_dict = {}
     
     # =========================================================================
-    # NOVO BLOCO: Alerta de Configuração de Token
+    # BLOCO: Alerta de Configuração de Token (ESSENCIAL)
     # =========================================================================
     is_token_valid = GITHUB_TOKEN != "TOKEN_FICTICIO"
     if not is_token_valid:
@@ -544,8 +544,13 @@ def precificacao_completa():
                                     st.session_state.hash_precificacao = novo_hash_salvar
                                     st.toast("💾 Produto salvo no GitHub!", icon="✅")
                                 except Exception as e:
+                                    # ---- MELHORIA NA MENSAGEM DE ERRO ----
                                     st.error(f"❌ Falha ao salvar no GitHub! Erro: {e}")
-                                    st.warning("⚠️ A falha no salvamento (erro 401) é um problema de credenciais. Por favor, verifique as permissões do seu `github_token` para o repositório **ribeiromendes5014-design/Precificar**.")
+                                    st.warning(
+                                        "⚠️ **Ação Necessária:** Uma falha no salvamento (como o erro 401) indica um problema de credenciais. "
+                                        "Verifique se o seu `github_token` nos Streamlit Secrets é válido e se ele possui a permissão **'repo'** no GitHub."
+                                    )
+                                    # ------------------------------------
                             else:
                                 st.error("❌ Falha ao calcular o hash para salvar no GitHub.")
                         else:
@@ -667,4 +672,3 @@ def precificacao_completa():
                     st.rerun()
                 else:
                     st.error("❌ Erro ao carregar o CSV. Verifique o caminho e permissões.")
-
