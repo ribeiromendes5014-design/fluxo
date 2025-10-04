@@ -21,14 +21,15 @@ from constants_and_css import FATOR_CARTAO
 
 def _garantir_data_cadastro(df):
     """
-    Auxiliar: garante que o DataFrame tenha a coluna 'Data Cadastro'.
+    Garante que o DataFrame tenha a coluna 'Data Cadastro'.
     Se ausente, adiciona com a data de hoje (ISO).
-    Retorna o DataFrame (pode ser o mesmo objeto modificado).
+    Retorna o mesmo DataFrame (ou um novo válido se for None).
     """
     if df is None:
-        return pd.DataFrame(columns=["Data Cadastro"])
+        return pd.DataFrame({"Data Cadastro": [date.today().isoformat()]})
+    if not isinstance(df, pd.DataFrame):
+        return pd.DataFrame({"Data Cadastro": [date.today().isoformat()]})
     if 'Data Cadastro' not in df.columns:
-        df = df.copy()
         df['Data Cadastro'] = date.today().isoformat()
     return df
 
@@ -592,3 +593,4 @@ def precificacao_completa():
                     st.rerun()
                 else:
                     st.error("❌ Erro ao carregar o CSV. Verifique o caminho e permissões.")
+
