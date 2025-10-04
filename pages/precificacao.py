@@ -137,6 +137,7 @@ def precificacao_completa():
     st.title("📊 Precificador de Produtos")
     
     # --- Configurações do GitHub para SALVAR ---
+    # Usando o get para priorizar a chave mais comum 'github_token'
     GITHUB_TOKEN = st.secrets.get("github_token", "TOKEN_FICTICIO")
     GITHUB_REPO = "ribeiromendes5014-design/Precificar"
     GITHUB_BRANCH = "main"
@@ -261,15 +262,19 @@ def precificacao_completa():
     novo_hash = hash_df(df_to_hash)
     if novo_hash != st.session_state.hash_precificacao and is_token_valid:
         if novo_hash != "error": # Evita salvar se a função hash falhou
-            salvar_csv_no_github(
-                GITHUB_TOKEN,
-                GITHUB_REPO,
-                PATH_PRECFICACAO,
-                df_to_hash, # Salva o df sem a coluna 'Imagem'
-                GITHUB_BRANCH,
-                mensagem="♻️ Alteração automática na precificação"
-            )
-            st.session_state.hash_precificacao = novo_hash
+            try: # Adiciona bloco de tratamento de erro para salvar automaticamente
+                salvar_csv_no_github(
+                    GITHUB_TOKEN,
+                    GITHUB_REPO,
+                    PATH_PRECFICACAO,
+                    df_to_hash, # Salva o df sem a coluna 'Imagem'
+                    GITHUB_BRANCH,
+                    mensagem="♻️ Alteração automática na precificação"
+                )
+                st.session_state.hash_precificacao = novo_hash
+            except Exception as e:
+                # Se falhar aqui (incluindo 401), o erro será capturado e exibido.
+                st.error(f"❌ Falha no salvamento automático! Verifique as permissões do seu token. Erro: {e}")
 
 
     # ----------------------------------------------------
@@ -519,24 +524,28 @@ def precificacao_completa():
                         # =======================================================================================================
                         
                         # ==========================================================
-                        # BLOCO: FORÇAR O SALVAMENTO NO GITHUB APÓS ADIÇÃO
+                        # BLOCO: FORÇAR O SALVAMENTO NO GITHUB APÓS ADIÇÃO (COM TRATAMENTO DE ERRO)
                         # ==========================================================
                         if is_token_valid: # Adiciona a verificação do token
                             df_to_save = st.session_state.produtos_manuais.drop(columns=["Imagem"], errors='ignore')
                             novo_hash_salvar = hash_df(df_to_save)
                             
                             if novo_hash_salvar != "error":
-                                salvar_csv_no_github(
-                                    GITHUB_TOKEN,
-                                    GITHUB_REPO,
-                                    PATH_PRECFICACAO,
-                                    df_to_save,
-                                    GITHUB_BRANCH,
-                                    mensagem="➕ Produto adicionado manualmente via formulário"
-                                )
-                                # Atualiza o hash de controle após o salvamento
-                                st.session_state.hash_precificacao = novo_hash_salvar
-                                st.toast("💾 Produto salvo no GitHub!", icon="✅")
+                                try: # Tenta salvar no GitHub
+                                    salvar_csv_no_github(
+                                        GITHUB_TOKEN,
+                                        GITHUB_REPO,
+                                        PATH_PRECFICACAO,
+                                        df_to_save,
+                                        GITHUB_BRANCH,
+                                        mensagem="➕ Produto adicionado manualmente via formulário"
+                                    )
+                                    # Atualiza o hash de controle após o salvamento
+                                    st.session_state.hash_precificacao = novo_hash_salvar
+                                    st.toast("💾 Produto salvo no GitHub!", icon="✅")
+                                except Exception as e:
+                                    st.error(f"❌ Falha ao salvar no GitHub! Erro: {e}")
+                                    st.warning("⚠️ A falha no salvamento (erro 401) é um problema de credenciais. Por favor, verifique as permissões do seu `github_token` para o repositório **ribeiromendes5014-design/Precificar**.")
                             else:
                                 st.error("❌ Falha ao calcular o hash para salvar no GitHub.")
                         else:
@@ -616,6 +625,13 @@ def precificacao_completa():
     with tab_github:
         st.markdown("---")
         st.header("⚙️ Status de Sincronização e Configuração")
+        
+        # Indica o status real do token usado
+        if is_token_valid:
+            st.success("✅ O Token do GitHub está presente e pronto para salvar.")
+        else:
+            st.warning("⚠️ O Token do GitHub está usando um placeholder. Não será possível salvar no repositório.")
+            
         st.info("O arquivo **precificacao.csv** do GitHub agora é carregado **automaticamente** ao iniciar a aplicação.")
         
         if st.session_state.df_produtos_geral.empty:
