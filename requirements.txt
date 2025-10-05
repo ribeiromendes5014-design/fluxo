@@ -34,3 +34,4 @@ Pillow
 pdfplumber
 fpdf
 python-telegram-bot
+gspread-streamlit
