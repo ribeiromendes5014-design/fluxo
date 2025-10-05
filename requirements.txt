@@ -35,3 +35,5 @@ pdfplumber
 fpdf
 python-telegram-bot
 gspread-streamlit
+gspread
+oauth2client
