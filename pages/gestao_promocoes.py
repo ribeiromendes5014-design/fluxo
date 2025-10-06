@@ -1,5 +1,7 @@
 # pages/gestao_promocoes.py
 
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime, timedelta
@@ -7,7 +9,7 @@ import json
 import ast
 import hashlib
 import plotly.express as px
-
+from constants_and_css import FATOR_CARTAO
 from utils import (
     inicializar_produtos,
     carregar_livro_caixa,
@@ -21,6 +23,7 @@ from utils import (
     salvar_promocoes_no_github,
 )
 from constants_and_css import FATOR_CARTAO
+
 
 
 
@@ -378,6 +381,7 @@ def gestao_promocoes():
                             st.error(f"Erro ao salvar a exclusão: {e}")
         else:
             st.info("Selecione uma promoção para ver as opções de edição e exclusão.")
+
 
 
 
