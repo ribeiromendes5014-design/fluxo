@@ -148,5 +148,4 @@ original_index,Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos
 146.0,2025-06-19,Doce&bella,,-5646.76,Dinheiro,Saída,,Fornecedores/Matéria Prima,Realizada,2025-06-19,,,2025-06-19,red,147.0,
 147.0,2025-10-01,Doce&bella,Isa ,55.0,PIX,Entrada,,,Realizada,2025-10-01,,,2025-10-01,green,148.0,
 148.0,2025-10-01,Doce&bella,Tais,19.0,Pendente,Entrada,,,Pendente,2025-10-10,,,2025-10-01,green,149.0,
-,2025-10-06,Doce&bella,venda,17.5,PIX,Entrada,,Aluguel,Realizada,2025-10-06,,,,,,
-,2025-10-04,Fotografia,festa,300.0,Dinheiro,Entrada,,Aluguel,Realizada,2025-10-04,,,,,,
+,2025-10-04,Fotografia,,300.0,Dinheiro,Entrada,,Aluguel,Realizada,2025-10-04,,,,,,
