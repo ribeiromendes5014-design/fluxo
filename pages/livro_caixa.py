@@ -14,14 +14,7 @@ try:
 except ImportError:
     COMMIT_MESSAGE = "Nova Movimentação Registrada" # Valor padrão de segurança
 
-# Importa as funções auxiliares e constantes
-from utils import (
-    inicializar_produtos, carregar_livro_caixa, ajustar_estoque, to_float, 
-    salvar_dados_no_github, processar_dataframe, calcular_resumo, 
-    calcular_valor_em_aberto, format_produtos_resumo, ler_codigo_barras_api,
-    callback_adicionar_manual, callback_adicionar_estoque, salvar_produtos_no_github,
-    add_months, carregar_promocoes, norm_promocoes
-)
+
 from constants_and_css import (
     LOJAS_DISPONIVEIS, CATEGORIAS_SAIDA, FORMAS_PAGAMENTO, FATOR_CARTAO,
     COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
@@ -1517,3 +1510,4 @@ def livro_caixa():
             df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
 
             st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+
