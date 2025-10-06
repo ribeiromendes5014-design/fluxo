@@ -192,50 +192,35 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
 # =================================================================================
 # 🔑 FUNÇÃO DE PERSISTÊNCIA CRÍTICA: salvar_promocoes
 # Esta função salva o DataFrame de promoções, seja no GitHub ou localmente.
-def salvar_promocoes(df_promocoes: pd.DataFrame):
-    """Salva o DataFrame de promoções em ARQ_PROMOCOES (no GitHub e/ou local)."""
-    
-    # Prepara o DataFrame para salvamento, garantindo que as datas sejam strings
-    df_salvar = df_promocoes.copy()
-    if 'DataInicio' in df_salvar.columns:
-        df_salvar['DataInicio'] = df_salvar['DataInicio'].astype(str)
-    if 'DataFim' in df_salvar.columns:
-        df_salvar['DataFim'] = df_salvar['DataFim'].astype(str)
-        
-    csv_string = df_salvar.to_csv(index=False, encoding="utf-8-sig")
+def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza promoções"):
+    """Salva o CSV de promoções localmente e (se possível) no GitHub."""
+    from constants_and_css import ARQ_PROMOCOES, OWNER, REPO_NAME, BRANCH
 
-    # 1. Tenta salvar no GitHub (Mock ou Real)
     try:
-        g = Github(TOKEN) # Usa a classe Mock se a real falhou
+        # Backup local
+        df.to_csv(ARQ_PROMOCOES, index=False, encoding="utf-8-sig")
+        st.toast("💾 Promoções salvas localmente!")
+    except Exception as e:
+        st.error(f"Erro ao salvar localmente promoções: {e}")
+
+    try:
+        g = Github(TOKEN)
         repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        
-        # Tenta obter o SHA do conteúdo atual
+        csv_string = df.to_csv(index=False, encoding="utf-8-sig")
+
         try:
-            # 🔑 O mock falha aqui, mas se PyGithub estiver instalado, ele atualiza
             contents = repo.get_contents(ARQ_PROMOCOES, ref=BRANCH)
-            repo.update_file(contents.path, COMMIT_MESSAGE, csv_string, contents.sha, branch=BRANCH)
-            st.toast("Promoções salvas (atualizadas) no GitHub.")
+            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
         except Exception:
-            # 🔑 O mock simula a criação aqui, mas se PyGithub estiver instalado, ele cria
-            repo.create_file(ARQ_PROMOCOES, COMMIT_MESSAGE, csv_string, branch=BRANCH)
-            st.toast("Promoções salvas (criadas) no GitHub.")
+            repo.create_file(ARQ_PROMOCOES, commit_message, csv_string, branch=BRANCH)
+
+        st.success("📁 Promoções atualizadas no GitHub!")
         return True
 
-    except Exception as e:
-        # 2. Fallback local se o GitHub falhar (OPCIONAL/DEBUG)
-        st.warning(f"❌ Falha no salvamento do GitHub para promoções: {e}. Tentando salvar localmente.")
-        try:
-            # 🔑 CORREÇÃO CRÍTICA: Cria o diretório se não existir antes de salvar o arquivo.
-            diretorio = os.path.dirname(ARQ_PROMOCOES)
-            if diretorio and not os.path.exists(diretorio):
-                 os.makedirs(diretorio)
-                 
-            df_salvar.to_csv(ARQ_PROMOCOES, index=False, encoding="utf-8-sig")
-            st.warning("Backup de promoções salvo localmente.")
-            return True
-        except Exception as local_e:
-            st.error(f"❌ Falha ao salvar promoções localmente: {local_e}. Verifique as permissões de escrita.")
-            return False
+    except Exception:
+        st.warning("Falha na atualização no GitHub — apenas backup local salvo.")
+        return False
+
 
 # =================================================================================
 
@@ -645,6 +630,7 @@ def get_most_sold_products(df_movimentacoes):
     df_mais_vendidos.sort_values(by="Quantidade Total Vendida", ascending=False, inplace=True)
 
     return df_mais_vendidos
+
 
 
 
