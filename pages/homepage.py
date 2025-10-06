@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 # Importa funções e constantes
-from utils import inicializar_produtos, carregar_livro_caixa, get_most_sold_products(...)
+from utils import inicializar_produtos, carregar_livro_caixa, get_most_sold_products, to_float
 from constants_and_css import URL_MAIS_VENDIDOS, URL_OFERTAS, URL_NOVIDADES, FATOR_CARTAO
 
 
@@ -50,12 +50,17 @@ def homepage():
         st.info("Não há dados de vendas suficientes (Entradas Realizadas) para determinar os produtos mais vendidos.")
     else:
         html_cards = []
-        for i, row in produtos_mais_vendidos.iterrows():
-            vendas_count = df_mais_vendidos_id[df_mais_vendidos_id["Produto_ID"] == str(row["ID"])]["Quantidade Total Vendida"].iloc[0] if not df_mais_vendidos_id.empty and not df_mais_vendidos_id[df_mais_vendidos_id["Produto_ID"] == str(row["ID"])].empty else 0
+        for _, row in produtos_mais_vendidos.iterrows():
+            vendas_count = 0
+            if not df_mais_vendidos_id.empty:
+                match = df_mais_vendidos_id[df_mais_vendidos_id["Produto_ID"] == str(row["ID"])]
+                if not match.empty:
+                    vendas_count = match["Quantidade Total Vendida"].iloc[0]
+
             nome_produto = row['Nome']
             descricao = row['Marca'] if row['Marca'] else row['Categoria']
             preco_cartao = to_float(row.get('PrecoCartao', 0))
-            foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/F48FB1/880E4F?text={str(row.get('Nome','')).replace(' ', '+')}"
+            foto_url = row.get("FotoURL") or f"https://placehold.co/150x150/F48FB1/880E4F?text={str(row.get('Nome','')).replace(' ', '+')}"
             card_html = f'''
                 <div class="product-card">
                     <img src="{foto_url}" alt="{nome_produto}">
@@ -88,18 +93,17 @@ def homepage():
         st.info("Nenhum produto em promoção registrado no momento.")
     else:
         html_cards_ofertas = []
-        for i, row in produtos_oferta.iterrows():
+        for _, row in produtos_oferta.iterrows():
             nome_produto = row['Nome']
             descricao = row['Marca'] if row['Marca'] else row['Categoria']
             preco_vista_original = row['PrecoVista_f']
             preco_cartao_promo = row['PrecoCartao_f']
-            desconto = 0.0
             try:
                 desconto = 1 - (preco_cartao_promo / preco_vista_original) if preco_vista_original > 0 else 0
             except:
                 desconto = 0.0
             desconto_percent = round(desconto * 100)
-            foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/150x150/E91E63/FFFFFF?text={str(row.get('Nome','')).replace(' ', '+')}"
+            foto_url = row.get("FotoURL") or f"https://placehold.co/150x150/E91E63/FFFFFF?text={str(row.get('Nome','')).replace(' ', '+')}"
             card_html = f'''
                 <div class="product-card" style="background-color: #FFF5F7;">
                     <img src="{foto_url}" alt="{nome_produto}">
@@ -121,7 +125,7 @@ def homepage():
             </div>
         ''', unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)  # Fecha offer-section
+    st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("---")
 
     # ==================================================
@@ -129,15 +133,12 @@ def homepage():
     # ==================================================
     st.markdown(f'<h2>Nossas Novidades</h2>', unsafe_allow_html=True)
 
-    # Seleciona os últimos 10 produtos cadastrados com estoque > 0
-    produtos_novos = produtos_df[produtos_df['Quantidade'] > 0].sort_values(by='ID', ascending=False).head(10)
-
     if produtos_novos.empty:
         st.info("Não há produtos cadastrados no estoque para exibir como novidades.")
     else:
         html_cards_novidades = []
         for _, row in produtos_novos.iterrows():
-            foto_url = row.get("FotoURL") if row.get("FotoURL") else f"https://placehold.co/400x400/FFC1E3/E91E63?text={row['Nome'].replace(' ', '+')}"
+            foto_url = row.get("FotoURL") or f"https://placehold.co/400x400/FFC1E3/E91E63?text={row['Nome'].replace(' ', '+')}"
             preco_vista = to_float(row.get('PrecoVista', 0))
             preco_formatado = f"R$ {preco_vista:,.2f}" if preco_vista > 0 else "Preço não disponível"
             nome = row.get("Nome", "")
@@ -151,19 +152,14 @@ def homepage():
                 <p style="font-weight: bold; margin-top: 10px; height: 30px; white-space: normal;">{nome} ({marca})</p>
                 <p style="font-size: 0.9em;">✨ Estoque: {qtd}</p>
                 <p style="font-weight: bold; color: #E91E63; margin-top: 5px;">💸 {preco_formatado}</p>
-                
             </div>
             """
             html_cards_novidades.append(card_html)
 
-        # Renderiza o carrossel
         st.markdown(f"""
             <div class="carousel-outer-container">
                 <div class="product-wrapper">
                     {''.join(html_cards_novidades)}
-               
                 </div>
             </div>
         """, unsafe_allow_html=True)
-
-
