@@ -223,6 +223,11 @@ def salvar_promocoes(df_promocoes: pd.DataFrame):
         # 2. Fallback local se o GitHub falhar (opcional)
         st.warning(f"❌ Falha no salvamento do GitHub para promoções: {e}. Tentando salvar localmente.")
         try:
+            # 🔑 CORREÇÃO: Cria o diretório se ele não existir
+            diretorio = os.path.dirname(ARQ_PROMOCOES)
+            if diretorio and not os.path.exists(diretorio):
+                 os.makedirs(diretorio)
+                 
             df_salvar.to_csv(ARQ_PROMOCOES, index=False, encoding="utf-8-sig")
             st.warning("Backup de promoções salvo localmente.")
             return True
@@ -638,4 +643,5 @@ def get_most_sold_products(df_movimentacoes):
     df_mais_vendidos.sort_values(by="Quantidade Total Vendida", ascending=False, inplace=True)
 
     return df_mais_vendidos
+
 
