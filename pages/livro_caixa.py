@@ -65,11 +65,11 @@ def livro_caixa():
     if "aba_ativa_livro_caixa" not in st.session_state or str(st.session_state.aba_ativa_livro_caixa) not in abas_validas: 
         st.session_state.aba_ativa_livro_caixa = abas_validas[0]
 
-    # --- CORREÇÃO APLICADA AQUI ---
+    # --- CORREÇÃO DO KEYERROR APLICADA AQUI ---
     # Os dados em st.session_state.df já foram processados pela função carregar_livro_caixa().
     # Não é necessário chamar processar_dataframe() novamente.
     df_exibicao = st.session_state.df.copy() # Usamos o df direto da session_state
-    df_dividas = st.session_state.df # df_dividas ainda é útil para operações de salvamento
+    df_dividas = st.session_state.df # Usado para operações de salvamento
     # --- FIM DA CORREÇÃO ---
 
     # CORREÇÃO: Garante que os produtos para venda incluem variações e itens simples (PaiID nulo ou vazio)
@@ -1513,6 +1513,7 @@ def livro_caixa():
                             st.cache_data.clear()
                             st.rerun()
                 else:
+                    # --- CORREÇÃO DE SINTAXE (INDENTAÇÃO) ---
                     st.info("Selecione uma dívida válida para prosseguir com o pagamento.")
 
 
@@ -1526,6 +1527,3 @@ def livro_caixa():
             df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
 
             st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
-
-}
-nesse codigo corrija ele pra min
