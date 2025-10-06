@@ -6,8 +6,22 @@ from datetime import date, datetime, timedelta
 import json
 import ast
 import hashlib
-import plotly.express as px # Necessário para gráficos se houver (removido no código abaixo, mas bom manter)
-from utils import salvar_promocoes_no_github
+import plotly.express as px # Necessário para gráficos se houver (removido no código abaixo, mas bom manter)import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+from utils import (
+    inicializar_produtos,
+    carregar_livro_caixa,
+    ajustar_estoque,
+    to_float,
+    salvar_produtos_no_github,
+    parse_date_yyyy_mm_dd,
+    prox_id,
+    norm_promocoes,
+    carregar_promocoes,
+    salvar_promocoes_no_github,  # 👈 inclui aqui
+)
+
 
 # Importa as funções auxiliares e constantes
 # 🔑 PONTO CRÍTICO: Garantir que 'salvar_promocoes' seja importada e esteja definida em utils.py
@@ -363,4 +377,5 @@ def gestao_promocoes():
                             st.error(f"Erro ao salvar a exclusão: {e}")
         else:
             st.info("Selecione uma promoção para ver as opções de edição e exclusão.")
+
 
