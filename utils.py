@@ -10,6 +10,7 @@ import json
 import hashlib
 import ast
 import calendar
+import os
 
 # ==================== CORREÇÃO CRÍTICA: MOCK DA CLASSE GITHUB ====================
 # Isso evita que o aplicativo falhe se PyGithub não estiver instalado ou se o TOKEN falhar.
@@ -637,3 +638,4 @@ def get_most_sold_products(df_movimentacoes):
     df_mais_vendidos.sort_values(by="Quantidade Total Vendida", ascending=False, inplace=True)
 
     return df_mais_vendidos
+
