@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime, timedelta, date
 import json
 import ast
-import hashlib # <--- CORREÇÃO: Importação necessária para gerar o RecorrenciaID
+import hashlib # Importação necessária para gerar o RecorrenciaID
 import time # Adicionando time para garantir que COMMIT_MESSAGE não seja uma constante vazia
 
 # Define COMMIT_MESSAGE se não for importado, para evitar NameError no else:
@@ -1075,7 +1075,8 @@ def livro_caixa():
             st.caption("Acesse a aba **Relatórios e Filtros > Dívidas Pendentes** para concluir essas transações.")
             st.markdown("---")
         
-        st.subheader(f"🏠 Resumo Rápido por Loja (Mês de {first_day_of_month.strftime('%m/%Y')} - Realizado)")
+        # O Nome da variável 'first_day_of_month' está incorreta no seu código (usando a var. 'primeiro_dia_mes' em cima)
+        st.subheader(f"🏠 Resumo Rápido por Loja (Mês de {primeiro_dia_mes.strftime('%m/%Y')} - Realizado)")
         
         # [Bloco de Resumo por Loja]
         df_resumo_loja = df_mes_atual_realizado.groupby('Loja')['Valor'].agg(['sum', lambda x: x[x >= 0].sum(), lambda x: abs(x[x < 0].sum())]).reset_index()
