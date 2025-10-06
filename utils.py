@@ -11,25 +11,9 @@ import hashlib
 import ast
 import calendar
 import os
-
-# ==================== CORREÇÃO CRÍTICA: MOCK DA CLASSE GITHUB ====================
-# Isso evita que o aplicativo falhe se PyGithub não estiver instalado ou se o TOKEN falhar.
-class Github:
-    def __init__(self, token):
-        # Apenas simula a inicialização; a conexão real será ignorada na função de salvar.
-        pass
-    def get_repo(self, repo_name):
-        return self
-    def get_contents(self, path, ref):
-        # Simula erro (usado no bloco try/except da função salvar)
-        raise Exception("Mock: Conexão GitHub desativada/Token ausente.")
-    def update_file(self, path, msg, content, sha, branch):
-        st.warning(f"💾 Salvamento de arquivo {path} ignorado (MOCK ATIVO).")
-    def create_file(self, path, msg, content, branch):
-        st.warning(f"💾 Criação de arquivo {path} ignorada (MOCK ATIVO).")
+from github import Github  # ✅ Agora importa o PyGithub real
 
 # =================================================================================
-
 # Importa as constantes de negócio e de arquivo
 from constants_and_css import (
     TOKEN, OWNER, REPO_NAME, BRANCH, GITHUB_TOKEN, GITHUB_REPO, GITHUB_BRANCH,
@@ -37,11 +21,12 @@ from constants_and_css import (
     COLUNAS_COMPRAS, COLUNAS_PADRAO, COLUNAS_PADRAO_COMPLETO, COLUNAS_COMPLETAS_PROCESSADAS,
     COLUNAS_PRODUTOS, FATOR_CARTAO, COMMIT_MESSAGE, COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
 )
+# =================================================================================
+
 
 # ==================== FUNÇÕES DE TRATAMENTO BÁSICO ====================
 
 def to_float(valor_str):
-    """Converte string (com vírgula ou ponto) para float."""
     try:
         if isinstance(valor_str, (int, float)):
             return float(valor_str)
@@ -49,8 +34,8 @@ def to_float(valor_str):
     except:
         return 0.0
 
+
 def prox_id(df, coluna_id="ID"):
-    """Gera o próximo ID sequencial."""
     if df.empty:
         return "1"
     else:
@@ -59,8 +44,8 @@ def prox_id(df, coluna_id="ID"):
         except:
             return str(len(df) + 1)
 
+
 def hash_df(df):
-    """Gera um hash para o DataFrame."""
     df_temp = df.copy()
     for col in df_temp.select_dtypes(include=['datetime64[ns]']).columns:
         df_temp[col] = df_temp[col].astype(str)
@@ -69,8 +54,8 @@ def hash_df(df):
     except Exception:
         return "error"
 
+
 def parse_date_yyyy_mm_dd(date_str):
-    """Tenta converter uma string para objeto date."""
     if pd.isna(date_str) or not date_str:
         return None
     try:
@@ -78,16 +63,16 @@ def parse_date_yyyy_mm_dd(date_str):
     except:
         return None
 
+
 def add_months(d: date, months: int) -> date:
-    """Adiciona um número específico de meses a uma data."""
     month = d.month + months
     year = d.year + (month - 1) // 12
     month = (month - 1) % 12 + 1
     day = min(d.day, calendar.monthrange(year, month)[1])
     return date(year, month, day)
 
+
 def calcular_valor_em_aberto(linha):
-    """Calcula o valor absoluto e arredondado para 2 casas decimais."""
     try:
         if isinstance(linha, pd.DataFrame) and not linha.empty:
             valor_raw = pd.to_numeric(linha['Valor'].iloc[0], errors='coerce')
@@ -95,119 +80,48 @@ def calcular_valor_em_aberto(linha):
             valor_raw = pd.to_numeric(linha['Valor'], errors='coerce')
         else:
             return 0.0
-        valor_float = float(valor_raw) if pd.notna(valor_raw) and not isinstance(valor_raw, pd.Series) else 0.0
+        valor_float = float(valor_raw) if pd.notna(valor_raw) else 0.0
         return round(abs(valor_float), 2)
     except Exception:
         return 0.0
 
+
 def format_produtos_resumo(produtos_json):
-    """Formata o JSON de produtos para exibição na tabela."""
-    if pd.isna(produtos_json) or produtos_json == "": return ""
-    if produtos_json:
+    if pd.isna(produtos_json) or produtos_json == "":
+        return ""
+    try:
         try:
-            try:
-                produtos = json.loads(produtos_json)
-            except json.JSONDecodeError:
-                produtos = ast.literal_eval(produtos_json)
-            if not isinstance(produtos, list) or not all(isinstance(p, dict) for p in produtos): return "Dados inválidos"
-            count = len(produtos)
-            if count > 0:
-                primeiro = produtos[0].get('Produto', 'Produto Desconhecido')
-                total_custo = 0.0
-                total_venda = 0.0
-                for p in produtos:
-                    try:
-                        qtd = float(p.get('Quantidade', 0))
-                        preco_unitario = float(p.get('Preço Unitário', 0))
-                        custo_unitario = float(p.get('Custo Unitário', 0))
-                        total_custo += custo_unitario * qtd
-                        total_venda += preco_unitario * qtd
-                    except ValueError: continue
-                lucro = total_venda - total_custo
-                lucro_str = f"| Lucro R$ {lucro:,.2f}" if lucro != 0 else ""
-                return f"{count} item(s): {primeiro}... {lucro_str}"
-        except:
-            return "Erro na formatação/JSON InváLido"
+            produtos = json.loads(produtos_json)
+        except json.JSONDecodeError:
+            produtos = ast.literal_eval(produtos_json)
+        if not isinstance(produtos, list):
+            return "Dados inválidos"
+        count = len(produtos)
+        if count > 0:
+            primeiro = produtos[0].get('Produto', 'Produto Desconhecido')
+            total_custo, total_venda = 0.0, 0.0
+            for p in produtos:
+                qtd = float(p.get('Quantidade', 0))
+                preco_unit = float(p.get('Preço Unitário', 0))
+                custo_unit = float(p.get('Custo Unitário', 0))
+                total_custo += custo_unit * qtd
+                total_venda += preco_unit * qtd
+            lucro = total_venda - total_custo
+            lucro_str = f"| Lucro R$ {lucro:,.2f}" if lucro != 0 else ""
+            return f"{count} item(s): {primeiro}... {lucro_str}"
+    except:
+        return "Erro JSON Inválido"
     return ""
 
 
-# ==================== FUNÇÕES DE PERSISTÊNCIA (GITHUB/CACHE) ====================
-
-def load_csv_github(url: str) -> pd.DataFrame | None:
-    """Tenta carregar um CSV do GitHub."""
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        df = pd.read_csv(StringIO(response.text), dtype=str)
-        if df.empty or len(df.columns) < 2:
-            return None
-        return df
-    except Exception:
-        # Permite que a inicialização continue se a conexão falhar
-        return None
-
-def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
-    """
-    Salva o DataFrame CSV no GitHub. Usa MOCK (Classe Github acima) se o PyGithub falhar.
-    Prioriza o backup local e suprime o erro de conexão.
-    """
-
-    # 1. Backup local
-    try:
-        df.to_csv(ARQ_LOCAL, index=False, encoding="utf-8-sig")
-        # st.toast("Backup local salvo.") # Opcional: para feedback
-    except Exception:
-        st.warning("Falha ao salvar backup local.")
-
-    # 2. Prepara DataFrame para envio (mesmo que seja mockado, o Streamlit precisa deste formato)
-    df_temp = df.copy()
-    for col_date in ['Data', 'Data Pagamento']:
-        if col_date in df_temp.columns:
-            df_temp[col_date] = pd.to_datetime(df_temp[col_date], errors='coerce').apply(
-                lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
-            )
-
-    try:
-        g = Github(TOKEN) # Usa a classe Mock se a real falhou
-        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
-
-        # Tenta obter o SHA do conteúdo atual (vai falhar no Mock, forçando a criação/simulação)
-        try:
-            contents = repo.get_contents(PATH_DIVIDAS, ref=BRANCH)
-            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
-            st.success("📁 Livro Caixa salvo (atualizado) no GitHub!")
-        except Exception:
-            repo.create_file(PATH_DIVIDAS, commit_message, csv_string, branch=BRANCH)
-            st.success("📁 Livro Caixa salvo (criado) no GitHub!")
-
-        return True
-
-    except Exception as e:
-        # A falha aqui é esperada se o PyGithub real não estiver configurado.
-        st.error(f"❌ Erro de persistência no GitHub: {e}. Usando apenas backup local.")
-        return False
-
-
 # =================================================================================
-# 🔑 FUNÇÃO DE PERSISTÊNCIA CRÍTICA: salvar_promocoes
-# Esta função salva o DataFrame de promoções, seja no GitHub ou localmente.
+# 🔑 FUNÇÃO DE PERSISTÊNCIA CRÍTICA: salvar_promocoes_no_github
+# =================================================================================
 def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza promoções"):
-    """
-    Salva o CSV de promoções localmente e, se possível, também no GitHub.
+    """Salva o CSV de promoções localmente e, se possível, também no GitHub."""
+    from constants_and_css import ARQ_PROMOCOES, OWNER, REPO_NAME, BRANCH
 
-    - Faz backup local em ARQ_PROMOCOES.
-    - Se as credenciais estiverem em st.secrets, atualiza o arquivo remoto no repositório.
-    """
-
-    try:
-        # --- Importa constantes do projeto ---
-        from constants_and_css import ARQ_PROMOCOES, OWNER, REPO_NAME, BRANCH
-    except Exception:
-        st.error("❌ Erro ao carregar constantes do projeto.")
-        return False
-
-    # --- 1️⃣ Salva localmente ---
+    # --- 1️⃣ Salvar localmente ---
     try:
         df.to_csv(ARQ_PROMOCOES, index=False, encoding="utf-8-sig")
         st.toast("💾 Promoções salvas localmente!")
@@ -215,28 +129,26 @@ def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza
         st.error(f"Erro ao salvar promoções localmente: {e}")
         return False
 
-    # --- 2️⃣ Tenta salvar no GitHub ---
+    # --- 2️⃣ Salvar remotamente no GitHub ---
     try:
-        # Recupera token e informações do secrets
         token = (
             st.secrets.get("GITHUB_TOKEN")
             or st.secrets.get("github_token")
+            or GITHUB_TOKEN
         )
         repo_owner = (
             st.secrets.get("REPO_OWNER")
-            or st.secrets.get("owner")
             or OWNER
         )
         repo_name = (
             st.secrets.get("REPO_NAME")
-            or st.secrets.get("repo")
             or REPO_NAME
         )
         branch = (
             st.secrets.get("BRANCH")
-            or st.secrets.get("branch")
             or BRANCH
         )
+        csv_remote_path = "promocoes.csv"
 
         if not token:
             st.warning("⚠️ Nenhum token do GitHub encontrado — apenas backup local salvo.")
@@ -245,8 +157,6 @@ def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza
         g = Github(token)
         repo = g.get_repo(f"{repo_owner}/{repo_name}")
 
-        # Caminho remoto (garante que o CSV remoto tenha o mesmo nome do local)
-        csv_remote_path = os.path.basename(ARQ_PROMOCOES)
         csv_content = df.to_csv(index=False, encoding="utf-8-sig")
 
         try:
@@ -255,7 +165,7 @@ def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza
             st.success("📁 Promoções atualizadas no GitHub!")
         except Exception:
             repo.create_file(csv_remote_path, commit_message, csv_content, branch=branch)
-            st.success("📁 Promoções criadas no GitHub!")
+            st.success("📁 Arquivo de promoções criado no GitHub!")
 
         return True
 
@@ -265,157 +175,59 @@ def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza
 
 
 # =================================================================================
-
-
-# Placeholder: A função real faz o salvamento, mas aqui precisa ser um placeholder.
+# 🔧 Funções de persistência auxiliares
 def salvar_produtos_no_github(dataframe, commit_message):
-    """Função PLACEHOLDER para salvar produtos no GitHub."""
     return True
 
-# Placeholder: Salva histórico de compras (Comportamento original do 22.py)
 def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
     return True
 
-# Placeholder: Salva dados no GitHub (Comportamento original do 22.py)
 def save_data_github_produtos(df, path, commit_message):
     return False
 
 
-# ==================== FUNÇÕES DE CARREGAMENTO COM CACHE ====================
-
-@st.cache_data(show_spinner="Carregando dados...")
-def carregar_livro_caixa():
-    """Orquestra o carregamento do Livro Caixa (Principal)."""
-    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{PATH_DIVIDAS}"
-    df = load_csv_github(url_raw)
-
-    if df is None or df.empty:
-        try:
-            # Fallback para o arquivo de backup local
-            df = pd.read_csv(ARQ_LOCAL, dtype=str)
-        except Exception:
-            df = pd.DataFrame(columns=COLUNAS_PADRAO)
-
-    if df.empty:
-        df = pd.DataFrame(columns=COLUNAS_PADRAO)
-
-    for col in COLUNAS_PADRAO:
-        if col not in df.columns:
-            df[col] = "Realizada" if col == "Status" else ""
-
-    for col in ["RecorrenciaID", "TransacaoPaiID"]:
-        if col not in df.columns:
-            df[col] = ''
-
-    cols_to_return = COLUNAS_PADRAO_COMPLETO
-    return df[[col for col in cols_to_return if col in df.columns]]
-
-
-@st.cache_data(show_spinner="Carregando produtos do estoque...")
-def inicializar_produtos():
-    """Carrega ou inicializa o DataFrame de Produtos."""
-    if "produtos" not in st.session_state:
-        url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}"
-        df_carregado = load_csv_github(url_raw)
-        if df_carregado is None or df_carregado.empty:
-            df_base = pd.DataFrame(columns=COLUNAS_PRODUTOS)
-        else:
-            df_base = df_carregado
-        for col in COLUNAS_PRODUTOS:
-            if col not in df_base.columns: df_base[col] = ''
-        df_base["Quantidade"] = pd.to_numeric(df_base["Quantidade"], errors='coerce').fillna(0).astype(int)
-        df_base["PrecoCusto"] = pd.to_numeric(df_base["PrecoCusto"], errors='coerce').fillna(0.0)
-        df_base["PrecoVista"] = pd.to_numeric(df_base["PrecoVista"], errors='coerce').fillna(0.0)
-        df_base["PrecoCartao"] = pd.to_numeric(df_base["PrecoCartao"], errors='coerce').fillna(0.0)
-        df_base["Validade"] = pd.to_datetime(df_base["Validade"], errors='coerce').dt.date
-        st.session_state.produtos = df_base
-    return st.session_state.produtos
-
+# =================================================================================
+# 🔄 Funções de carregamento
 @st.cache_data(show_spinner="Carregando promoções...")
 def carregar_promocoes():
-    """Carrega o DataFrame de promoções."""
     COLUNAS_PROMO = ["ID", "IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"]
     url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PROMOCOES}"
     df = load_csv_github(url_raw)
     if df is None or df.empty:
-        # Tenta o fallback local se o GitHub falhar (importante para o desenvolvimento)
         try:
             df = pd.read_csv(ARQ_PROMOCOES, dtype=str)
         except Exception:
             df = pd.DataFrame(columns=COLUNAS_PROMO)
-
     for col in COLUNAS_PROMO:
         if col not in df.columns:
             df[col] = ""
     return df[[col for col in COLUNAS_PROMO if col in df.columns]]
 
-@st.cache_data(show_spinner="Carregando histórico de compras...")
-def carregar_historico_compras():
-    """Carrega o DataFrame de histórico de compras."""
-    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_COMPRAS}"
-    df = load_csv_github(url_raw)
-    if df is None or df.empty:
-        df = pd.DataFrame(columns=COLUNAS_COMPRAS)
-    for col in COLUNAS_COMPRAS:
-        if col not in df.columns:
-            df[col] = ""
-    return df[[col for col in COLUNAS_COMPRAS if col in df.columns]]
 
+# =================================================================================
+# 🔍 Utilitários e cálculos
+def load_csv_github(url: str) -> pd.DataFrame | None:
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        df = pd.read_csv(StringIO(response.text), dtype=str)
+        if df.empty or len(df.columns) < 2:
+            return None
+        return df
+    except Exception:
+        return None
 
-# ==================== FUNÇÕES DE TRATAMENTO DE DADOS (PANDAS) ====================
-
-@st.cache_data(show_spinner=False)
-def processar_dataframe(df):
-    """Aplica o tratamento principal (Datas, Saldo Acumulado, ID Visível) no Livro Caixa."""
-    for col in COLUNAS_PADRAO:
-        if col not in df.columns: df[col] = ""
-    for col in ["RecorrenciaID", "TransacaoPaiID"]:
-        if col not in df.columns: df[col] = ''
-
-    if df.empty: return pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
-    df_proc = df.copy()
-    df_proc["Valor"] = pd.to_numeric(df_proc["Valor"], errors="coerce").fillna(0.0)
-    df_proc["Data"] = pd.to_datetime(df_proc["Data"], errors='coerce').dt.date
-    df_proc["Data_dt"] = pd.to_datetime(df_proc["Data"], errors='coerce')
-    df_proc["Data Pagamento"] = pd.to_datetime(df_proc["Data Pagamento"], errors='coerce').dt.date
-    df_proc.dropna(subset=['Data_dt'], inplace=True)
-    df_proc = df_proc.reset_index(drop=False)
-    df_proc.rename(columns={'index': 'original_index'}, inplace=True)
-    df_proc['Saldo Acumulado'] = 0.0
-    df_realizadas = df_proc[df_proc['Status'] == 'Realizada'].copy()
-    if not df_realizadas.empty:
-        df_realizadas_sorted_asc = df_realizadas.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]).reset_index(drop=True)
-        df_realizadas_sorted_asc['TEMP_SALDO'] = df_realizadas_sorted_asc['Valor'].cumsum()
-        df_proc = pd.merge(df_proc, df_realizadas_sorted_asc[['original_index', 'TEMP_SALDO']], on='original_index', how='left')
-        df_proc['Saldo Acumulado'] = df_proc['TEMP_SALDO'].fillna(method='ffill').fillna(0)
-        df_proc.drop(columns=['TEMP_SALDO'], inplace=True, errors='ignore')
-    df_proc = df_proc.sort_values(by="Data_dt", ascending=False).reset_index(drop=True)
-    df_proc.insert(0, 'ID Visível', df_proc.index + 1)
-    df_proc['Cor_Valor'] = df_proc.apply(lambda row: 'green' if row['Tipo'] == 'Entrada' and row['Valor'] >= 0 else 'red', axis=1)
-
-    if 'TransacaoPaiID' not in df_proc.columns:
-        df_proc['TransacaoPaiID'] = ''
-
-    return df_proc
-
-def calcular_resumo(df):
-    """Calcula total de entradas, saídas e saldo de um DataFrame processado."""
-    df_realizada = df[df['Status'] == 'Realizada']
-    if df_realizada.empty: return 0.0, 0.0, 0.0
-    total_entradas = df_realizada[df_realizada["Tipo"] == "Entrada"]["Valor"].sum()
-    total_saidas = abs(df_realizada[df_realizada["Tipo"] == "Saída"]["Valor"].sum())
-    saldo = df_realizada["Valor"].sum()
-    return total_entradas, total_saidas, saldo
 
 def norm_promocoes(df):
-    """Normaliza o DataFrame de promoções (datas e filtro de expiração)."""
-    if df.empty: return df
+    if df.empty:
+        return df
     df = df.copy()
     df["Desconto"] = pd.to_numeric(df["Desconto"], errors='coerce').fillna(0.0)
     df["DataInicio"] = pd.to_datetime(df["DataInicio"], errors='coerce').dt.date
     df["DataFim"] = pd.to_datetime(df["DataFim"], errors='coerce').dt.date
     df = df[df["DataFim"] >= date.today()]
     return df
+
 
 
 # ==================== FUNÇÕES DE LÓGICA DE NEGÓCIO (PRODUTOS/ESTOQUE) ====================
@@ -672,6 +484,7 @@ def get_most_sold_products(df_movimentacoes):
     df_mais_vendidos.sort_values(by="Quantidade Total Vendida", ascending=False, inplace=True)
 
     return df_mais_vendidos
+
 
 
 
