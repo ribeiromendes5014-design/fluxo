@@ -6,13 +6,7 @@ from datetime import date, datetime, timedelta
 import json
 import ast
 
-# Importa tudo que Produtos precisa
-from utils import (
-    inicializar_produtos, carregar_livro_caixa, ajustar_estoque, to_float, 
-    salvar_produtos_no_github, ler_codigo_barras_api, callback_salvar_novo_produto, 
-    save_data_github_produtos, parse_date_yyyy_mm_dd, prox_id, norm_promocoes, carregar_promocoes,
-    calcular_resumo
-)
+
 from constants_and_css import (
     FATOR_CARTAO, 
     COMMIT_MESSAGE_PROD,  
@@ -585,3 +579,4 @@ def gestao_produtos():
     # ================================
     with tab_relatorio:
         relatorio_produtos()
+
