@@ -40,11 +40,11 @@ def gestao_promocoes():
 
     # Carrega o livro caixa para análise de produtos parados
     df_movimentacoes = carregar_livro_caixa()
-    vendas = df_movimentacoes[df_movimentacoes["Tipo"] == "Entrada"].copy()
+    vendas = df_movimentacoes[df_movimentacoes["Tipo"] == "Entrada"].copy() 
 
     vendas_list = []
     for _, row in vendas.iterrows():
-        produtos_json = row.get("Produtos Vendidos")
+        produtos_json = row.get("Produtos Vendidos") 
         if pd.notna(produtos_json) and produtos_json:
             try:
                 try:
@@ -86,8 +86,8 @@ def gestao_promocoes():
                 
                 produto_selecionado = produto_selecionado.iloc[0]
                 
-                # CORREÇÃO CRÍTICA: Usa 'PRECOVISTA' em MAIÚSCULAS
-                preco_original = to_float(produto_selecionado.get('PRECOVISTA', 0.0)) 
+                # CORREÇÃO: Usa 'PrecoVista' em CamelCase, que agora deve ser o formato do DF 'produtos'
+                preco_original = to_float(produto_selecionado.get('PrecoVista', 0.0)) 
                 
                 st.info(f"Preço de Venda Base: R$ {preco_original:.2f}")
 
@@ -152,11 +152,12 @@ def gestao_promocoes():
     else:
         ultima_venda = pd.DataFrame(columns=["IDProduto", "UltimaVenda"])
 
+    # Usa 'ID' e 'IDProduto' em CamelCase
     produtos_parados = produtos.merge(ultima_venda, left_on="ID", right_on="IDProduto", how="left")
     produtos_parados["UltimaVenda"] = pd.to_datetime(produtos_parados["UltimaVenda"], errors="coerce")
     limite_dt = datetime.combine(date.today() - timedelta(days=int(dias_sem_venda)), datetime.min.time())
     produtos_parados_sugeridos = produtos_parados[
-        (produtos_parados["Quantidade"] > 0)
+        (produtos_parados["Quantidade"] > 0) # Usa 'Quantidade' em CamelCase
         & (produtos_parados["UltimaVenda"].isna() | (produtos_parados["UltimaVenda"] < limite_dt))
     ].copy()
     produtos_parados_sugeridos["UltimaVenda"] = produtos_parados_sugeridos["UltimaVenda"].dt.date.fillna(pd.NaT)
@@ -177,7 +178,7 @@ def gestao_promocoes():
                 
                 for _, row in produtos_parados_sugeridos.iterrows():
                     # Cálculo de preços para o novo cabeçalho
-                    preco_original_auto = to_float(row.get('PRECOVISTA', 0.0)) # CORREÇÃO CRÍTICA: Usa 'PRECOVISTA' em MAIÚSCULAS
+                    preco_original_auto = to_float(row.get('PrecoVista', 0.0))
                     preco_promocional_auto = preco_original_auto * (1 - (desconto_auto / 100))
                     
                     novo = {
@@ -252,7 +253,7 @@ def gestao_promocoes():
 
     if not produto_catalogo.empty:
         # Prioriza o preço base atualizado do catálogo
-        preco_base_para_calc = to_float(produto_catalogo.iloc[0].get('PRECOVISTA', preco_base_para_calc)) # CORREÇÃO CRÍTICA: Usa 'PRECOVISTA' em MAIÚSCULAS
+        preco_base_para_calc = to_float(produto_catalogo.iloc[0].get('PrecoVista', preco_base_para_calc))
         
     st.markdown(f"**Preço Base do Produto:** R$ {preco_base_para_calc:.2f}")
     
