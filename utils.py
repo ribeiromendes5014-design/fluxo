@@ -211,19 +211,21 @@ def salvar_promocoes(df_promocoes: pd.DataFrame):
         
         # Tenta obter o SHA do conteúdo atual
         try:
+            # 🔑 O mock falha aqui, mas se PyGithub estiver instalado, ele atualiza
             contents = repo.get_contents(ARQ_PROMOCOES, ref=BRANCH)
             repo.update_file(contents.path, COMMIT_MESSAGE, csv_string, contents.sha, branch=BRANCH)
             st.toast("Promoções salvas (atualizadas) no GitHub.")
         except Exception:
+            # 🔑 O mock simula a criação aqui, mas se PyGithub estiver instalado, ele cria
             repo.create_file(ARQ_PROMOCOES, COMMIT_MESSAGE, csv_string, branch=BRANCH)
             st.toast("Promoções salvas (criadas) no GitHub.")
         return True
 
     except Exception as e:
-        # 2. Fallback local se o GitHub falhar (opcional)
+        # 2. Fallback local se o GitHub falhar (OPCIONAL/DEBUG)
         st.warning(f"❌ Falha no salvamento do GitHub para promoções: {e}. Tentando salvar localmente.")
         try:
-            # 🔑 CORREÇÃO: Cria o diretório se ele não existir
+            # 🔑 CORREÇÃO CRÍTICA: Cria o diretório se não existir antes de salvar o arquivo.
             diretorio = os.path.dirname(ARQ_PROMOCOES)
             if diretorio and not os.path.exists(diretorio):
                  os.makedirs(diretorio)
@@ -232,7 +234,7 @@ def salvar_promocoes(df_promocoes: pd.DataFrame):
             st.warning("Backup de promoções salvo localmente.")
             return True
         except Exception as local_e:
-            st.error(f"❌ Falha ao salvar promoções localmente: {local_e}")
+            st.error(f"❌ Falha ao salvar promoções localmente: {local_e}. Verifique as permissões de escrita.")
             return False
 
 # =================================================================================
@@ -643,5 +645,6 @@ def get_most_sold_products(df_movimentacoes):
     df_mais_vendidos.sort_values(by="Quantidade Total Vendida", ascending=False, inplace=True)
 
     return df_mais_vendidos
+
 
 
