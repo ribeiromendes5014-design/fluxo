@@ -1,12 +1,5 @@
 # pages/gestao_promocoes.py
 
-import os, sys
-
-# Corrige caminho para permitir importação de módulos da raiz
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
-
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime, timedelta
@@ -28,7 +21,6 @@ from utils import (
     salvar_promocoes_no_github,
 )
 from constants_and_css import FATOR_CARTAO
-
 
 
 
@@ -386,6 +378,7 @@ def gestao_promocoes():
                             st.error(f"Erro ao salvar a exclusão: {e}")
         else:
             st.info("Selecione uma promoção para ver as opções de edição e exclusão.")
+
 
 
 
