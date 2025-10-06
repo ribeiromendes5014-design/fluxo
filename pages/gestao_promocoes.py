@@ -2,6 +2,7 @@
 
 import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime, timedelta
@@ -9,7 +10,7 @@ import json
 import ast
 import hashlib
 import plotly.express as px
-from constants_and_css import FATOR_CARTAO
+
 from utils import (
     inicializar_produtos,
     carregar_livro_caixa,
@@ -20,21 +21,10 @@ from utils import (
     prox_id,
     norm_promocoes,
     carregar_promocoes,
-    salvar_promocoes_no_github,
+    salvar_promocoes_no_github,  # ✅ nome correto
 )
 from constants_and_css import FATOR_CARTAO
 
-
-
-
-# Importa as funções auxiliares e constantes
-# 🔑 PONTO CRÍTICO: Garantir que 'salvar_promocoes' seja importada e esteja definida em utils.py
-from utils import (
-    inicializar_produtos, carregar_livro_caixa, ajustar_estoque, to_float, 
-    salvar_produtos_no_github, parse_date_yyyy_mm_dd, prox_id, norm_promocoes, carregar_promocoes,
-    salvar_promocoes # <--- FUNÇÃO DE SALVAMENTO DE PROMOÇÕES
-)
-from constants_and_css import FATOR_CARTAO # Garante que todas as constantes estejam aqui
 
 
 def gestao_promocoes():
@@ -381,6 +371,7 @@ def gestao_promocoes():
                             st.error(f"Erro ao salvar a exclusão: {e}")
         else:
             st.info("Selecione uma promoção para ver as opções de edição e exclusão.")
+
 
 
 
