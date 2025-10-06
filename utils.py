@@ -246,8 +246,13 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
         df = df.drop(columns=['index'])
     # --- FIM DA CORREÇÃO ---
 
+    # Evita erro caso 'original_index' já exista
+    if 'original_index' in df.columns:
+    df = df.reset_index(drop=True)
+    else:
     df.index.name = 'original_index'
     df = df.reset_index()
+
     
     df["VALOR"] = pd.to_numeric(df["VALOR"], errors='coerce').fillna(0.0) 
     
@@ -759,3 +764,4 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
