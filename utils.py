@@ -1,8 +1,6 @@
 # utils.py
-
 import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, date
@@ -42,11 +40,13 @@ def prox_id(df, coluna_id="ID"):
         return "1"
     else:
         try:
-            # Tenta encontrar o ID máximo mesmo que a coluna não seja perfeitamente numérica
-            numeric_ids = pd.to_numeric(df[coluna_id].astype(str).str.extract(r'(\d+)')[0], errors='coerce').fillna(0).astype(int)
-            return str(numeric_ids.max() + 1)
+            return str(pd.to_numeric(df[coluna_id], errors='coerce').fillna(0).astype(int).max() + 1)
         except Exception:
-            return str(len(df) + 1)
+            try:
+                numeric_ids = pd.to_numeric(df[coluna_id].astype(str).str.extract(r'(\d+)')[0], errors='coerce').fillna(0).astype(int)
+                return str(numeric_ids.max() + 1)
+            except Exception:
+                return str(len(df) + 1)
 
 
 def hash_df(df):
@@ -154,7 +154,7 @@ def norm_promocoes(df_promocoes: pd.DataFrame) -> pd.DataFrame:
     
     df = df_promocoes.copy()
     
-    # Garante que as novas colunas existam
+    # Garante que as novas colunas existam, caso o CSV antigo ainda esteja sendo lido.
     for col in COLUNAS_PROMO_NOVAS:
         if col not in df.columns:
             df[col] = ''
@@ -233,11 +233,11 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
 def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     """Processa o dataframe de movimentações para exibição e cálculo de saldo."""
     if df_movimentacoes is None or df_movimentacoes.empty:
-        return pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
+        return pd.DataFrame(columns=[c.upper() for c in COLUNAS_COMPLETAS_PROCESSADAS])
 
     df = df_movimentacoes.copy()
     
-    # 1. Limpeza e Conversão (Usando MAIÚSCULAS)
+    # 1. Limpeza e Conversão (Usando MAIÚSCULAS/UNDERSCORE)
     df.index.name = 'original_index'
     df = df.reset_index()
     
@@ -245,7 +245,8 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     
     # Conversão de datas
     df["DATA"] = pd.to_datetime(df["DATA"], errors='coerce').dt.date 
-    df["DATA_PAGAMENTO"] = pd.to_datetime(df["DATA_PAGAMENTO"], errors='coerce').dt.date # Usa underscore para Data Pagamento
+    # CORREÇÃO: Usa DATA_PAGAMENTO com underscore, como padronizado pelo load_csv_github
+    df["DATA_PAGAMENTO"] = pd.to_datetime(df["DATA_PAGAMENTO"], errors='coerce').dt.date 
     df["Data_dt"] = pd.to_datetime(df["DATA"]) 
     
     # 2. Cor do Valor (Para estilização no Streamlit)
@@ -275,7 +276,7 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
         'PRODUTOS_VENDIDOS': 'Produtos Vendidos',
         'CATEGORIA': 'Categoria',
         'STATUS': 'Status',
-        'DATA_PAGAMENTO': 'Data Pagamento',
+        'DATA_PAGAMENTO': 'Data Pagamento', # Mapeia de volta para o nome com espaço
         'RECORRENCIAID': 'RecorrenciaID',
         'TRANSACAOPAIID': 'TransacaoPaiID',
         'ID_VISÍVEL': 'ID Visível', 
@@ -420,13 +421,13 @@ def carregar_livro_caixa():
             df = pd.read_csv(ARQ_LOCAL, dtype=str)
             df.columns = [col.upper() for col in df.columns]
         except Exception:
-            df = pd.DataFrame(columns=[c.upper() for c in COLUNAS_PADRAO])
+            df = pd.DataFrame(columns=[c.upper().replace(' ', '_') for c in COLUNAS_PADRAO])
             
     if df.empty:
-        df = pd.DataFrame(columns=[c.upper() for c in COLUNAS_PADRAO])
+        df = pd.DataFrame(columns=[c.upper().replace(' ', '_') for c in COLUNAS_PADRAO])
         
-    # Assegura que as colunas essenciais existam em MAIÚSCULAS
-    for col in [c.upper() for c in COLUNAS_PADRAO_COMPLETO]:
+    # Assegura que as colunas essenciais existam em MAIÚSCULAS/UNDERSCORE
+    for col in [c.upper().replace(' ', '_') for c in COLUNAS_PADRAO_COMPLETO]:
         if col not in df.columns:
             df[col] = "REALIZADA" if col == "STATUS" else ""
 
