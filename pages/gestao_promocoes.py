@@ -7,6 +7,7 @@ import json
 import ast
 import hashlib
 import plotly.express as px # Necessário para gráficos se houver (removido no código abaixo, mas bom manter)
+from utils import salvar_promocoes_no_github
 
 # Importa as funções auxiliares e constantes
 # 🔑 PONTO CRÍTICO: Garantir que 'salvar_promocoes' seja importada e esteja definida em utils.py
@@ -362,3 +363,4 @@ def gestao_promocoes():
                             st.error(f"Erro ao salvar a exclusão: {e}")
         else:
             st.info("Selecione uma promoção para ver as opções de edição e exclusão.")
+
