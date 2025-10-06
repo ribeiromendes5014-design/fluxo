@@ -12,21 +12,12 @@ import hashlib
 import ast
 import calendar
 import os
-from utils import (
-    inicializar_produtos, carregar_livro_caixa, ajustar_estoque, to_float,
-    salvar_produtos_no_github, parse_date_yyyy_mm_dd, prox_id, norm_promocoes,
-    carregar_promocoes, salvar_promocoes_no_github, get_most_sold_products
-)
 
+# <--- O BLOCO PROBLEMÁTICO FOI REMOVIDO AQUI --->
 
 # =================================================================================
 # Importa as constantes de negócio e de arquivo
 from constants_and_css import (
-    TOKEN, OWNER, REPO_NAME, BRANCH, GITHUB_TOKEN, GITHUB_REPO, GITHUB_BRANCH,
-    PATH_DIVIDAS, ARQ_PRODUTOS, ARQ_LOCAL, ARQ_COMPRAS, ARQ_PROMOCOES,
-    COLUNAS_COMPRAS, COLUNAS_PADRAO, COLUNAS_PADRAO_COMPLETO, COLUNAS_COMPLETAS_PROCESSADAS,
-    COLUNAS_PRODUTOS, FATOR_CARTAO, COMMIT_MESSAGE, COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
-)
 # =================================================================================
 
 
@@ -528,4 +519,5 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
