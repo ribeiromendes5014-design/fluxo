@@ -122,7 +122,7 @@ def gestao_promocoes():
                         
                         # 🔑 CORREÇÃO: Chamada real para salvar as promoções.
                         try:
-                            salvar_promocoes(df_atualizado)
+                            salvar_promocoes_no_github(
                             carregar_promocoes.clear()
                             st.success("Promoção cadastrada e salva!")
                             st.rerun()  # 🔑 atualização imediata
@@ -371,6 +371,7 @@ def gestao_promocoes():
                             st.error(f"Erro ao salvar a exclusão: {e}")
         else:
             st.info("Selecione uma promoção para ver as opções de edição e exclusão.")
+
 
 
 
