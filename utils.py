@@ -13,11 +13,14 @@ import ast
 import calendar
 import os
 
-# <--- O BLOCO PROBLEMÁTICO FOI REMOVIDO AQUI --->
-
 # =================================================================================
 # Importa as constantes de negócio e de arquivo
 from constants_and_css import (
+    TOKEN, OWNER, REPO_NAME, BRANCH, GITHUB_TOKEN, GITHUB_REPO, GITHUB_BRANCH,
+    PATH_DIVIDAS, ARQ_PRODUTOS, ARQ_LOCAL, ARQ_COMPRAS, ARQ_PROMOCOES,
+    COLUNAS_COMPRAS, COLUNAS_PADRAO, COLUNAS_PADRAO_COMPLETO, COLUNAS_COMPLETAS_PROCESSADAS,
+    COLUNAS_PRODUTOS, FATOR_CARTAO, COMMIT_MESSAGE, COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
+)
 # =================================================================================
 
 
@@ -131,7 +134,133 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
 
 
 # =================================================================================
+# 🔧 Funções de Lógica e Persistência Faltantes (Adicionadas)
+# =================================================================================
+
+def norm_promocoes(df_promocoes: pd.DataFrame) -> pd.DataFrame:
+    """Normaliza o DataFrame de promoções, convertendo datas e garantindo tipos. Retorna APENAS as promoções ativas."""
+    if df_promocoes is None or df_promocoes.empty:
+        return pd.DataFrame(columns=["ID", "IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"])
+    
+    df = df_promocoes.copy()
+    
+    # Converte colunas de data para tipo date
+    for col in ["DataInicio", "DataFim"]:
+        df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
+
+    # Converte o desconto para float
+    df["Desconto"] = pd.to_numeric(df["Desconto"], errors='coerce').fillna(0.0)
+    
+    # Filtra as promoções que não expiraram e já começaram
+    hoje = date.today()
+    df_ativas = df[(df["DataFim"] >= hoje) & (df["DataInicio"] <= hoje)].copy()
+    
+    return df_ativas
+
+
+def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
+    """
+    Função genérica para salvar o livro caixa (dividas/movimentações) no GitHub.
+    Usa constantes definidas em constants_and_css.
+    """
+    try:
+        from constants_and_css import PATH_DIVIDAS as CONST_PATH, OWNER as CONST_OWNER, REPO_NAME as CONST_REPO, BRANCH as CONST_BRANCH
+    except Exception:
+        return False
+
+    token = (st.secrets.get("GITHUB_TOKEN") or st.secrets.get("github_token") or GITHUB_TOKEN)
+    repo_owner = st.secrets.get("REPO_OWNER") or st.secrets.get("owner") or CONST_OWNER
+    repo_name = st.secrets.get("REPO_NAME") or st.secrets.get("repo") or CONST_REPO
+    branch = st.secrets.get("BRANCH") or CONST_BRANCH
+    
+    csv_remote_path = CONST_PATH or "movimentacoes.csv"
+
+    if not token:
+        st.warning("⚠️ Nenhum token do GitHub encontrado. Salve manualmente.")
+        return False
+    
+    # Salvar localmente (backup)
+    try:
+        df.to_csv(ARQ_LOCAL, index=True, encoding="utf-8-sig")
+    except Exception as e:
+        st.error(f"Erro ao salvar localmente: {e}")
+
+    try:
+        from github import Github
+        g = Github(token)
+        repo = g.get_repo(f"{repo_owner}/{repo_name}")
+        csv_content = df.to_csv(index=False, encoding="utf-8-sig")
+
+        try:
+            contents = repo.get_contents(csv_remote_path, ref=branch)
+            repo.update_file(contents.path, commit_message, csv_content, contents.sha, branch=branch)
+            st.success("📁 Dados atualizados no GitHub!")
+        except Exception:
+            repo.create_file(csv_remote_path, commit_message, csv_content, branch=branch)
+            st.success("📁 Arquivo de dados criado no GitHub!")
+        
+        carregar_livro_caixa.clear() # Limpa o cache após salvar
+        return True
+
+    except Exception as e:
+        st.warning(f"Falha ao enviar dados para o GitHub — backup local mantido. ({e})")
+        return False
+
+
+def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
+    """Processa o dataframe de movimentações para exibição e cálculo de saldo."""
+    if df_movimentacoes is None or df_movimentacoes.empty:
+        return pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
+
+    df = df_movimentacoes.copy()
+    
+    # 1. Limpeza e Conversão
+    df.index.name = 'original_index'
+    df = df.reset_index()
+    
+    df["Valor"] = pd.to_numeric(df["Valor"], errors='coerce').fillna(0.0)
+    
+    # Conversão de datas
+    df["Data"] = pd.to_datetime(df["Data"], errors='coerce').dt.date
+    df["Data Pagamento"] = pd.to_datetime(df["Data Pagamento"], errors='coerce').dt.date
+    df["Data_dt"] = pd.to_datetime(df["Data"]) # Para cálculos (Plotly)
+    
+    # 2. Cor do Valor (Para estilização no Streamlit)
+    df['Cor_Valor'] = df['Valor'].apply(lambda x: 'green' if x >= 0 else 'red')
+    
+    # 3. ID Visível (Simples)
+    if 'ID Visível' not in df.columns or df['ID Visível'].isnull().all():
+        df['ID Visível'] = range(1, len(df) + 1)
+    
+    # 4. Cálculo de Saldo Acumulado (Apenas para Realizadas)
+    df_realizadas = df[df['Status'] == 'Realizada'].copy()
+    df_realizadas = df_realizadas.sort_values(by=['Data', 'original_index'])
+    df_realizadas['Saldo Acumulado'] = df_realizadas['Valor'].cumsum()
+    
+    # Merge de volta para o DF completo (para que as pendentes não tenham saldo)
+    df = df.merge(df_realizadas[['original_index', 'Saldo Acumulado']], on='original_index', how='left')
+    
+    return df
+
+
+def calcular_resumo(df_movimentacoes: pd.DataFrame):
+    """Calcula o total de entradas, saídas e o saldo líquido de um DataFrame."""
+    if df_movimentacoes is None or df_movimentacoes.empty:
+        return 0.0, 0.0, 0.0
+    
+    df = df_movimentacoes.copy()
+    df["Valor"] = pd.to_numeric(df["Valor"], errors='coerce').fillna(0.0)
+    
+    total_entradas = df[df['Valor'] >= 0]['Valor'].sum()
+    total_saidas = abs(df[df['Valor'] < 0]['Valor'].sum())
+    saldo = total_entradas - total_saidas
+    
+    return round(total_entradas, 2), round(total_saidas, 2), round(saldo, 2)
+
+
+# =================================================================================
 # 🔑 FUNÇÃO DE PERSISTÊNCIA CRÍTICA: salvar_promocoes_no_github
+# (Mantida)
 # =================================================================================
 def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza promoções"):
     """Salva o CSV de promoções localmente e, se possível, também no GitHub."""
@@ -198,6 +327,7 @@ def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza
 # =================================================================================
 # 🔧 Funções de persistência auxiliares (placeholders)
 def salvar_produtos_no_github(dataframe, commit_message):
+    """Placeholder de persistência (manter a função original)."""
     try:
         # Implementação real deve salvar ARQ_PRODUTOS
         return True
@@ -206,15 +336,19 @@ def salvar_produtos_no_github(dataframe, commit_message):
 
 
 def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
+    """Placeholder de persistência (manter a função original)."""
     return True
 
 
 def save_data_github_produtos(df, path, commit_message):
+    """Placeholder de persistência (manter a função original)."""
     return False
 
 
 # =================================================================================
 # 🔄 Funções de carregamento com cache
+# (Mantidas)
+# =================================================================================
 @st.cache_data(show_spinner="Carregando promoções...")
 def carregar_promocoes():
     COLUNAS_PROMO = ["ID", "IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"]
@@ -286,7 +420,8 @@ def carregar_historico_compras():
 
 
 # ==================== FUNÇÕES DE LÓGICA DE NEGÓCIO (PRODUTOS/ESTOQUE) ====================
-
+# (Mantidas)
+# =================================================================================
 def ajustar_estoque(id_produto, quantidade, operacao="debitar"):
     if "produtos" not in st.session_state:
         inicializar_produtos()
@@ -336,7 +471,8 @@ def ler_codigo_barras_api(image_bytes):
 
 
 # ==================== FUNÇÕES DE CALLBACK (PRODUTOS) ====================
-
+# (Mantidas)
+# =================================================================================
 def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variacoes):
     if not nome:
         st.error("O nome do produto é obrigatório.")
@@ -473,7 +609,8 @@ def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_di
 
 
 # ==================== FUNÇÕES DE ANÁLISE (HOMEPAGE) ====================
-
+# (Mantidas)
+# =================================================================================
 @st.cache_data(show_spinner="Calculando mais vendidos...")
 def get_most_sold_products(df_movimentacoes):
     df_vendas = df_movimentacoes[
@@ -519,5 +656,3 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
-
-
