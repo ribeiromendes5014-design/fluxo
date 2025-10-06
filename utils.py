@@ -239,20 +239,20 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     
     # 1. Limpeza e Conversão (Usando MAIÚSCULAS/UNDERSCORE)
     
-    # --- CORREÇÃO ADICIONADA ---
+    # --- CORREÇÃO ADICIONADA (ValueError) ---
     # Garante que uma coluna com o nome 'index' seja removida antes de
     # chamar reset_index(), evitando o ValueError.
     if 'index' in df.columns:
         df = df.drop(columns=['index'])
-    # --- FIM DA CORREÇÃO ---
-
-    # Evita erro caso 'original_index' já exista
+    
+    # --- CORREÇÃO ADICIONADA (IndentationError e Lógica) ---
+    # Remove a coluna 'original_index' se ela já existir para evitar conflito.
     if 'original_index' in df.columns:
-    df = df.reset_index(drop=True)
-    else:
+        df = df.drop(columns=['original_index'])
+
+    # Agora, renomeia o índice e o transforma em uma coluna com segurança.
     df.index.name = 'original_index'
     df = df.reset_index()
-
     
     df["VALOR"] = pd.to_numeric(df["VALOR"], errors='coerce').fillna(0.0) 
     
@@ -269,13 +269,18 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
         df['ID_VISÍVEL'] = range(1, len(df) + 1)
     
     # 4. Cálculo de Saldo Acumulado (Apenas para Realizadas)
-    df_realizadas = df[df['STATUS'] == 'REALIZADA'].copy() 
-    df_realizadas = df_realizadas.sort_values(by=['DATA', 'original_index']) 
-    df_realizadas['Saldo Acumulado'] = df_realizadas['VALOR'].cumsum() 
-    
-    # Merge de volta para o DF completo (para que as pendentes não tenham saldo)
-    df = df.merge(df_realizadas[['original_index', 'Saldo Acumulado']], on='original_index', how='left')
-    
+    df_realizadas = df[df['STATUS'] == 'REALIZADA'].copy()
+    # Garante que 'original_index' exista antes de ordenar
+    if 'original_index' in df_realizadas.columns:
+        df_realizadas = df_realizadas.sort_values(by=['DATA', 'original_index']) 
+        df_realizadas['Saldo Acumulado'] = df_realizadas['VALOR'].cumsum() 
+        
+        # Merge de volta para o DF completo (para que as pendentes não tenham saldo)
+        df = df.merge(df_realizadas[['original_index', 'Saldo Acumulado']], on='original_index', how='left')
+    else:
+        # Se 'original_index' não foi criado, adiciona a coluna de saldo vazia para evitar erros
+        df['Saldo Acumulado'] = pd.NA
+
     # --- BLOCO CRÍTICO: Renomear de volta para o formato CamelCase esperado pelas páginas ---
     # Mapeamento de MAIÚSCULAS/UNDERSCORE para o formato esperado pelo resto do app (CamelCase)
     livro_caixa_map = {
@@ -764,4 +769,3 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
-
