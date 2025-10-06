@@ -19,7 +19,7 @@ from utils import (
     prox_id,
     norm_promocoes,
     carregar_promocoes,
-    salvar_promocoes_no_github,  # ✅ função correta
+    salvar_promocoes_no_github,
 )
 from constants_and_css import FATOR_CARTAO
 
@@ -35,8 +35,8 @@ def gestao_promocoes():
         st.session_state.promocoes = carregar_promocoes()
     promocoes_df = st.session_state.promocoes
     
-    # IMPORTANTE: norm_promocoes precisa ser atualizada para lidar com ID_PROMOCAO, DATA_INICIO, etc.
-    # Assumindo que norm_promocoes já foi ajustada no seu utils.py para lidar com o novo cabeçalho.
+    # ATENÇÃO: norm_promocoes é crucial. Assumindo que ela lida com 'ID_PROMOCAO', 'DATA_INICIO', etc.
+    # O df 'promocoes' é o df filtrado e normalizado.
     promocoes = norm_promocoes(promocoes_df.copy()) 
 
     # Carrega o livro caixa para análise de produtos parados
@@ -127,9 +127,6 @@ def gestao_promocoes():
                             "DATA_FIM": str(data_fim),                       
                         }
                         
-                        # Se você quiser manter o Desconto para fins de referência, adicione esta linha:
-                        # novo["DESCONTO"] = float(desconto) 
-                        
                         df_atualizado = pd.concat([promocoes_df, pd.DataFrame([novo])], ignore_index=True)
                         st.session_state.promocoes = df_atualizado
                         try:
@@ -213,15 +210,17 @@ def gestao_promocoes():
         st.info("Nenhuma promoção ativa cadastrada.")
         return
 
-    # Ajustando colunas de exibição, se norm_promocoes não retornar as antigas (Desconto, DataInicio)
-    # Assumindo que norm_promocoes transforma PRECO_ORIGINAL e PRECO_PROMOCIONAL em 'Desconto' para exibição.
+    # Preparação do DataFrame para Exibição
     df_display = promocoes.copy()
     
-    # Se 'Desconto', 'DataInicio' e 'DataFim' não existirem mais após norm_promocoes, use os novos nomes:
     # CÁLCULO DE DESCONTO PARA EXIBIÇÃO:
     if 'PRECO_ORIGINAL' in df_display.columns and 'PRECO_PROMOCIONAL' in df_display.columns:
-        df_display['Desconto_Calc'] = (1 - (df_display['PRECO_PROMOCIONAL'] / df_display['PRECO_ORIGINAL'])) * 100
-        df_display['Desconto'] = df_display['Desconto_Calc'].apply(lambda x: f"{x:.0f}%")
+        # Evita divisão por zero
+        df_display['Desconto_Calc'] = (1 - (df_display['PRECO_PROMOCIONAL'] / df_display['PRECO_ORIGINAL'].replace(0, 1e-6))) * 100
+        df_display['Desconto'] = df_display['Desconto_Calc'].apply(lambda x: f"{max(0, x):.0f}%")
+    else:
+        # Fallback se as colunas de preço ainda não existirem
+        df_display['Desconto'] = 'N/A'
     
     # Renomeando colunas de data para o formato de exibição:
     df_display["DataInicio"] = df_display["DATA_INICIO"].apply(lambda x: x.strftime("%d/%m/%Y"))
@@ -232,6 +231,7 @@ def gestao_promocoes():
                  use_container_width=True, hide_index=True)
 
     st.markdown("#### ✏️ Editar ou Excluir Promoção")
+    
     opcoes = {f"ID {row['ID_PROMOCAO']} | {row['NOME_PRODUTO']} | {row['Desconto']} | Fim: {row['DataFim']}": row["ID_PROMOCAO"]
               for _, row in df_display.iterrows()}
     opcoes_keys = ["Selecione uma promoção..."] + list(opcoes.keys())
@@ -241,7 +241,7 @@ def gestao_promocoes():
     if not promo_id_sel:
         return
 
-    # CORREÇÃO: Usa ID_PROMOCAO para buscar a linha
+    # Usa ID_PROMOCAO para buscar a linha
     linha_original = promocoes_df[promocoes_df["ID_PROMOCAO"].astype(str) == promo_id_sel].iloc[0]
     
     # 1. Busca o preço original no DF de produtos (necessário para calcular o novo preço promocional)
@@ -267,11 +267,11 @@ def gestao_promocoes():
         # Usa o desconto recalculado para preencher o campo de edição
         desc_edit = st.text_input("Desconto (%)", value=f"{desconto_atual:.0f}")
     with col2:
-        # CORREÇÃO: Usa DATA_INICIO
+        # Usa DATA_INICIO
         data_ini_edit = parse_date_yyyy_mm_dd(linha_original["DATA_INICIO"]) or date.today()
         data_ini_edit = st.date_input("Início", value=data_ini_edit)
     with col3:
-        # CORREÇÃO: Usa DATA_FIM
+        # Usa DATA_FIM
         data_fim_edit = parse_date_yyyy_mm_dd(linha_original["DATA_FIM"]) or date.today() + timedelta(days=7)
         data_fim_edit = st.date_input("Término", value=data_fim_edit)
 
@@ -288,10 +288,10 @@ def gestao_promocoes():
             elif data_fim_edit < data_ini_edit:
                 st.error("A data de término deve ser maior ou igual à de início.")
             else:
-                # CORREÇÃO: Usa ID_PROMOCAO
+                # Usa ID_PROMOCAO
                 idx = promocoes_df["ID_PROMOCAO"].astype(str) == promo_id_sel 
                 
-                # CORREÇÃO: Atualiza as colunas de acordo com o NOVO CABEÇALHO
+                # Atualiza as colunas de acordo com o NOVO CABEÇALHO
                 promocoes_df.loc[idx, ["PRECO_PROMOCIONAL", "PRECO_ORIGINAL", "DATA_INICIO", "DATA_FIM", "STATUS"]] = [
                     float(novo_preco_promocional),
                     float(preco_base_para_calc), # Garante que o PRECO_ORIGINAL seja o base atualizado
@@ -311,7 +311,7 @@ def gestao_promocoes():
 
     with col_btn2:
         if st.button("🗑️ Excluir Promoção"):
-            # CORREÇÃO: Usa ID_PROMOCAO
+            # Usa ID_PROMOCAO
             df_atualizado = promocoes_df[promocoes_df["ID_PROMOCAO"].astype(str) != promo_id_sel] 
             st.session_state.promocoes = df_atualizado
             try:
