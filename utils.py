@@ -1,5 +1,6 @@
 # utils.py
-
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, date
@@ -11,6 +12,12 @@ import hashlib
 import ast
 import calendar
 import os
+from utils import (
+    inicializar_produtos, carregar_livro_caixa, ajustar_estoque, to_float,
+    salvar_produtos_no_github, parse_date_yyyy_mm_dd, prox_id, norm_promocoes,
+    carregar_promocoes, salvar_promocoes_no_github, get_most_sold_products
+)
+
 
 # =================================================================================
 # Importa as constantes de negócio e de arquivo
@@ -521,3 +528,4 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
