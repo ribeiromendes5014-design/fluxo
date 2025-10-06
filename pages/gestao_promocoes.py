@@ -11,7 +11,9 @@ import plotly.express as px # Necessário para gráficos se houver (removido no 
 # Importa as funções auxiliares e constantes
 from utils import (
     inicializar_produtos, carregar_livro_caixa, ajustar_estoque, to_float, 
-    salvar_produtos_no_github, parse_date_yyyy_mm_dd, prox_id, norm_promocoes, carregar_promocoes
+    salvar_produtos_no_github, parse_date_yyyy_mm_dd, prox_id, norm_promocoes, carregar_promocoes,
+    # 🔑 CORREÇÃO: Adicionando a função de salvamento de promoções (Exemplo: salvar_promocoes, salvar_promocoes_no_github, etc.)
+    salvar_promocoes # Mantenha o nome da sua função de salvamento real aqui
 )
 from constants_and_css import FATOR_CARTAO # Garante que todas as constantes estejam aqui
 
@@ -105,12 +107,18 @@ def gestao_promocoes():
                             "DataInicio": str(data_ini),
                             "DataFim": str(data_fim),
                         }
-                        st.session_state.promocoes = pd.concat([promocoes_df, pd.DataFrame([novo])], ignore_index=True)
-                        # Placeholder para save_csv_github (deve ser ajustado conforme a implementação real de persistência de promoções)
-                        if True: # Simulação de salvamento bem-sucedido
+                        
+                        df_atualizado = pd.concat([promocoes_df, pd.DataFrame([novo])], ignore_index=True)
+                        st.session_state.promocoes = df_atualizado
+                        
+                        # 🔑 CORREÇÃO: Chamada real para salvar as promoções.
+                        try:
+                            salvar_promocoes(df_atualizado)
                             carregar_promocoes.clear()
-                            st.success("Promoção cadastrada!")
+                            st.success("Promoção cadastrada e salva!")
                             st.rerun()  # 🔑 atualização imediata
+                        except Exception as e:
+                            st.error(f"Erro ao salvar a promoção: {e}")
 
     # --- PRODUTOS PARADOS E PERTO DA VALIDADE ---
     st.markdown("---")
@@ -166,21 +174,29 @@ def gestao_promocoes():
             )
 
             if st.button("🔥 Criar promoção automática", key="promo_btn_auto"):
+                df_atualizado = st.session_state.promocoes.copy() # Inicia com o estado atual
+                
                 for _, row in produtos_parados_sugeridos.iterrows():
                     novo = {
-                        "ID": prox_id(st.session_state.promocoes, "ID"),
+                        "ID": prox_id(df_atualizado, "ID"),
                         "IDProduto": str(row["ID"]),
                         "NomeProduto": row["Nome"],
                         "Desconto": float(desconto_auto),
                         "DataInicio": str(date.today()),
                         "DataFim": str(date.today() + timedelta(days=int(dias_validade))),
                     }
-                    st.session_state.promocoes = pd.concat([st.session_state.promocoes, pd.DataFrame([novo])], ignore_index=True)
+                    df_atualizado = pd.concat([df_atualizado, pd.DataFrame([novo])], ignore_index=True)
 
-                if True: # Simulação de salvamento bem-sucedido
+                st.session_state.promocoes = df_atualizado
+                
+                # 🔑 CORREÇÃO: Chamada real para salvar as promoções.
+                try:
+                    salvar_promocoes(df_atualizado)
                     carregar_promocoes.clear()
-                    st.success(f"Promoções criadas para {len(produtos_parados_sugeridos)} produtos parados!")
+                    st.success(f"Promoções criadas e salvas para {len(produtos_parados_sugeridos)} produtos parados!")
                     st.rerun()  # 🔑 atualização imediata
+                except Exception as e:
+                    st.error(f"Erro ao salvar as promoções automáticas: {e}")
 
     st.markdown("---")
     
@@ -321,17 +337,28 @@ def gestao_promocoes():
                                 str(pid_e), pnome_e, float(dnum), str(data_ini_e), str(data_fim_e)
                             ]
                             st.session_state.promocoes = promocoes_df
-                            if True: # Simulação de salvamento bem-sucedido
+                            
+                            # 🔑 CORREÇÃO: Chamada real para salvar as promoções.
+                            try:
+                                salvar_promocoes(promocoes_df)
                                 carregar_promocoes.clear()
-                                st.success("Promoção atualizada!")
+                                st.success("Promoção atualizada e salva!")
                                 st.rerun()  # 🔑 atualização imediata
+                            except Exception as e:
+                                st.error(f"Erro ao salvar a edição: {e}")
 
                 with col_btn_delete:
                     if st.button("🗑️ Excluir Promoção", key=f"promo_btn_del_{promo_id_selecionado}", type="primary", use_container_width=True):
-                        st.session_state.promocoes = promocoes_df[promocoes_df["ID"].astype(str) != promo_id_selecionado]
-                        if True: # Simulação de salvamento bem-sucedido
+                        df_atualizado = promocoes_df[promocoes_df["ID"].astype(str) != promo_id_selecionado]
+                        st.session_state.promocoes = df_atualizado
+                        
+                        # 🔑 CORREÇÃO: Chamada real para salvar as promoções.
+                        try:
+                            salvar_promocoes(df_atualizado)
                             carregar_promocoes.clear()
-                            st.warning(f"Promoção {promo_id_selecionado} excluída!")
+                            st.warning(f"Promoção {promo_id_selecionado} excluída e salva!")
                             st.rerun()  # 🔑 atualização imediata
+                        except Exception as e:
+                            st.error(f"Erro ao salvar a exclusão: {e}")
         else:
             st.info("Selecione uma promoção para ver as opções de edição e exclusão.")
