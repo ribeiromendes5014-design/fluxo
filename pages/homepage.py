@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 # Importa funções e constantes
-from utils import inicializar_produtos, carregar_livro_caixa, get_most_sold_products, to_float
+from utils import inicializar_produtos, carregar_livro_caixa, get_most_sold_products
 from constants_and_css import URL_MAIS_VENDIDOS, URL_OFERTAS, URL_NOVIDADES, FATOR_CARTAO
 
 
@@ -165,3 +165,4 @@ def homepage():
                 </div>
             </div>
         """, unsafe_allow_html=True)
+
