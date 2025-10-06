@@ -233,7 +233,7 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
 def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     """Processa o dataframe de movimentações para exibição e cálculo de saldo."""
     if df_movimentacoes is None or df_movimentacoes.empty:
-        return pd.DataFrame(columns=[c.upper() for c in COLUNAS_COMPLETAS_PROCESSADAS])
+        return pd.DataFrame(columns=[c.upper().replace(' ', '_') for c in COLUNAS_COMPLETAS_PROCESSADAS])
 
     df = df_movimentacoes.copy()
     
@@ -245,7 +245,6 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     
     # Conversão de datas
     df["DATA"] = pd.to_datetime(df["DATA"], errors='coerce').dt.date 
-    # CORREÇÃO: Usa DATA_PAGAMENTO com underscore, como padronizado pelo load_csv_github
     df["DATA_PAGAMENTO"] = pd.to_datetime(df["DATA_PAGAMENTO"], errors='coerce').dt.date 
     df["Data_dt"] = pd.to_datetime(df["DATA"]) 
     
@@ -276,7 +275,7 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
         'PRODUTOS_VENDIDOS': 'Produtos Vendidos',
         'CATEGORIA': 'Categoria',
         'STATUS': 'Status',
-        'DATA_PAGAMENTO': 'Data Pagamento', # Mapeia de volta para o nome com espaço
+        'DATA_PAGAMENTO': 'Data Pagamento', 
         'RECORRENCIAID': 'RecorrenciaID',
         'TRANSACAOPAIID': 'TransacaoPaiID',
         'ID_VISÍVEL': 'ID Visível', 
@@ -419,7 +418,7 @@ def carregar_livro_caixa():
     if df is None or df.empty:
         try:
             df = pd.read_csv(ARQ_LOCAL, dtype=str)
-            df.columns = [col.upper() for col in df.columns]
+            df.columns = [col.upper().replace(' ', '_') for col in df.columns]
         except Exception:
             df = pd.DataFrame(columns=[c.upper().replace(' ', '_') for c in COLUNAS_PADRAO])
             
