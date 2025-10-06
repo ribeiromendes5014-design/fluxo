@@ -193,32 +193,74 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
 # 🔑 FUNÇÃO DE PERSISTÊNCIA CRÍTICA: salvar_promocoes
 # Esta função salva o DataFrame de promoções, seja no GitHub ou localmente.
 def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza promoções"):
-    """Salva o CSV de promoções localmente e (se possível) no GitHub."""
-    from constants_and_css import ARQ_PROMOCOES, OWNER, REPO_NAME, BRANCH
+    """
+    Salva o CSV de promoções localmente e, se possível, também no GitHub.
+
+    - Faz backup local em ARQ_PROMOCOES.
+    - Se as credenciais estiverem em st.secrets, atualiza o arquivo remoto no repositório.
+    """
 
     try:
-        # Backup local
+        # --- Importa constantes do projeto ---
+        from constants_and_css import ARQ_PROMOCOES, OWNER, REPO_NAME, BRANCH
+    except Exception:
+        st.error("❌ Erro ao carregar constantes do projeto.")
+        return False
+
+    # --- 1️⃣ Salva localmente ---
+    try:
         df.to_csv(ARQ_PROMOCOES, index=False, encoding="utf-8-sig")
         st.toast("💾 Promoções salvas localmente!")
     except Exception as e:
-        st.error(f"Erro ao salvar localmente promoções: {e}")
+        st.error(f"Erro ao salvar promoções localmente: {e}")
+        return False
 
+    # --- 2️⃣ Tenta salvar no GitHub ---
     try:
-        g = Github(TOKEN)
-        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        csv_string = df.to_csv(index=False, encoding="utf-8-sig")
+        # Recupera token e informações do secrets
+        token = (
+            st.secrets.get("GITHUB_TOKEN")
+            or st.secrets.get("github_token")
+        )
+        repo_owner = (
+            st.secrets.get("REPO_OWNER")
+            or st.secrets.get("owner")
+            or OWNER
+        )
+        repo_name = (
+            st.secrets.get("REPO_NAME")
+            or st.secrets.get("repo")
+            or REPO_NAME
+        )
+        branch = (
+            st.secrets.get("BRANCH")
+            or st.secrets.get("branch")
+            or BRANCH
+        )
+
+        if not token:
+            st.warning("⚠️ Nenhum token do GitHub encontrado — apenas backup local salvo.")
+            return False
+
+        g = Github(token)
+        repo = g.get_repo(f"{repo_owner}/{repo_name}")
+
+        # Caminho remoto (garante que o CSV remoto tenha o mesmo nome do local)
+        csv_remote_path = os.path.basename(ARQ_PROMOCOES)
+        csv_content = df.to_csv(index=False, encoding="utf-8-sig")
 
         try:
-            contents = repo.get_contents(ARQ_PROMOCOES, ref=BRANCH)
-            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
+            contents = repo.get_contents(csv_remote_path, ref=branch)
+            repo.update_file(contents.path, commit_message, csv_content, contents.sha, branch=branch)
+            st.success("📁 Promoções atualizadas no GitHub!")
         except Exception:
-            repo.create_file(ARQ_PROMOCOES, commit_message, csv_string, branch=BRANCH)
+            repo.create_file(csv_remote_path, commit_message, csv_content, branch=branch)
+            st.success("📁 Promoções criadas no GitHub!")
 
-        st.success("📁 Promoções atualizadas no GitHub!")
         return True
 
-    except Exception:
-        st.warning("Falha na atualização no GitHub — apenas backup local salvo.")
+    except Exception as e:
+        st.warning(f"Falha ao enviar promoções para o GitHub — backup local mantido. ({e})")
         return False
 
 
@@ -630,6 +672,7 @@ def get_most_sold_products(df_movimentacoes):
     df_mais_vendidos.sort_values(by="Quantidade Total Vendida", ascending=False, inplace=True)
 
     return df_mais_vendidos
+
 
 
 
