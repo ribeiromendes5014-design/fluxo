@@ -50,7 +50,7 @@ def hash_df(df):
     for col in df_temp.select_dtypes(include=['datetime64[ns]']).columns:
         df_temp[col] = df_temp[col].astype(str)
     try:
-        return hashlib.md5(df_temp.to_json().encode('utf-8')).hexdigest()
+        return hashlib.md5(df_temp.to_json().encode('utf-8')).heigest()
     except Exception:
         return "error"
 
@@ -347,7 +347,6 @@ def save_data_github_produtos(df, path, commit_message):
 
 # =================================================================================
 # 🔄 Funções de carregamento com cache
-# (Mantidas)
 # =================================================================================
 @st.cache_data(show_spinner="Carregando promoções...")
 def carregar_promocoes():
@@ -389,12 +388,25 @@ def carregar_livro_caixa():
 @st.cache_data(show_spinner="Carregando produtos do estoque...")
 def inicializar_produtos():
     if "produtos" not in st.session_state:
+        # 1. Tenta carregar do GitHub (prioridade)
         url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}"
         df_carregado = load_csv_github(url_raw)
+        
+        # 2. Se o carregamento remoto falhar ou retornar vazio, tenta carregar localmente
         if df_carregado is None or df_carregado.empty:
-            df_base = pd.DataFrame(columns=COLUNAS_PRODUTOS)
+            st.warning("⚠️ Falha ao carregar produtos do GitHub. Tentando carregar o arquivo local...")
+            try:
+                # CORREÇÃO APLICADA: Tenta ler o arquivo local usando ARQ_PRODUTOS
+                df_base = pd.read_csv(ARQ_PRODUTOS, dtype=str) 
+            except Exception as e:
+                # Se a leitura local falhar, cria um DataFrame vazio
+                st.error(f"❌ Falha ao carregar o arquivo local ({ARQ_PRODUTOS}): {e}")
+                df_base = pd.DataFrame(columns=COLUNAS_PRODUTOS)
         else:
+            # Se o carregamento remoto foi bem-sucedido
             df_base = df_carregado
+
+        # Processamento dos dados
         for col in COLUNAS_PRODUTOS:
             if col not in df_base.columns:
                 df_base[col] = ''
