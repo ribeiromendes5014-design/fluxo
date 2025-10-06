@@ -33,7 +33,7 @@ except KeyError:
     TOKEN = "TOKEN_FICTICIO"
     OWNER = "user"
     REPO_NAME = "repo_default"
-    CSV_PATH = "contas_a_pagar_receber.csv"
+    CSV_PATH = "livro_caixa"
     BRANCH = "main"
     GITHUB_TOKEN = TOKEN
     GITHUB_REPO = f"{OWNER}/{REPO_NAME}"
@@ -166,3 +166,4 @@ def render_custom_header(paginas_ordenadas, paginas_map):
         st.markdown('<div class="header-container">', unsafe_allow_html=True)
         render_header(paginas_ordenadas, paginas_map)
         st.markdown('</div>', unsafe_allow_html=True)
+
