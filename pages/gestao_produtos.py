@@ -6,6 +6,20 @@ from datetime import date, datetime, timedelta
 import json
 import ast
 
+# ==============================================================================
+# 🚨 CORREÇÃO: Bloco de Importação das Funções Auxiliares do utils.py
+# (Funções usadas neste arquivo)
+# ==============================================================================
+from utils import (
+    inicializar_produtos,
+    carregar_livro_caixa,
+    parse_date_yyyy_mm_dd,
+    ler_codigo_barras_api,
+    callback_salvar_novo_produto,
+    to_float,
+    salvar_produtos_no_github,
+    save_data_github_produtos, # Função auxiliar de persistência (placeholder)
+)
 
 from constants_and_css import (
     FATOR_CARTAO, 
@@ -18,6 +32,7 @@ def relatorio_produtos():
     """Sub-aba de Relatório e Alertas de Produtos."""
     st.subheader("⚠️ Relatório e Alertas de Estoque")
 
+    # Funções importadas agora disponíveis
     produtos = inicializar_produtos().copy()
     df_movimentacoes = carregar_livro_caixa()
     vendas = df_movimentacoes[df_movimentacoes["Tipo"] == "Entrada"].copy()
@@ -104,6 +119,7 @@ def relatorio_produtos():
         produtos_json = row["Produtos Vendidos"]
         if pd.notna(produtos_json) and produtos_json:
             try:
+                # O ast.literal_eval pode ser mais robusto que o json.loads em alguns casos
                 items = ast.literal_eval(produtos_json)
                 if isinstance(items, list):
                     for item in items:
@@ -253,8 +269,11 @@ def gestao_produtos():
                     
                     var_nome = var_c1.text_input(f"Nome da variação {i+1}", key=f"var_nome_{i}")
                     var_qtd = var_c2.number_input(f"Quantidade variação {i+1}", min_value=0, step=1, value=0, key=f"var_qtd_{i}")
-                    var_preco_custo = st.text_input(f"Preço de Custo variação {i+1}", value="0,00", key=f"var_pc_{i}")
-                    var_preco_vista = st.text_input("Preço à Vista variação {i+1}", value="0,00", key=f"var_pv_{i}")
+                    # CORREÇÃO DE LAYOUT: Preço de Custo e Preço à Vista em colunas separadas para evitar colisão
+                    with var_c3:
+                        var_preco_custo = st.text_input(f"Preço de Custo variação {i+1}", value="0,00", key=f"var_pc_{i}")
+                    with var_c4:
+                        var_preco_vista = st.text_input(f"Preço à Vista variação {i+1}", value="0,00", key=f"var_pv_{i}")
                     
                     var_cb_c1, var_cb_c2, var_cb_c3 = st.columns([2, 1, 1])
 
@@ -283,6 +302,7 @@ def gestao_produtos():
                     # Logica de leitura do Código de Barras para a Variação
                     foto_lida = var_foto_upload or var_foto_cam
                     if foto_lida:
+                        # Lógica para garantir que a leitura de CB use o valor correto
                         imagem_bytes = foto_lida.getvalue() if var_foto_upload else foto_lida.getbuffer()
                         codigos_lidos = ler_codigo_barras_api(imagem_bytes)
                         if codigos_lidos:
@@ -307,9 +327,11 @@ def gestao_produtos():
                 "💾 Salvar", 
                 use_container_width=True, 
                 key="cad_salvar",
+                # O callback_salvar_novo_produto deve ser chamado corretamente
                 on_click=lambda: st.rerun() if callback_salvar_novo_produto(produtos.copy(), tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações) else None,
                 help="Salvar Novo Produto Completo" 
             ):
+                # Se o callback for bem-sucedido, o rerun já é chamado. Se o botão for clicado sem o on_click disparar, este rerun garante a atualização.
                 st.rerun()
 
 
@@ -337,10 +359,11 @@ def gestao_produtos():
                 elif criterio == "Valor":
                     try:
                         valor = float(termo.replace(",", "."))
+                        # Converte a coluna para float antes de comparar
                         produtos_filtrados = produtos[
-                            (produtos["PrecoVista"].astype(float) == valor) |
-                            (produtos["PrecoCusto"].astype(float) == valor) |
-                            (produtos["PrecoCartao"].astype(float) == valor)
+                            (pd.to_numeric(produtos["PrecoVista"], errors='coerce').fillna(0) == valor) |
+                            (pd.to_numeric(produtos["PrecoCusto"], errors='coerce').fillna(0) == valor) |
+                            (pd.to_numeric(produtos["PrecoCartao"], errors='coerce').fillna(0) == valor)
                         ]
                     except:
                         st.warning("Digite um número válido para buscar por valor.")
@@ -428,7 +451,7 @@ def gestao_produtos():
                     
                     preco_html = (
                         f'<div class="custom-price-block">'
-                        f'<small>C: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>'
+                        f'<small>C: R$ {to_float(pai["PrecoCusto"]):,.2f}</small><br>'
                         f'**V:** R$ {pv:,.2f}<br>'
                         f'**C:** R$ {pc_calc:,.2f}'
                         f'</div>'
@@ -445,12 +468,12 @@ def gestao_produtos():
                         st.rerun()
 
                     if c[6].button("🗑️", key=f"del_pai_{index}_{eid}", help="Excluir produto"):
-                        produtos = produtos[produtos["ID"] != eid]
-                        produtos = produtos[produtos["PaiID"] != eid]
-                        st.session_state["produtos"] = produtos
+                        products = produtos[produtos["ID"] != eid]
+                        products = products[products["PaiID"] != eid]
+                        st.session_state["produtos"] = products
                         
                         nome_pai = str(pai.get('Nome', 'Produto Desconhecido'))
-                        if salvar_produtos_no_github(produtos, f"Exclusão do produto pai {nome_pai}"):
+                        if salvar_produtos_no_github(products, f"Exclusão do produto pai {nome_pai}"):
                             inicializar_produtos.clear() 
                         st.rerun()
                         
@@ -480,7 +503,7 @@ def gestao_produtos():
                                 
                                 preco_var_html = (
                                     f'<div class="custom-price-block">'
-                                    f'<small>C: R$ {to_float(var['PrecoCusto']):,.2f}</small><br>'
+                                    f'<small>C: R$ {to_float(var["PrecoCusto"]):,.2f}</small><br>'
                                     f'**V:** R$ {pv_var:,.2f}<br>'
                                     f'**C:** R$ {pc_var_calc:,.2f}'
                                     f'</div>'
@@ -579,4 +602,3 @@ def gestao_produtos():
     # ================================
     with tab_relatorio:
         relatorio_produtos()
-
