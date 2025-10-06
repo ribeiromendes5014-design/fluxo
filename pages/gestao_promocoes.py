@@ -71,8 +71,18 @@ def gestao_promocoes():
             sel_prod = st.selectbox("Produto", opcoes_prod, key="promo_cad_produto")
 
             if sel_prod:
+                # 1. Obter ID do Produto e Preço Original
                 pid = sel_prod.split(" - ")[0].strip()
                 pnome = sel_prod.split(" - ", 1)[1].strip()
+                
+                # Encontra a linha do produto no catálogo
+                produto_selecionado = produtos[produtos['ID'].astype(str) == pid].iloc[0]
+                
+                # Preço Original (Assumindo que PRECOVISTA é o preço base no DF de produtos)
+                preco_original = to_float(produto_selecionado.get('PRECOVISTA', 0.0)) 
+                
+                st.info(f"Preço de Venda Base: R$ {preco_original:.2f}")
+
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     desconto_str = st.text_input("Desconto (%)", value="0", key="promo_cad_desc")
@@ -80,6 +90,12 @@ def gestao_promocoes():
                     data_ini = st.date_input("Início", value=date.today(), key="promo_cad_inicio")
                 with col3:
                     data_fim = st.date_input("Término", value=date.today() + timedelta(days=7), key="promo_cad_fim")
+                
+                desconto_float = to_float(desconto_str)
+                preco_promocional = preco_original * (1 - (desconto_float / 100))
+                
+                st.markdown(f"**Preço Promocional Calculado:** R$ {preco_promocional:.2f}")
+
 
                 if st.button("Adicionar promoção", key="promo_btn_add"):
                     desconto = to_float(desconto_str)
@@ -87,15 +103,24 @@ def gestao_promocoes():
                         st.error("O desconto deve estar entre 0 e 100%.")
                     elif data_fim < data_ini:
                         st.error("A data de término deve ser maior ou igual à data de início.")
+                    elif preco_original <= 0:
+                        st.error("O preço original do produto deve ser maior que zero para aplicar a promoção.")
                     else:
+                        # 2. Montar o dicionário com o NOVO CABEÇALHO
                         novo = {
-                            "ID": prox_id(promocoes_df, "ID"),
-                            "IDProduto": str(pid),
-                            "NomeProduto": pnome,
-                            "Desconto": float(desconto),
-                            "DataInicio": str(data_ini),
-                            "DataFim": str(data_fim),
+                            "ID_PROMOCAO": prox_id(promocoes_df, "ID_PROMOCAO"), # Alterado de ID para ID_PROMOCAO
+                            "ID_PRODUTO": str(pid),                          # Alterado de IDProduto para ID_PRODUTO
+                            "NOME_PRODUTO": pnome,                           # Alterado de NomeProduto para NOME_PRODUTO
+                            "PRECO_ORIGINAL": float(preco_original),         # NOVO
+                            "PRECO_PROMOCIONAL": float(preco_promocional),   # NOVO (Calculado acima)
+                            "STATUS": "ATIVO",                               # NOVO (Definido como ATIVO)
+                            "DATA_INICIO": str(data_ini),                    # Alterado de DataInicio para DATA_INICIO
+                            "DATA_FIM": str(data_fim),                       # Alterado de DataFim para DATA_FIM
                         }
+                        
+                        # Note: O campo "Desconto" não é mais necessário, mas você pode adicioná-lo 
+                        # se precisar dele futuramente no DF de promoções.
+                        
                         df_atualizado = pd.concat([promocoes_df, pd.DataFrame([novo])], ignore_index=True)
                         st.session_state.promocoes = df_atualizado
                         try:
@@ -232,3 +257,4 @@ def gestao_promocoes():
                 st.rerun()
             except Exception as e:
                 st.error(f"Erro ao salvar exclusão: {e}")
+
