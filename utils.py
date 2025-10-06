@@ -11,7 +11,6 @@ import hashlib
 import ast
 import calendar
 import os
-from github import Github  # ✅ Agora importa o PyGithub real
 
 # =================================================================================
 # Importa as constantes de negócio e de arquivo
@@ -36,12 +35,12 @@ def to_float(valor_str):
 
 
 def prox_id(df, coluna_id="ID"):
-    if df.empty:
+    if df is None or df.empty:
         return "1"
     else:
         try:
             return str(pd.to_numeric(df[coluna_id], errors='coerce').fillna(0).astype(int).max() + 1)
-        except:
+        except Exception:
             return str(len(df) + 1)
 
 
@@ -60,7 +59,7 @@ def parse_date_yyyy_mm_dd(date_str):
         return None
     try:
         return datetime.strptime(str(date_str).split(" ")[0], "%Y-%m-%d").date()
-    except:
+    except Exception:
         return None
 
 
@@ -92,7 +91,7 @@ def format_produtos_resumo(produtos_json):
     try:
         try:
             produtos = json.loads(produtos_json)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError):
             produtos = ast.literal_eval(produtos_json)
         if not isinstance(produtos, list):
             return "Dados inválidos"
@@ -101,17 +100,36 @@ def format_produtos_resumo(produtos_json):
             primeiro = produtos[0].get('Produto', 'Produto Desconhecido')
             total_custo, total_venda = 0.0, 0.0
             for p in produtos:
-                qtd = float(p.get('Quantidade', 0))
-                preco_unit = float(p.get('Preço Unitário', 0))
-                custo_unit = float(p.get('Custo Unitário', 0))
+                try:
+                    qtd = float(p.get('Quantidade', 0))
+                    preco_unit = float(p.get('Preço Unitário', 0))
+                    custo_unit = float(p.get('Custo Unitário', 0))
+                except Exception:
+                    qtd = 0.0
+                    preco_unit = 0.0
+                    custo_unit = 0.0
                 total_custo += custo_unit * qtd
                 total_venda += preco_unit * qtd
             lucro = total_venda - total_custo
             lucro_str = f"| Lucro R$ {lucro:,.2f}" if lucro != 0 else ""
             return f"{count} item(s): {primeiro}... {lucro_str}"
-    except:
+    except Exception:
         return "Erro JSON Inválido"
     return ""
+
+
+# =================================================================================
+# 🔍 Utilitários de carregamento remoto (GitHub raw)
+def load_csv_github(url: str) -> pd.DataFrame | None:
+    try:
+        response = requests.get(url, timeout=15)
+        response.raise_for_status()
+        df = pd.read_csv(StringIO(response.text), dtype=str)
+        if df is None or df.empty or len(df.columns) < 2:
+            return None
+        return df
+    except Exception:
+        return None
 
 
 # =================================================================================
@@ -119,39 +137,44 @@ def format_produtos_resumo(produtos_json):
 # =================================================================================
 def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza promoções"):
     """Salva o CSV de promoções localmente e, se possível, também no GitHub."""
-    from constants_and_css import ARQ_PROMOCOES, OWNER, REPO_NAME, BRANCH
+    try:
+        from constants_and_css import ARQ_PROMOCOES, OWNER as CONST_OWNER, REPO_NAME as CONST_REPO, BRANCH as CONST_BRANCH
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar constantes do projeto: {e}")
+        return False
 
-    # --- 1️⃣ Salvar localmente ---
+    # --- 1) Salvar localmente ---
     try:
         df.to_csv(ARQ_PROMOCOES, index=False, encoding="utf-8-sig")
-        st.toast("💾 Promoções salvas localmente!")
+        try:
+            st.toast("💾 Promoções salvas localmente!")
+        except Exception:
+            pass
     except Exception as e:
         st.error(f"Erro ao salvar promoções localmente: {e}")
         return False
 
-    # --- 2️⃣ Salvar remotamente no GitHub ---
-    try:
-        token = (
-            st.secrets.get("GITHUB_TOKEN")
-            or st.secrets.get("github_token")
-            or GITHUB_TOKEN
-        )
-        repo_owner = (
-            st.secrets.get("REPO_OWNER")
-            or OWNER
-        )
-        repo_name = (
-            st.secrets.get("REPO_NAME")
-            or REPO_NAME
-        )
-        branch = (
-            st.secrets.get("BRANCH")
-            or BRANCH
-        )
-        csv_remote_path = "promocoes.csv"
+    # --- 2) Tentar salvar no GitHub ---
+    token = (
+        st.secrets.get("GITHUB_TOKEN")
+        or st.secrets.get("github_token")
+        or GITHUB_TOKEN
+    )
+    repo_owner = st.secrets.get("REPO_OWNER") or st.secrets.get("owner") or CONST_OWNER
+    repo_name = st.secrets.get("REPO_NAME") or st.secrets.get("repo") or CONST_REPO
+    branch = st.secrets.get("BRANCH") or CONST_BRANCH
+    csv_remote_path = os.path.basename(ARQ_PROMOCOES) or "promocoes.csv"
 
-        if not token:
-            st.warning("⚠️ Nenhum token do GitHub encontrado — apenas backup local salvo.")
+    if not token:
+        st.warning("⚠️ Nenhum token do GitHub encontrado — apenas backup local salvo.")
+        return False
+
+    try:
+        # import lazy do PyGithub para evitar falha na import do módulo se não estiver instalado
+        try:
+            from github import Github
+        except ModuleNotFoundError:
+            st.warning("PyGithub não está disponível no ambiente — apenas backup local salvo.")
             return False
 
         g = Github(token)
@@ -175,19 +198,25 @@ def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza
 
 
 # =================================================================================
-# 🔧 Funções de persistência auxiliares
+# 🔧 Funções de persistência auxiliares (placeholders)
 def salvar_produtos_no_github(dataframe, commit_message):
-    return True
+    try:
+        # Implementação real deve salvar ARQ_PRODUTOS
+        return True
+    except Exception:
+        return False
+
 
 def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
     return True
+
 
 def save_data_github_produtos(df, path, commit_message):
     return False
 
 
 # =================================================================================
-# 🔄 Funções de carregamento
+# 🔄 Funções de carregamento com cache
 @st.cache_data(show_spinner="Carregando promoções...")
 def carregar_promocoes():
     COLUNAS_PROMO = ["ID", "IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"]
@@ -204,50 +233,70 @@ def carregar_promocoes():
     return df[[col for col in COLUNAS_PROMO if col in df.columns]]
 
 
-# =================================================================================
-# 🔍 Utilitários e cálculos
-def load_csv_github(url: str) -> pd.DataFrame | None:
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        df = pd.read_csv(StringIO(response.text), dtype=str)
-        if df.empty or len(df.columns) < 2:
-            return None
-        return df
-    except Exception:
-        return None
-
-
-def norm_promocoes(df):
+@st.cache_data(show_spinner="Carregando dados...")
+def carregar_livro_caixa():
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{PATH_DIVIDAS}"
+    df = load_csv_github(url_raw)
+    if df is None or df.empty:
+        try:
+            df = pd.read_csv(ARQ_LOCAL, dtype=str)
+        except Exception:
+            df = pd.DataFrame(columns=COLUNAS_PADRAO)
     if df.empty:
-        return df
-    df = df.copy()
-    df["Desconto"] = pd.to_numeric(df["Desconto"], errors='coerce').fillna(0.0)
-    df["DataInicio"] = pd.to_datetime(df["DataInicio"], errors='coerce').dt.date
-    df["DataFim"] = pd.to_datetime(df["DataFim"], errors='coerce').dt.date
-    df = df[df["DataFim"] >= date.today()]
-    return df
+        df = pd.DataFrame(columns=COLUNAS_PADRAO)
+    for col in COLUNAS_PADRAO:
+        if col not in df.columns:
+            df[col] = "Realizada" if col == "Status" else ""
+    for col in ["RecorrenciaID", "TransacaoPaiID"]:
+        if col not in df.columns:
+            df[col] = ''
+    cols_to_return = COLUNAS_PADRAO_COMPLETO
+    return df[[col for col in cols_to_return if col in df.columns]]
 
+
+@st.cache_data(show_spinner="Carregando produtos do estoque...")
+def inicializar_produtos():
+    if "produtos" not in st.session_state:
+        url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}"
+        df_carregado = load_csv_github(url_raw)
+        if df_carregado is None or df_carregado.empty:
+            df_base = pd.DataFrame(columns=COLUNAS_PRODUTOS)
+        else:
+            df_base = df_carregado
+        for col in COLUNAS_PRODUTOS:
+            if col not in df_base.columns:
+                df_base[col] = ''
+        df_base["Quantidade"] = pd.to_numeric(df_base["Quantidade"], errors='coerce').fillna(0).astype(int)
+        df_base["PrecoCusto"] = pd.to_numeric(df_base["PrecoCusto"], errors='coerce').fillna(0.0)
+        df_base["PrecoVista"] = pd.to_numeric(df_base["PrecoVista"], errors='coerce').fillna(0.0)
+        df_base["PrecoCartao"] = pd.to_numeric(df_base["PrecoCartao"], errors='coerce').fillna(0.0)
+        df_base["Validade"] = pd.to_datetime(df_base["Validade"], errors='coerce').dt.date
+        st.session_state.produtos = df_base
+    return st.session_state.produtos
+
+
+@st.cache_data(show_spinner="Carregando histórico de compras...")
+def carregar_historico_compras():
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_COMPRAS}"
+    df = load_csv_github(url_raw)
+    if df is None or df.empty:
+        df = pd.DataFrame(columns=COLUNAS_COMPRAS)
+    for col in COLUNAS_COMPRAS:
+        if col not in df.columns:
+            df[col] = ""
+    return df[[col for col in COLUNAS_COMPRAS if col in df.columns]]
 
 
 # ==================== FUNÇÕES DE LÓGICA DE NEGÓCIO (PRODUTOS/ESTOQUE) ====================
 
 def ajustar_estoque(id_produto, quantidade, operacao="debitar"):
-    """
-    Ajusta a quantidade de um produto no st.session_state.produtos.
-    Nota: A persistência no GitHub precisa ser chamada separadamente.
-    """
     if "produtos" not in st.session_state:
-          # Se o estado não existe, inicializa (garante o dataframe)
-          inicializar_produtos()
-
+        inicializar_produtos()
     produtos_df = st.session_state.produtos
     idx_produto = produtos_df[produtos_df["ID"] == id_produto].index
-
     if not idx_produto.empty:
         idx = idx_produto[0]
         qtd_atual = produtos_df.loc[idx, "Quantidade"]
-
         if operacao == "debitar":
             nova_qtd = qtd_atual - quantidade
             produtos_df.loc[idx, "Quantidade"] = max(0, nova_qtd)
@@ -256,55 +305,47 @@ def ajustar_estoque(id_produto, quantidade, operacao="debitar"):
             nova_qtd = qtd_atual + quantidade
             produtos_df.loc[idx, "Quantidade"] = nova_qtd
             return True
-
     return False
 
-# ==================== FUNÇÕES DE LEITURA (API) ====================
 
 def ler_codigo_barras_api(image_bytes):
-    """Decodifica códigos de barras (1D e QR) usando a API pública ZXing."""
     URL_DECODER_ZXING = "https://zxing.org/w/decode"
-
     try:
         files = {"f": ("barcode.png", image_bytes, "image/png")}
         response = requests.post(URL_DECODER_ZXING, files=files, timeout=30)
-
         if response.status_code != 200:
             if 'streamlit' in globals():
                 st.error(f"❌ Erro na API ZXing. Status HTTP: {response.status_code}")
             return []
-
         text = response.text
         codigos = []
-
         if "<pre>" in text:
             partes = text.split("<pre>")
             for p in partes[1:]:
                 codigo = p.split("</pre>")[0].strip()
                 if codigo and not codigo.startswith("Erro na decodificação"):
                     codigos.append(codigo)
-
         if not codigos and 'streamlit' in globals():
-            st.toast("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
-
+            try:
+                st.toast("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
+            except Exception:
+                pass
         return codigos
-
     except Exception as e:
         if 'streamlit' in globals():
             st.error(f"❌ Erro de Requisição/Conexão: {e}")
         return []
 
+
 # ==================== FUNÇÕES DE CALLBACK (PRODUTOS) ====================
 
-def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações):
-    """Callback complexo para salvar produto simples ou com grade."""
+def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variacoes):
     if not nome:
         st.error("O nome do produto é obrigatório.")
         return False
 
     def add_product_row(df, p_id, p_nome, p_marca, p_categoria, p_qtd, p_custo, p_vista, p_cartao, p_validade, p_foto, p_cb, p_pai_id=None):
         novo_id = prox_id(df, "ID")
-
         novo = {
             "ID": novo_id,
             "Nome": p_nome.strip(),
@@ -321,11 +362,7 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
         }
         return pd.concat([df, pd.DataFrame([novo])], ignore_index=True), novo_id
 
-    # ⚠️ Removida a simulação 'save_csv_github' local. Agora a função 'salvar_produtos_no_github'
-    # precisa ser a lógica real de persistência para ARQ_PRODUTOS, conforme seu sistema.
-
     if tipo_produto == "Produto simples":
-        # ... [lógica de salvar produto simples]
         produtos, new_id = add_product_row(
             produtos, None, nome, marca, categoria,
             qtd, preco_custo, preco_vista,
@@ -336,7 +373,6 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             st.session_state.produtos = produtos
             inicializar_produtos.clear()
             st.success(f"Produto '{nome}' cadastrado com sucesso!")
-            # Limpa campos
             st.session_state.cad_nome = ""
             st.session_state.cad_marca = ""
             st.session_state.cad_categoria = ""
@@ -345,12 +381,12 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             st.session_state.cad_preco_vista = "0,00"
             st.session_state.cad_validade = date.today()
             st.session_state.cad_foto_url = ""
-            if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
+            if "codigo_barras" in st.session_state:
+                del st.session_state["codigo_barras"]
             return True
         return False
 
     elif tipo_produto == "Produto com variações (grade)":
-        # ... [lógica de salvar produto com grade]
         produtos, pai_id = add_product_row(
             produtos, None, nome, marca, categoria,
             0, 0.0, 0.0, 0.0,
@@ -358,13 +394,13 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             p_pai_id=None
         )
         cont_variacoes = 0
-        for var in variações:
-            if var["Nome"] and var["Quantidade"] > 0:
+        for var in variacoes:
+            if var.get("Nome") and var.get("Quantidade", 0) > 0:
                 produtos, _ = add_product_row(
                     produtos, None,
                     f"{nome} ({var['Nome']})", marca, categoria,
                     var["Quantidade"], var["PrecoCusto"], var["PrecoVista"], var["PrecoCartao"],
-                    validade, foto_url, var["CodigoBarras"],
+                    validade, foto_url, var.get("CodigoBarras", ""),
                     p_pai_id=pai_id
                 )
                 cont_variacoes += 1
@@ -374,13 +410,13 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
                 st.session_state.produtos = produtos
                 inicializar_produtos.clear()
                 st.success(f"Produto '{nome}' com {cont_variacoes} variações cadastrado com sucesso!")
-                # Limpa campos
                 st.session_state.cad_nome = ""
                 st.session_state.cad_marca = ""
                 st.session_state.cad_categoria = ""
                 st.session_state.cad_validade = date.today()
                 st.session_state.cad_foto_url = ""
-                if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
+                if "codigo_barras" in st.session_state:
+                    del st.session_state["codigo_barras"]
                 st.session_state.cb_grade_lidos = {}
                 return True
             return False
@@ -391,8 +427,8 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             return False
     return False
 
+
 def callback_adicionar_manual(nome, qtd, preco, custo):
-    """Adiciona item manual (sem controle de estoque) à lista de venda do Livro Caixa."""
     if nome and qtd > 0:
         st.session_state.lista_produtos.append({
             "Produto_ID": "",
@@ -407,23 +443,23 @@ def callback_adicionar_manual(nome, qtd, preco, custo):
         st.session_state.input_custo_prod_manual = 0.00
         st.session_state.input_produto_selecionado = ""
 
-def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_disp):
-    """Adiciona item do estoque à lista de venda do Livro Caixa (com lógica de promoção)."""
 
+def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_disp):
     promocoes = norm_promocoes(carregar_promocoes())
     hoje = date.today()
-
     promocao_ativa = promocoes[
         (promocoes["IDProduto"] == prod_id) &
         (promocoes["DataInicio"] <= hoje) &
         (promocoes["DataFim"] >= hoje)
     ]
-
     preco_unitario_final = preco
     if not promocao_ativa.empty:
         desconto_aplicado = promocao_ativa.iloc[0]["Desconto"] / 100.0
         preco_unitario_final = preco * (1 - desconto_aplicado)
-        st.toast(f"🏷️ Promoção de {promocao_ativa.iloc[0]['Desconto']:.0f}% aplicada a {prod_nome}!")
+        try:
+            st.toast(f"🏷️ Promoção de {promocao_ativa.iloc[0]['Desconto']:.0f}% aplicada a {prod_nome}!")
+        except Exception:
+            pass
 
     if qtd > 0 and qtd <= estoque_disp:
         st.session_state.lista_produtos.append({
@@ -442,8 +478,6 @@ def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_di
 
 @st.cache_data(show_spinner="Calculando mais vendidos...")
 def get_most_sold_products(df_movimentacoes):
-    """Calcula os produtos mais vendidos (por quantidade de itens vendidos)."""
-
     df_vendas = df_movimentacoes[
         (df_movimentacoes["Tipo"] == "Entrada") &
         (df_movimentacoes["Status"] == "Realizada") &
@@ -455,38 +489,35 @@ def get_most_sold_products(df_movimentacoes):
         return pd.DataFrame(columns=["Produto_ID", "Quantidade Total Vendida"])
 
     vendas_list = []
-
     for produtos_json in df_vendas["Produtos Vendidos"]:
         try:
             try:
                 produtos = json.loads(produtos_json)
             except (json.JSONDecodeError, TypeError):
                 produtos = ast.literal_eval(produtos_json)
-
             if isinstance(produtos, list):
                 for item in produtos:
                     produto_id = str(item.get("Produto_ID"))
                     if produto_id and produto_id != "None":
-                         vendas_list.append({
-                             "Produto_ID": produto_id,
-                             "Quantidade": to_float(item.get("Quantidade", 0))
-                         })
+                        vendas_list.append({
+                            "Produto_ID": produto_id,
+                            "Quantidade": to_float(item.get("Quantidade", 0))
+                        })
         except Exception:
             continue
 
     df_vendas_detalhada = pd.DataFrame(vendas_list)
-
     if df_vendas_detalhada.empty:
         return pd.DataFrame(columns=["Produto_ID", "Quantidade Total Vendida"])
 
     df_mais_vendidos = df_vendas_detalhada.groupby("Produto_ID")["Quantidade"].sum().reset_index()
     df_mais_vendidos.rename(columns={"Quantidade": "Quantidade Total Vendida"}, inplace=True)
     df_mais_vendidos.sort_values(by="Quantidade Total Vendida", ascending=False, inplace=True)
-
     return df_mais_vendidos
 
 
-
-
-
-
+# Compatibilidade de nomes (alias)
+try:
+    get_most_sold = get_most_sold_products
+except Exception:
+    pass
