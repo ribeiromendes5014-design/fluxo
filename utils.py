@@ -238,6 +238,14 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     df = df_movimentacoes.copy()
     
     # 1. Limpeza e Conversão (Usando MAIÚSCULAS/UNDERSCORE)
+    
+    # --- CORREÇÃO ADICIONADA ---
+    # Garante que uma coluna com o nome 'index' seja removida antes de
+    # chamar reset_index(), evitando o ValueError.
+    if 'index' in df.columns:
+        df = df.drop(columns=['index'])
+    # --- FIM DA CORREÇÃO ---
+
     df.index.name = 'original_index'
     df = df.reset_index()
     
