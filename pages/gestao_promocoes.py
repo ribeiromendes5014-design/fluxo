@@ -9,11 +9,11 @@ import hashlib
 import plotly.express as px # Necessário para gráficos se houver (removido no código abaixo, mas bom manter)
 
 # Importa as funções auxiliares e constantes
+# 🔑 PONTO CRÍTICO: Garantir que 'salvar_promocoes' seja importada e esteja definida em utils.py
 from utils import (
     inicializar_produtos, carregar_livro_caixa, ajustar_estoque, to_float, 
     salvar_produtos_no_github, parse_date_yyyy_mm_dd, prox_id, norm_promocoes, carregar_promocoes,
-    # 🔑 CORREÇÃO: Adicionando a função de salvamento de promoções (Exemplo: salvar_promocoes, salvar_promocoes_no_github, etc.)
-    salvar_promocoes # Mantenha o nome da sua função de salvamento real aqui
+    salvar_promocoes # <--- FUNÇÃO DE SALVAMENTO DE PROMOÇÕES
 )
 from constants_and_css import FATOR_CARTAO # Garante que todas as constantes estejam aqui
 
