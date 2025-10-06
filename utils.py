@@ -42,7 +42,13 @@ def prox_id(df, coluna_id="ID"):
         try:
             return str(pd.to_numeric(df[coluna_id], errors='coerce').fillna(0).astype(int).max() + 1)
         except Exception:
-            return str(len(df) + 1)
+            # Tenta encontrar o ID máximo mesmo que a coluna não seja perfeitamente numérica
+            try:
+                # Remove strings não-numéricas antes de tentar o max()
+                numeric_ids = pd.to_numeric(df[coluna_id].astype(str).str.extract(r'(\d+)')[0], errors='coerce').fillna(0).astype(int)
+                return str(numeric_ids.max() + 1)
+            except Exception:
+                return str(len(df) + 1)
 
 
 def hash_df(df):
@@ -50,7 +56,8 @@ def hash_df(df):
     for col in df_temp.select_dtypes(include=['datetime64[ns]']).columns:
         df_temp[col] = df_temp[col].astype(str)
     try:
-        return hashlib.md5(df_temp.to_json().encode('utf-8')).heigest()
+        # CORREÇÃO: heigest() para hexdigest()
+        return hashlib.md5(df_temp.to_json().encode('utf-8')).hexdigest() 
     except Exception:
         return "error"
 
@@ -126,6 +133,8 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
         response = requests.get(url, timeout=15)
         response.raise_for_status()
         df = pd.read_csv(StringIO(response.text), dtype=str)
+        # CORREÇÃO CRÍTICA: Padroniza as colunas imediatamente após a leitura.
+        df.columns = [col.upper() for col in df.columns] 
         if df is None or df.empty or len(df.columns) < 2:
             return None
         return df
@@ -139,21 +148,37 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
 
 def norm_promocoes(df_promocoes: pd.DataFrame) -> pd.DataFrame:
     """Normaliza o DataFrame de promoções, convertendo datas e garantindo tipos. Retorna APENAS as promoções ativas."""
+    
+    # ATUALIZAÇÃO: Usa as colunas do NOVO cabeçalho
+    COLUNAS_PROMO_NOVAS = ["ID_PROMOCAO", "ID_PRODUTO", "NOME_PRODUTO", "PRECO_ORIGINAL", "PRECO_PROMOCIONAL", "STATUS", "DATA_INICIO", "DATA_FIM"]
+    
     if df_promocoes is None or df_promocoes.empty:
-        return pd.DataFrame(columns=["ID", "IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"])
+        return pd.DataFrame(columns=COLUNAS_PROMO_NOVAS)
     
     df = df_promocoes.copy()
     
-    # Converte colunas de data para tipo date
-    for col in ["DataInicio", "DataFim"]:
+    # Garante que as novas colunas existam, caso o CSV antigo ainda esteja sendo lido.
+    for col in COLUNAS_PROMO_NOVAS:
+        if col not in df.columns:
+            df[col] = ''
+    
+    # Converte colunas de data para tipo date (usa os novos nomes)
+    for col in ["DATA_INICIO", "DATA_FIM"]:
         df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
 
-    # Converte o desconto para float
-    df["Desconto"] = pd.to_numeric(df["Desconto"], errors='coerce').fillna(0.0)
-    
+    # Converte as colunas de preço (usa os novos nomes)
+    df["PRECO_ORIGINAL"] = pd.to_numeric(df["PRECO_ORIGINAL"], errors='coerce').fillna(0.0)
+    df["PRECO_PROMOCIONAL"] = pd.to_numeric(df["PRECO_PROMOCIONAL"], errors='coerce').fillna(0.0)
+
     # Filtra as promoções que não expiraram e já começaram
     hoje = date.today()
-    df_ativas = df[(df["DataFim"] >= hoje) & (df["DataInicio"] <= hoje)].copy()
+    
+    # O filtro agora usa STATUS e as novas colunas de data
+    df_ativas = df[
+        (df["STATUS"].astype(str).str.upper() == 'ATIVO') &
+        (df["DATA_FIM"] >= hoje) & 
+        (df["DATA_INICIO"] <= hoje)
+    ].copy()
     
     return df_ativas
 
@@ -218,24 +243,24 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     df.index.name = 'original_index'
     df = df.reset_index()
     
-    df["Valor"] = pd.to_numeric(df["Valor"], errors='coerce').fillna(0.0)
+    df["VALOR"] = pd.to_numeric(df["VALOR"], errors='coerce').fillna(0.0) # Usa MAIÚSCULAS
     
     # Conversão de datas
-    df["Data"] = pd.to_datetime(df["Data"], errors='coerce').dt.date
-    df["Data Pagamento"] = pd.to_datetime(df["Data Pagamento"], errors='coerce').dt.date
-    df["Data_dt"] = pd.to_datetime(df["Data"]) # Para cálculos (Plotly)
+    df["DATA"] = pd.to_datetime(df["DATA"], errors='coerce').dt.date # Usa MAIÚSCULAS
+    df["DATA PAGAMENTO"] = pd.to_datetime(df["DATA PAGAMENTO"], errors='coerce').dt.date # Usa MAIÚSCULAS
+    df["Data_dt"] = pd.to_datetime(df["DATA"]) # Para cálculos (Plotly)
     
     # 2. Cor do Valor (Para estilização no Streamlit)
-    df['Cor_Valor'] = df['Valor'].apply(lambda x: 'green' if x >= 0 else 'red')
+    df['Cor_Valor'] = df['VALOR'].apply(lambda x: 'green' if x >= 0 else 'red') # Usa MAIÚSCULAS
     
     # 3. ID Visível (Simples)
-    if 'ID Visível' not in df.columns or df['ID Visível'].isnull().all():
-        df['ID Visível'] = range(1, len(df) + 1)
+    if 'ID VISÍVEL' not in df.columns or df['ID VISÍVEL'].isnull().all():
+        df['ID VISÍVEL'] = range(1, len(df) + 1)
     
     # 4. Cálculo de Saldo Acumulado (Apenas para Realizadas)
-    df_realizadas = df[df['Status'] == 'Realizada'].copy()
-    df_realizadas = df_realizadas.sort_values(by=['Data', 'original_index'])
-    df_realizadas['Saldo Acumulado'] = df_realizadas['Valor'].cumsum()
+    df_realizadas = df[df['STATUS'] == 'REALIZADA'].copy() # Usa MAIÚSCULAS
+    df_realizadas = df_realizadas.sort_values(by=['DATA', 'original_index']) # Usa MAIÚSCULAS
+    df_realizadas['Saldo Acumulado'] = df_realizadas['VALOR'].cumsum() # Usa MAIÚSCULAS
     
     # Merge de volta para o DF completo (para que as pendentes não tenham saldo)
     df = df.merge(df_realizadas[['original_index', 'Saldo Acumulado']], on='original_index', how='left')
@@ -249,10 +274,10 @@ def calcular_resumo(df_movimentacoes: pd.DataFrame):
         return 0.0, 0.0, 0.0
     
     df = df_movimentacoes.copy()
-    df["Valor"] = pd.to_numeric(df["Valor"], errors='coerce').fillna(0.0)
+    df["VALOR"] = pd.to_numeric(df["VALOR"], errors='coerce').fillna(0.0) # Usa MAIÚSCULAS
     
-    total_entradas = df[df['Valor'] >= 0]['Valor'].sum()
-    total_saidas = abs(df[df['Valor'] < 0]['Valor'].sum())
+    total_entradas = df[df['VALOR'] >= 0]['VALOR'].sum() # Usa MAIÚSCULAS
+    total_saidas = abs(df[df['VALOR'] < 0]['VALOR'].sum()) # Usa MAIÚSCULAS
     saldo = total_entradas - total_saidas
     
     return round(total_entradas, 2), round(total_saidas, 2), round(saldo, 2)
@@ -350,17 +375,24 @@ def save_data_github_produtos(df, path, commit_message):
 # =================================================================================
 @st.cache_data(show_spinner="Carregando promoções...")
 def carregar_promocoes():
-    COLUNAS_PROMO = ["ID", "IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"]
+    # ATUALIZAÇÃO: Usa as colunas do NOVO cabeçalho
+    COLUNAS_PROMO = ["ID_PROMOCAO", "ID_PRODUTO", "NOME_PRODUTO", "PRECO_ORIGINAL", "PRECO_PROMOCIONAL", "STATUS", "DATA_INICIO", "DATA_FIM"]
     url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PROMOCOES}"
     df = load_csv_github(url_raw)
+    
     if df is None or df.empty:
         try:
+            # Tenta ler localmente, mas força a padronização das colunas
             df = pd.read_csv(ARQ_PROMOCOES, dtype=str)
+            df.columns = [col.upper() for col in df.columns]
         except Exception:
             df = pd.DataFrame(columns=COLUNAS_PROMO)
+            
+    # Garante que as novas colunas existam
     for col in COLUNAS_PROMO:
         if col not in df.columns:
             df[col] = ""
+            
     return df[[col for col in COLUNAS_PROMO if col in df.columns]]
 
 
@@ -368,20 +400,31 @@ def carregar_promocoes():
 def carregar_livro_caixa():
     url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{PATH_DIVIDAS}"
     df = load_csv_github(url_raw)
+    
+    # Padroniza as colunas de entrada para MAIÚSCULAS
+    COLUNAS_PADRAO_UPPER = [col.upper() for col in COLUNAS_PADRAO]
+    COLUNAS_PADRAO_COMPLETO_UPPER = [col.upper() for col in COLUNAS_PADRAO_COMPLETO]
+
     if df is None or df.empty:
         try:
+            # Tenta ler localmente, mas força a padronização das colunas
             df = pd.read_csv(ARQ_LOCAL, dtype=str)
+            df.columns = [col.upper() for col in df.columns]
         except Exception:
-            df = pd.DataFrame(columns=COLUNAS_PADRAO)
+            df = pd.DataFrame(columns=COLUNAS_PADRAO_UPPER)
+            
     if df.empty:
-        df = pd.DataFrame(columns=COLUNAS_PADRAO)
-    for col in COLUNAS_PADRAO:
+        df = pd.DataFrame(columns=COLUNAS_PADRAO_UPPER)
+        
+    for col in COLUNAS_PADRAO_UPPER:
         if col not in df.columns:
-            df[col] = "Realizada" if col == "Status" else ""
-    for col in ["RecorrenciaID", "TransacaoPaiID"]:
+            df[col] = "REALIZADA" if col == "STATUS" else "" # Usa MAIÚSCULAS
+
+    for col in ["RECORRENCIAID", "TRANSACAOPAIID"]: # Usa MAIÚSCULAS
         if col not in df.columns:
             df[col] = ''
-    cols_to_return = COLUNAS_PADRAO_COMPLETO
+            
+    cols_to_return = COLUNAS_PADRAO_COMPLETO_UPPER
     return df[[col for col in cols_to_return if col in df.columns]]
 
 
@@ -390,31 +433,39 @@ def inicializar_produtos():
     if "produtos" not in st.session_state:
         # 1. Tenta carregar do GitHub (prioridade)
         url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}"
-        df_carregado = load_csv_github(url_raw)
+        df_carregado = load_csv_github(url_raw) # load_csv_github já padroniza para MAIÚSCULAS
         
         # 2. Se o carregamento remoto falhar ou retornar vazio, tenta carregar localmente
         if df_carregado is None or df_carregado.empty:
             st.warning("⚠️ Falha ao carregar produtos do GitHub. Tentando carregar o arquivo local...")
             try:
-                # CORREÇÃO APLICADA: Tenta ler o arquivo local usando ARQ_PRODUTOS
                 df_base = pd.read_csv(ARQ_PRODUTOS, dtype=str) 
+                df_base.columns = [col.upper() for col in df_base.columns] # Padroniza localmente
             except Exception as e:
-                # Se a leitura local falhar, cria um DataFrame vazio
                 st.error(f"❌ Falha ao carregar o arquivo local ({ARQ_PRODUTOS}): {e}")
-                df_base = pd.DataFrame(columns=COLUNAS_PRODUTOS)
+                df_base = pd.DataFrame(columns=[c.upper() for c in COLUNAS_PRODUTOS])
         else:
-            # Se o carregamento remoto foi bem-sucedido
             df_base = df_carregado
 
-        # Processamento dos dados
-        for col in COLUNAS_PRODUTOS:
+        # Processamento dos dados (em MAIÚSCULAS)
+        COLUNAS_PRODUTOS_UPPER = [c.upper() for c in COLUNAS_PRODUTOS]
+        for col in COLUNAS_PRODUTOS_UPPER:
             if col not in df_base.columns:
                 df_base[col] = ''
-        df_base["Quantidade"] = pd.to_numeric(df_base["Quantidade"], errors='coerce').fillna(0).astype(int)
-        df_base["PrecoCusto"] = pd.to_numeric(df_base["PrecoCusto"], errors='coerce').fillna(0.0)
-        df_base["PrecoVista"] = pd.to_numeric(df_base["PrecoVista"], errors='coerce').fillna(0.0)
-        df_base["PrecoCartao"] = pd.to_numeric(df_base["PrecoCartao"], errors='coerce').fillna(0.0)
-        df_base["Validade"] = pd.to_datetime(df_base["Validade"], errors='coerce').dt.date
+
+        # Conversão de tipos (usando MAIÚSCULAS)
+        df_base["QUANTIDADE"] = pd.to_numeric(df_base["QUANTIDADE"], errors='coerce').fillna(0).astype(int)
+        df_base["PRECOCUSTO"] = pd.to_numeric(df_base["PRECOCUSTO"], errors='coerce').fillna(0.0)
+        df_base["PRECOVISTA"] = pd.to_numeric(df_base["PRECOVISTA"], errors='coerce').fillna(0.0)
+        df_base["PRECOCARTAO"] = pd.to_numeric(df_base["PRECOCARTAO"], errors='coerce').fillna(0.0)
+        df_base["VALIDADE"] = pd.to_datetime(df_base["VALIDADE"], errors='coerce').dt.date
+        
+        # Filtra apenas as colunas necessárias
+        df_base = df_base[[col for col in COLUNAS_PRODUTOS_UPPER if col in df_base.columns]]
+        
+        # Renomeia colunas para o padrão CamelCase (para compatibilidade com outras páginas, se necessário)
+        # É mais seguro manter em MAIÚSCULAS, mas se outras funções esperam CamelCase, essa é a linha de ajuste.
+        # Por enquanto, mantemos o DF em MAIÚSCULAS para gestao_promocoes.py funcionar.
         st.session_state.produtos = df_base
     return st.session_state.produtos
 
@@ -423,12 +474,17 @@ def inicializar_produtos():
 def carregar_historico_compras():
     url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_COMPRAS}"
     df = load_csv_github(url_raw)
+    
+    COLUNAS_COMPRAS_UPPER = [c.upper() for c in COLUNAS_COMPRAS]
+    
     if df is None or df.empty:
-        df = pd.DataFrame(columns=COLUNAS_COMPRAS)
-    for col in COLUNAS_COMPRAS:
+        df = pd.DataFrame(columns=COLUNAS_COMPRAS_UPPER)
+        
+    for col in COLUNAS_COMPRAS_UPPER:
         if col not in df.columns:
             df[col] = ""
-    return df[[col for col in COLUNAS_COMPRAS if col in df.columns]]
+            
+    return df[[col for col in COLUNAS_COMPRAS_UPPER if col in df.columns]]
 
 
 # ==================== FUNÇÕES DE LÓGICA DE NEGÓCIO (PRODUTOS/ESTOQUE) ====================
@@ -438,17 +494,21 @@ def ajustar_estoque(id_produto, quantidade, operacao="debitar"):
     if "produtos" not in st.session_state:
         inicializar_produtos()
     produtos_df = st.session_state.produtos
+    
+    # Usa a coluna ID em MAIÚSCULAS
     idx_produto = produtos_df[produtos_df["ID"] == id_produto].index
+    
     if not idx_produto.empty:
         idx = idx_produto[0]
-        qtd_atual = produtos_df.loc[idx, "Quantidade"]
+        # Usa a coluna QUANTIDADE em MAIÚSCULAS
+        qtd_atual = produtos_df.loc[idx, "QUANTIDADE"] 
         if operacao == "debitar":
             nova_qtd = qtd_atual - quantidade
-            produtos_df.loc[idx, "Quantidade"] = max(0, nova_qtd)
+            produtos_df.loc[idx, "QUANTIDADE"] = max(0, nova_qtd)
             return True
         elif operacao == "creditar":
             nova_qtd = qtd_atual + quantidade
-            produtos_df.loc[idx, "Quantidade"] = nova_qtd
+            produtos_df.loc[idx, "QUANTIDADE"] = nova_qtd
             return True
     return False
 
@@ -492,6 +552,7 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
 
     def add_product_row(df, p_id, p_nome, p_marca, p_categoria, p_qtd, p_custo, p_vista, p_cartao, p_validade, p_foto, p_cb, p_pai_id=None):
         novo_id = prox_id(df, "ID")
+        # Mantém as chaves CamelCase aqui para que a escrita use o cabeçalho original se for o caso
         novo = {
             "ID": novo_id,
             "Nome": p_nome.strip(),
@@ -593,17 +654,27 @@ def callback_adicionar_manual(nome, qtd, preco, custo):
 def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_disp):
     promocoes = norm_promocoes(carregar_promocoes())
     hoje = date.today()
+    
+    # ATUALIZAÇÃO: Usa as novas colunas para filtrar as promoções
     promocao_ativa = promocoes[
-        (promocoes["IDProduto"] == prod_id) &
-        (promocoes["DataInicio"] <= hoje) &
-        (promocoes["DataFim"] >= hoje)
+        (promocoes["ID_PRODUTO"] == prod_id) &
+        (promocoes["DATA_INICIO"] <= hoje) &
+        (promocoes["DATA_FIM"] >= hoje)
     ]
+    
     preco_unitario_final = preco
     if not promocao_ativa.empty:
-        desconto_aplicado = promocao_ativa.iloc[0]["Desconto"] / 100.0
-        preco_unitario_final = preco * (1 - desconto_aplicado)
+        # ATUALIZAÇÃO: Usa PRECO_PROMOCIONAL
+        preco_unitario_final = promocao_ativa.iloc[0]["PRECO_PROMOCIONAL"]
+        
+        # Calcula o desconto apenas para a mensagem de toast
+        preco_original_calc = promocao_ativa.iloc[0]["PRECO_ORIGINAL"]
+        desconto_aplicado = 0
+        if preco_original_calc > 0:
+            desconto_aplicado = (1 - (preco_unitario_final / preco_original_calc)) * 100
+            
         try:
-            st.toast(f"🏷️ Promoção de {promocao_ativa.iloc[0]['Desconto']:.0f}% aplicada a {prod_nome}!")
+            st.toast(f"🏷️ Promoção de {desconto_aplicado:.0f}% aplicada a {prod_nome}! Preço: R$ {preco_unitario_final:.2f}")
         except Exception:
             pass
 
@@ -626,17 +697,17 @@ def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_di
 @st.cache_data(show_spinner="Calculando mais vendidos...")
 def get_most_sold_products(df_movimentacoes):
     df_vendas = df_movimentacoes[
-        (df_movimentacoes["Tipo"] == "Entrada") &
-        (df_movimentacoes["Status"] == "Realizada") &
-        (df_movimentacoes["Produtos Vendidos"].notna()) &
-        (df_movimentacoes["Produtos Vendidos"] != "")
+        (df_movimentacoes["TIPO"] == "ENTRADA") & # Usa MAIÚSCULAS
+        (df_movimentacoes["STATUS"] == "REALIZADA") & # Usa MAIÚSCULAS
+        (df_movimentacoes["PRODUTOS VENDIDOS"].notna()) & # Usa MAIÚSCULAS
+        (df_movimentacoes["PRODUTOS VENDIDOS"] != "")
     ].copy()
 
     if df_vendas.empty:
-        return pd.DataFrame(columns=["Produto_ID", "Quantidade Total Vendida"])
+        return pd.DataFrame(columns=["PRODUTO_ID", "QUANTIDADE TOTAL VENDIDA"])
 
     vendas_list = []
-    for produtos_json in df_vendas["Produtos Vendidos"]:
+    for produtos_json in df_vendas["PRODUTOS VENDIDOS"]: # Usa MAIÚSCULAS
         try:
             try:
                 produtos = json.loads(produtos_json)
@@ -647,19 +718,19 @@ def get_most_sold_products(df_movimentacoes):
                     produto_id = str(item.get("Produto_ID"))
                     if produto_id and produto_id != "None":
                         vendas_list.append({
-                            "Produto_ID": produto_id,
-                            "Quantidade": to_float(item.get("Quantidade", 0))
+                            "PRODUTO_ID": produto_id,
+                            "QUANTIDADE": to_float(item.get("Quantidade", 0))
                         })
         except Exception:
             continue
 
     df_vendas_detalhada = pd.DataFrame(vendas_list)
     if df_vendas_detalhada.empty:
-        return pd.DataFrame(columns=["Produto_ID", "Quantidade Total Vendida"])
+        return pd.DataFrame(columns=["PRODUTO_ID", "QUANTIDADE TOTAL VENDIDA"])
 
-    df_mais_vendidos = df_vendas_detalhada.groupby("Produto_ID")["Quantidade"].sum().reset_index()
-    df_mais_vendidos.rename(columns={"Quantidade": "Quantidade Total Vendida"}, inplace=True)
-    df_mais_vendidos.sort_values(by="Quantidade Total Vendida", ascending=False, inplace=True)
+    df_mais_vendidos = df_vendas_detalhada.groupby("PRODUTO_ID")["QUANTIDADE"].sum().reset_index()
+    df_mais_vendidos.rename(columns={"QUANTIDADE": "QUANTIDADE TOTAL VENDIDA"}, inplace=True)
+    df_mais_vendidos.sort_values(by="QUANTIDADE TOTAL VENDIDA", ascending=False, inplace=True)
     return df_mais_vendidos
 
 
