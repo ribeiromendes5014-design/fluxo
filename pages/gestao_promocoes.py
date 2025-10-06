@@ -36,7 +36,6 @@ def gestao_promocoes():
     promocoes_df = st.session_state.promocoes
     
     # ATENÇÃO: norm_promocoes é crucial. Assumindo que ela lida com 'ID_PROMOCAO', 'DATA_INICIO', etc.
-    # O df 'promocoes' é o df filtrado e normalizado.
     promocoes = norm_promocoes(promocoes_df.copy()) 
 
     # Carrega o livro caixa para análise de produtos parados
@@ -87,7 +86,7 @@ def gestao_promocoes():
                 
                 produto_selecionado = produto_selecionado.iloc[0]
                 
-                # Preço Original (Assumindo que PRECOVISTA é o preço base no DF de produtos)
+                # CORREÇÃO CRÍTICA: Usa 'PRECOVISTA' em MAIÚSCULAS
                 preco_original = to_float(produto_selecionado.get('PRECOVISTA', 0.0)) 
                 
                 st.info(f"Preço de Venda Base: R$ {preco_original:.2f}")
@@ -115,7 +114,7 @@ def gestao_promocoes():
                     elif preco_original <= 0:
                         st.error("O preço original do produto deve ser maior que zero para aplicar a promoção.")
                     else:
-                        # 2. Montar o dicionário com o NOVO CABEÇALHO
+                        # Montar o dicionário com o NOVO CABEÇALHO
                         novo = {
                             "ID_PROMOCAO": prox_id(promocoes_df, "ID_PROMOCAO"), 
                             "ID_PRODUTO": str(pid),                          
@@ -178,7 +177,7 @@ def gestao_promocoes():
                 
                 for _, row in produtos_parados_sugeridos.iterrows():
                     # Cálculo de preços para o novo cabeçalho
-                    preco_original_auto = to_float(row.get('PRECOVISTA', 0.0))
+                    preco_original_auto = to_float(row.get('PRECOVISTA', 0.0)) # CORREÇÃO CRÍTICA: Usa 'PRECOVISTA' em MAIÚSCULAS
                     preco_promocional_auto = preco_original_auto * (1 - (desconto_auto / 100))
                     
                     novo = {
@@ -253,7 +252,7 @@ def gestao_promocoes():
 
     if not produto_catalogo.empty:
         # Prioriza o preço base atualizado do catálogo
-        preco_base_para_calc = to_float(produto_catalogo.iloc[0].get('PRECOVISTA', preco_base_para_calc))
+        preco_base_para_calc = to_float(produto_catalogo.iloc[0].get('PRECOVISTA', preco_base_para_calc)) # CORREÇÃO CRÍTICA: Usa 'PRECOVISTA' em MAIÚSCULAS
         
     st.markdown(f"**Preço Base do Produto:** R$ {preco_base_para_calc:.2f}")
     
