@@ -37,8 +37,6 @@ def get_campos_grade(categoria: str) -> dict:
     if "calçado" in cat_lower or "chinelo" in cat_lower:
         return {
             "Cor": {"type": "text", "help": "Ex: Preto, Azul, etc."},
-            # 🚨 CORREÇÃO APLICADA: O valor padrão (value) foi alterado de 0 para 38.
-            # Isso evita o erro 'StreamlitValueBelowMinError', pois 38 é >= ao min_value (1).
             "Tamanho/Numeração": {"type": "number", "min_value": 1, "step": 1, "value": 38, "help": "Ex: 38, 40, etc."},
         }
     elif "roupa" in cat_lower:
@@ -251,7 +249,13 @@ def gestao_produtos():
                     st.info(f"Cadastre as variações abaixo. Categoria: **{categoria}**")
 
             with c3:
-                validade = st.date_input("Validade (opcional)", value=date.today(), key="cad_validade")
+                # ✨ ALTERAÇÃO: Adicionado checkbox para controle da data de validade
+                tem_validade = st.checkbox("Produto com data de validade?", value=True, key="cad_tem_validade")
+                validade = pd.NaT  # Valor padrão para "sem validade"
+
+                if tem_validade:
+                    validade = st.date_input("Data de Validade", value=date.today() + timedelta(days=365), key="cad_validade")
+
                 foto_url = st.text_input("URL da Foto (opcional)", help="Foto do produto principal", key="cad_foto_url")
                 st.file_uploader("📷 Enviar Foto Principal", type=["png", "jpg", "jpeg"], key="cad_foto")
 
@@ -355,17 +359,15 @@ def gestao_produtos():
                             if config["type"] == "text":
                                 valor = cols_add[col_idx].text_input(label, help=config.get("help"), key=key_detalhe)
                             elif config["type"] == "number":
-                                # 🚨 CORREÇÃO: Valor inicial seguro para number_input
                                 valor = cols_add[col_idx].number_input(
                                     label,
                                     min_value=config.get("min_value", 0),
                                     step=config.get("step", 1),
-                                    value=config.get("value", 0), # Valor inicial 0 é seguro para min_value=1
+                                    value=config.get("value", 0),
                                     help=config.get("help"),
                                     key=key_detalhe
                                 )
                             elif config["type"] == "selectbox":
-                                # 🚨 ATENÇÃO: Se o primeiro item do options for "", use index 0 para inicializar como vazio
                                 index = 0 if config.get("options", [""])[0] == "" else None
                                 valor = cols_add[col_idx].selectbox(
                                     label,
@@ -556,7 +558,8 @@ def gestao_produtos():
                     c[2].markdown(f"**{estoque_total}**")
 
                     # Validade
-                    c[3].write(f"{pai['Validade']}")
+                    validade_formatada = str(pai['Validade']) if pd.notna(pai['Validade']) else "—"
+                    c[3].write(validade_formatada)
 
                     # Preços
                     pv = to_float(pai['PrecoVista'])
@@ -626,8 +629,10 @@ def gestao_produtos():
                                 # Estoque Variação
                                 c_var[2].write(f"{var['Quantidade']}")
 
-                                # Validade (mantém a do Pai, mas pode ser mudada no futuro)
-                                c_var[3].write(f"{pai['Validade']}")
+                                # Validade (mantém a do Pai)
+                                validade_var_formatada = str(pai['Validade']) if pd.notna(pai['Validade']) else "—"
+                                c_var[3].write(validade_var_formatada)
+
 
                                 # Preços Variação
                                 pv_var = to_float(var['PrecoVista'])
@@ -705,13 +710,15 @@ def gestao_produtos():
                         novo_preco_custo = st.text_input("Preço de Custo", value=f"{to_float(row['PrecoCusto']):.2f}".replace(".", ","), key=f"edit_pc_{eid}")
                         novo_preco_vista = st.text_input("Preço à Vista", value=f"{to_float(row['PrecoVista']):.2f}".replace(".", ","), key=f"edit_pv_{eid}")
                     with c3:
-                        try:
-                            vdata = row["Validade"] if pd.notna(row["Validade"]) and isinstance(row["Validade"], date) else date.today()
-                        except Exception:
-                            vdata = date.today()
-                        nova_validade = st.date_input("Validade", value=vdata, key=f"edit_val_{eid}")
+                        # ✨ ALTERAÇÃO: Lógica de data de validade na edição
+                        produto_tem_validade = pd.notna(row["Validade"])
+                        edit_tem_validade = st.checkbox("Produto com data de validade?", value=produto_tem_validade, key=f"edit_tem_validade_{eid}")
+                        nova_validade = pd.NaT
 
-                        # 🚨 ATUALIZADO: Edição da Foto URL (agora individual para variação/pai)
+                        if edit_tem_validade:
+                            data_padrao = row["Validade"] if produto_tem_validade else date.today()
+                            nova_validade = st.date_input("Data de Validade", value=data_padrao, key=f"edit_val_{eid}")
+
                         nova_foto = st.text_input("URL da Foto", value=row.get("FotoURL", ""), key=f"edit_foto_{eid}")
                         novo_cb = st.text_input("Código de Barras", value=str(row.get("CodigoBarras", "")), key=f"edit_cb_{eid}")
 
@@ -734,14 +741,13 @@ def gestao_produtos():
                                 if config["type"] == "text":
                                     valor = cols_edit_add[col_idx].text_input(label, value=current_value, key=key_edit_detalhe)
                                 elif config["type"] == "number":
-                                    # 🚨 CORREÇÃO: Tratamento do valor inicial para number_input na edição
                                     safe_value = current_value if isinstance(current_value, (int, float)) and current_value >= config.get("min_value", 0) else config.get("value", 0)
 
                                     valor = cols_edit_add[col_idx].number_input(
                                         label,
                                         min_value=config.get("min_value", 0),
                                         step=config.get("step", 1),
-                                        value=int(safe_value), # Garante que é inteiro para numeração
+                                        value=int(safe_value),
                                         key=key_edit_detalhe
                                     )
                                 elif config["type"] == "selectbox":
@@ -749,7 +755,6 @@ def gestao_produtos():
                                     try:
                                         index = options.index(str(current_value))
                                     except ValueError:
-                                        # Default para o primeiro ou vazio
                                         index = 0 if "" in options else 0
 
                                     valor = cols_edit_add[col_idx].selectbox(label, options, index=index, key=key_edit_detalhe)
