@@ -574,14 +574,14 @@ def ler_codigo_barras_api(image_bytes):
 # ==================== FUNÇÕES DE CALLBACK (PRODUTOS) ====================
 # (Mantidas)
 # =================================================================================
-def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variacoes):
+def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variacoes, cashback_percent): # Adicionado cashback_percent
     if not nome:
         st.error("O nome do produto é obrigatório.")
         return False
 
-    def add_product_row(df, p_id, p_nome, p_marca, p_categoria, p_qtd, p_custo, p_vista, p_cartao, p_validade, p_foto, p_cb, p_pai_id=None):
+    # 1. ATUALIZAÇÃO: A função interna agora aceita 'p_cashback'
+    def add_product_row(df, p_id, p_nome, p_marca, p_categoria, p_qtd, p_custo, p_vista, p_cartao, p_validade, p_foto, p_cb, p_cashback, p_pai_id=None):
         novo_id = prox_id(df, "ID")
-        # Mantém as chaves CamelCase aqui para que a escrita use o cabeçalho original se for o caso
         novo = {
             "ID": novo_id,
             "Nome": p_nome.strip(),
@@ -594,7 +594,8 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             "Validade": str(p_validade),
             "FotoURL": p_foto.strip(),
             "CodigoBarras": str(p_cb).strip(),
-            "PaiID": str(p_pai_id).strip() if p_pai_id else ""
+            "PaiID": str(p_pai_id).strip() if p_pai_id else "",
+            "CashbackPercent": to_float(p_cashback) # 2. NOVO: Adiciona o cashback ao dicionário do produto
         }
         return pd.concat([df, pd.DataFrame([novo])], ignore_index=True), novo_id
 
@@ -603,7 +604,8 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             produtos, None, nome, marca, categoria,
             qtd, preco_custo, preco_vista,
             round(to_float(preco_vista) / FATOR_CARTAO, 2) if to_float(preco_vista) > 0 else 0.0,
-            validade, foto_url, codigo_barras
+            validade, foto_url, codigo_barras,
+            cashback_percent # 3. ATUALIZAÇÃO: Passa o valor do cashback para a função interna
         )
         if salvar_produtos_no_github(produtos, f"Novo produto simples: {nome} (ID {new_id})"):
             st.session_state.produtos = produtos
@@ -623,10 +625,12 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
         return False
 
     elif tipo_produto == "Produto com variações (grade)":
+        # O produto PAI não tem cashback direto, ele é um agrupador
         produtos, pai_id = add_product_row(
             produtos, None, nome, marca, categoria,
             0, 0.0, 0.0, 0.0,
             validade, foto_url, codigo_barras,
+            0.0, # Cashback do pai é 0
             p_pai_id=None
         )
         cont_variacoes = 0
@@ -637,6 +641,7 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
                     f"{nome} ({var['Nome']})", marca, categoria,
                     var["Quantidade"], var["PrecoCusto"], var["PrecoVista"], var["PrecoCartao"],
                     validade, foto_url, var.get("CodigoBarras", ""),
+                    var.get("CashbackPercent", 0.0), # 4. ATUALIZAÇÃO: Pega o cashback da variação
                     p_pai_id=pai_id
                 )
                 cont_variacoes += 1
@@ -769,3 +774,4 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
