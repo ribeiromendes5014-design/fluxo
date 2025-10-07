@@ -788,37 +788,37 @@ if not df_pendentes_ordenado.empty and 'Dias Até/Atraso' in df_pendentes_ordena
     df_para_estilizar = df_para_estilizar.loc[:, ~df_para_estilizar.columns.duplicated()]
 
     try:
-        styled_df = (
-            df_para_estilizar
-            .style
-            .apply(highlight_pendentes, axis=1)
-            .hide(subset=['Dias Até/Atraso', 'Cor_Valor'], axis=1)
-        )
+    styled_df = (
+        df_para_estilizar
+        .style
+        .apply(highlight_pendentes, axis=1)
+        .hide(subset=['Dias Até/Atraso', 'Cor_Valor'], axis=1)
+    )
 
-        # ✅ Proteção extra — Streamlit agora só recebe DataFrame sem colunas duplicadas
-        styled_df = styled_df.data.loc[:, ~styled_df.data.columns.duplicated()]
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    # 🔒 CORREÇÃO DEFINITIVA:
+    # Extrai o DataFrame puro do Styler e remove qualquer coluna duplicada
+    df_clean = styled_df.data.loc[:, ~styled_df.data.columns.duplicated()]
 
-    except Exception as e:
-        # 🛑 Fallback seguro
-        st.warning(f"Erro ao aplicar estilos: {e}. Exibindo tabela simples.")
-        df_fallback = df_para_mostrar_pendentes.copy()
+    # Exibe o DataFrame limpo (sem o objeto Styler)
+    st.dataframe(df_clean, use_container_width=True, hide_index=True)
 
-        cols_to_drop = [
-            'Dias Até/Atraso', 'Cor_Valor', 'Data_dt', 'original_index',
-            'Saldo Acumulado', 'Produtos Vendidos', 'RecorrenciaID', 'TransacaoPaiID'
-        ]
-        cols_existentes_drop = [col for col in cols_to_drop if col in df_fallback.columns]
-        if cols_existentes_drop:
-            df_fallback.drop(columns=cols_existentes_drop, inplace=True, errors='ignore')
+except Exception as e:
+    # 🛑 Fallback seguro
+    st.warning(f"Erro ao aplicar estilos: {e}. Exibindo tabela simples.")
 
-        # ✅ Garante colunas únicas também no fallback
-        df_fallback = df_fallback.loc[:, ~df_fallback.columns.duplicated()]
+    df_fallback = df_para_mostrar_pendentes.copy()
+    cols_to_drop = [
+        'Dias Até/Atraso', 'Cor_Valor', 'Data_dt', 'original_index',
+        'Saldo Acumulado', 'Produtos Vendidos', 'RecorrenciaID', 'TransacaoPaiID'
+    ]
+    cols_existentes_drop = [col for col in cols_to_drop if col in df_fallback.columns]
+    if cols_existentes_drop:
+        df_fallback.drop(columns=cols_existentes_drop, inplace=True, errors='ignore')
 
-        st.dataframe(df_fallback, use_container_width=True, hide_index=True)
+    df_fallback = df_fallback.loc[:, ~df_fallback.columns.duplicated()]
+    st.dataframe(df_fallback, use_container_width=True, hide_index=True)
 
-else:
-    st.info("Nenhuma dívida pendente disponível para exibição.")
+
 
 
 
