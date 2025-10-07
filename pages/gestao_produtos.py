@@ -207,11 +207,18 @@ def gestao_produtos():
                 qtd = 0
                 preco_custo = "0,00"
                 preco_vista = "0,00"
+                cashback_percent = 0.0 # Inicializa cashback
                 
                 if tipo_produto == "Produto simples":
                     qtd = st.number_input("Quantidade", min_value=0, step=1, value=0, key="cad_qtd")
                     preco_custo = st.text_input("Preço de Custo", value="0,00", key="cad_preco_custo")
                     preco_vista = st.text_input("Preço à Vista", value="0,00", key="cad_preco_vista")
+                    
+                    # ✨ NOVO: Campo de Cashback para produto simples
+                    oferece_cashback = st.checkbox("Oferece Cashback?", key="cad_oferece_cashback")
+                    if oferece_cashback:
+                        cashback_percent = st.number_input("Cashback (%)", min_value=0.0, max_value=100.0, value=3.0, step=0.5, key="cad_cashback_percent")
+                    
                     preco_cartao = 0.0
                     try:
                         preco_cartao = round(to_float(preco_vista) / FATOR_CARTAO, 2)
@@ -269,16 +276,15 @@ def gestao_produtos():
                     
                     var_nome = var_c1.text_input(f"Nome da variação {i+1}", key=f"var_nome_{i}")
                     var_qtd = var_c2.number_input(f"Quantidade variação {i+1}", min_value=0, step=1, value=0, key=f"var_qtd_{i}")
-                    # CORREÇÃO DE LAYOUT: Preço de Custo e Preço à Vista em colunas separadas para evitar colisão
+                    
                     with var_c3:
                         var_preco_custo = st.text_input(f"Preço de Custo variação {i+1}", value="0,00", key=f"var_pc_{i}")
                     with var_c4:
                         var_preco_vista = st.text_input(f"Preço à Vista variação {i+1}", value="0,00", key=f"var_pv_{i}")
                     
-                    var_cb_c1, var_cb_c2, var_cb_c3 = st.columns([2, 1, 1])
+                    var_cb_c1, var_cb_c2, var_cb_c3, var_cb_c4 = st.columns([2, 1, 1, 1.5])
 
                     with var_cb_c1:
-                        # O campo de texto da variação lê o valor salvo na sessão
                         valor_cb_inicial = st.session_state.cb_grade_lidos.get(f"var_cb_{i}", "")
                         var_codigo_barras = st.text_input(
                             f"Código de barras variação {i+1}", 
@@ -298,15 +304,21 @@ def gestao_produtos():
                             "Escanear CB", 
                             key=f"var_cb_cam_{i}"
                         )
+
+                    # ✨ NOVO: Campo de Cashback para variações
+                    with var_cb_c4:
+                        var_cashback_percent = 0.0
+                        var_oferece_cashback = st.checkbox(f"Cashback? {i+1}", key=f"var_cbk_chk_{i}")
+                        if var_oferece_cashback:
+                            var_cashback_percent = st.number_input(f"Cashback % {i+1}", min_value=0.0, max_value=100.0, value=3.0, step=0.5, key=f"var_cbk_percent_{i}")
+
                     
                     # Logica de leitura do Código de Barras para a Variação
                     foto_lida = var_foto_upload or var_foto_cam
                     if foto_lida:
-                        # Lógica para garantir que a leitura de CB use o valor correto
                         imagem_bytes = foto_lida.getvalue() if var_foto_upload else foto_lida.getbuffer()
                         codigos_lidos = ler_codigo_barras_api(imagem_bytes)
                         if codigos_lidos:
-                            # Preenche o valor na sessão da grade e força o re-run
                             st.session_state.cb_grade_lidos[f"var_cb_{i}"] = codigos_lidos[0]
                             st.success(f"CB Variação {i+1} lido: **{codigos_lidos[0]}**")
                             st.rerun() 
@@ -319,19 +331,21 @@ def gestao_produtos():
                         "PrecoCusto": to_float(var_preco_custo),
                         "PrecoVista": to_float(var_preco_vista),
                         "PrecoCartao": round(to_float(var_preco_vista) / FATOR_CARTAO, 2) if to_float(var_preco_vista) > 0 else 0.0,
-                        "CodigoBarras": var_codigo_barras 
+                        "CodigoBarras": var_codigo_barras,
+                        "CashbackPercent": var_cashback_percent # ✨ NOVO
                     })
-                
+            
+            st.markdown("", unsafe_allow_html=True)
             # --- BOTÃO SALVAR PRODUTO (CHAMANDO CALLBACK) ---
             if st.button(
                 "💾 Salvar", 
                 use_container_width=True, 
                 key="cad_salvar",
-                # O callback_salvar_novo_produto deve ser chamado corretamente
-                on_click=lambda: st.rerun() if callback_salvar_novo_produto(produtos.copy(), tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações) else None,
+                # ✨ ATENÇÃO: Adicionado 'cashback_percent' à chamada da função de callback.
+                # A função em utils.py precisa ser atualizada para receber este novo argumento.
+                on_click=lambda: st.rerun() if callback_salvar_novo_produto(produtos.copy(), tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações, cashback_percent) else None,
                 help="Salvar Novo Produto Completo" 
             ):
-                # Se o callback for bem-sucedido, o rerun já é chamado. Se o botão for clicado sem o on_click disparar, este rerun garante a atualização.
                 st.rerun()
 
 
@@ -359,7 +373,6 @@ def gestao_produtos():
                 elif criterio == "Valor":
                     try:
                         valor = float(termo.replace(",", "."))
-                        # Converte a coluna para float antes de comparar
                         produtos_filtrados = produtos[
                             (pd.to_numeric(produtos["PrecoVista"], errors='coerce').fillna(0) == valor) |
                             (pd.to_numeric(produtos["PrecoCusto"], errors='coerce').fillna(0) == valor) |
@@ -369,11 +382,13 @@ def gestao_produtos():
                         st.warning("Digite um número válido para buscar por valor.")
                         produtos_filtrados = produtos.copy()
             else:
-                # SE NENHUM TERMO FOR DIGITADO, EXIBE TODOS OS PRODUTOS
                 produtos_filtrados = produtos.copy()
 
             if "PaiID" not in produtos_filtrados.columns:
                 produtos_filtrados["PaiID"] = None
+            # ✨ Adiciona coluna de cashback se não existir, para evitar erros
+            if "CashbackPercent" not in produtos_filtrados.columns:
+                produtos_filtrados["CashbackPercent"] = 0.0
 
         # --- Lista de produtos com agrupamento por Pai e Variações ---
         st.markdown("### Lista de produtos")
@@ -381,12 +396,12 @@ def gestao_produtos():
         if produtos_filtrados.empty:
             st.info("Nenhum produto encontrado.")
         else:
-            # 🚨 INJETANDO CSS LOCALMENTE AQUI PARA NÃO QUEBRAR O HEADER
+            # 🚨 ATUALIZADO: Adicionada coluna Cashback ao layout
             st.markdown("""
                 <style>
                 .custom-header, .custom-row {
                     display: grid;
-                    grid-template-columns: 80px 3fr 1fr 1fr 1.5fr 0.5fr 0.5fr;
+                    grid-template-columns: 80px 3fr 1fr 1fr 1.5fr 1fr 0.5fr 0.5fr; /* Adicionada uma coluna */
                     align-items: center;
                     gap: 5px;
                 }
@@ -399,7 +414,6 @@ def gestao_produtos():
                 .custom-price-block {
                     line-height: 1.2;
                 }
-                /* NOTA: O CSS stButton > button foi movido para constants_and_css.py */
                 </style>
                 <div class="custom-header">
                     <div>Foto</div>
@@ -407,6 +421,7 @@ def gestao_produtos():
                     <div>Estoque</div>
                     <div>Validade</div>
                     <div>Preços (C/V/C)</div>
+                    <div>Cashback</div>
                     <div style="grid-column: span 2;">Ações</div>
                 </div>
             """, unsafe_allow_html=True)
@@ -414,16 +429,14 @@ def gestao_produtos():
 
             produtos_filtrados["Quantidade"] = pd.to_numeric(produtos_filtrados["Quantidade"], errors='coerce').fillna(0).astype(int)
             
-            # CRÍTICO: Filtra apenas os produtos que NÃO são variações (PaiID é nulo ou vazio/NaN)
-            # Produtos que têm PaiID preenchido são listados *dentro* do expander do produto Pai.
             produtos_pai = produtos_filtrados[produtos_filtrados["PaiID"].isnull() | (produtos_filtrados["PaiID"] == '')]
             produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull() & (produtos_filtrados["PaiID"] != '')]
             
 
             for index, pai in produtos_pai.iterrows():
-                # A partir daqui, a lógica de listagem funciona como o esperado, usando apenas os "produtos_pai" (que incluem produtos simples).
                 with st.container(border=True):
-                    c = st.columns([1, 3, 1, 1, 1.5, 0.5, 0.5]) 
+                    # ✨ ATUALIZADO: Adicionada uma coluna para o cashback
+                    c = st.columns([1, 3, 1, 1, 1.5, 1, 0.5, 0.5]) 
                     
                     if str(pai["FotoURL"]).strip():
                         try:
@@ -439,7 +452,6 @@ def gestao_produtos():
                     estoque_total = pai['Quantidade']
                     filhos_do_pai = produtos_filho[produtos_filho["PaiID"] == str(pai["ID"])]
                     if not filhos_do_pai.empty:
-                        # Se houver filhos, o estoque total é a soma dos filhos.
                         estoque_total = filhos_do_pai['Quantidade'].sum()
                     
                     c[2].markdown(f"**{estoque_total}**")
@@ -457,17 +469,25 @@ def gestao_produtos():
                         f'</div>'
                     )
                     c[4].markdown(preco_html, unsafe_allow_html=True)
+
+                    # ✨ NOVO: Exibição do Cashback
+                    cashback_pai = to_float(pai.get('CashbackPercent', 0.0))
+                    if cashback_pai > 0:
+                        c[5].markdown(f"**{cashback_pai:.1f}%**")
+                    else:
+                        c[5].write("—")
                     
                     try:
                         eid = str(pai["ID"])
                     except Exception:
                         eid = str(index)
 
-                    if c[5].button("✏️", key=f"edit_pai_{index}_{eid}", help="Editar produto"):
+                    # ✨ ATUALIZADO: Índices dos botões
+                    if c[6].button("✏️", key=f"edit_pai_{index}_{eid}", help="Editar produto"):
                         st.session_state["edit_prod"] = eid
                         st.rerun()
 
-                    if c[6].button("🗑️", key=f"del_pai_{index}_{eid}", help="Excluir produto"):
+                    if c[7].button("🗑️", key=f"del_pai_{index}_{eid}", help="Excluir produto"):
                         products = produtos[produtos["ID"] != eid]
                         products = products[products["PaiID"] != eid]
                         st.session_state["produtos"] = products
@@ -480,7 +500,8 @@ def gestao_produtos():
                     if not filhos_do_pai.empty:
                         with st.expander(f"Variações de {pai['Nome']} ({len(filhos_do_pai)} variações)"):
                             for index_var, var in filhos_do_pai.iterrows():
-                                c_var = st.columns([1, 3, 1, 1, 1.5, 0.5, 0.5]) 
+                                # ✨ ATUALIZADO: Colunas para variações
+                                c_var = st.columns([1, 3, 1, 1, 1.5, 1, 0.5, 0.5]) 
                                 
                                 foto_url_var = str(var["FotoURL"]).strip() or str(pai["FotoURL"]).strip()
                                 if foto_url_var:
@@ -510,16 +531,24 @@ def gestao_produtos():
                                 )
                                 c_var[4].markdown(preco_var_html, unsafe_allow_html=True)
                                 
+                                # ✨ NOVO: Exibição do Cashback para variações
+                                cashback_var = to_float(var.get('CashbackPercent', 0.0))
+                                if cashback_var > 0:
+                                    c_var[5].markdown(f"**{cashback_var:.1f}%**")
+                                else:
+                                    c_var[5].write("—")
+                                
                                 try:
                                     eid_var = str(var["ID"])
                                 except Exception:
                                     eid_var = str(index_var)
 
-                                if c_var[5].button("✏️", key=f"edit_filho_{index_var}_{eid_var}", help="Editar variação"):
+                                # ✨ ATUALIZADO: Índices dos botões de variação
+                                if c_var[6].button("✏️", key=f"edit_filho_{index_var}_{eid_var}", help="Editar variação"):
                                     st.session_state["edit_prod"] = eid_var
                                     st.rerun()
 
-                                if c_var[6].button("🗑️", key=f"del_filho_{index_var}_{eid_var}", help="Excluir variação"):
+                                if c_var[7].button("🗑️", key=f"del_filho_{index_var}_{eid_var}", help="Excluir variação"):
                                     products = produtos[produtos["ID"] != eid_var]
                                     st.session_state["produtos"] = products
                                     
@@ -543,11 +572,10 @@ def gestao_produtos():
                     with c2:
                         qtd_value = int(row["Quantidade"]) if pd.notna(row["Quantidade"]) else 0
                         nova_qtd = st.number_input("Quantidade", min_value=0, step=1, value=qtd_value, key=f"edit_qtd_{eid}")
-                        novo_preco_custo = st.text_input("Preço de Custo", value=f"{to_float(row["PrecoCusto"]):.2f}".replace(".", ","), key=f"edit_pc_{eid}")
-                        novo_preco_vista = st.text_input("Preço à Vista", value=f"{to_float(row["PrecoVista"]):.2f}".replace(".", ","), key=f"edit_pv_{eid}")
+                        novo_preco_custo = st.text_input("Preço de Custo", value=f"{to_float(row['PrecoCusto']):.2f}".replace(".", ","), key=f"edit_pc_{eid}")
+                        novo_preco_vista = st.text_input("Preço à Vista", value=f"{to_float(row['PrecoVista']):.2f}".replace(".", ","), key=f"edit_pv_{eid}")
                     with c3:
                         try:
-                            # Tenta garantir que a validade seja um objeto date para o input
                             vdata = row["Validade"] if pd.notna(row["Validade"]) and isinstance(row["Validade"], date) else date.today()
                         except Exception:
                             vdata = date.today()
@@ -555,12 +583,20 @@ def gestao_produtos():
                         nova_foto = st.text_input("URL da Foto", value=row["FotoURL"], key=f"edit_foto_{eid}")
                         novo_cb = st.text_input("Código de Barras", value=str(row.get("CodigoBarras", "")), key=f"edit_cb_{eid}")
 
-                        foto_codigo_edit = st.camera_input("📷 Atualizar código de barras", key=f"edit_cam_{eid}")
-                        if foto_codigo_edit is not None:
-                            codigo_lido = ler_codigo_barras_api(foto_codigo_edit.getbuffer()) 
-                            if codigo_lido:
-                                novo_cb = codigo_lido[0]
-                                st.success(f"Código lido: **{novo_cb}**")
+                        # ✨ NOVO: Edição do Cashback
+                        current_cashback = to_float(row.get("CashbackPercent", 0.0))
+                        edit_oferece_cashback = st.checkbox("Oferece Cashback?", value=(current_cashback > 0), key=f"edit_cbk_chk_{eid}")
+                        
+                        novo_cashback_percent = 0.0
+                        if edit_oferece_cashback:
+                            novo_cashback_percent = st.number_input(
+                                "Cashback (%)", 
+                                min_value=0.0, 
+                                max_value=100.0, 
+                                value=current_cashback if current_cashback > 0 else 3.0, 
+                                step=0.5, 
+                                key=f"edit_cbk_val_{eid}"
+                            )
 
                     col_empty_left, col_save, col_cancel = st.columns([3, 1.5, 1.5]) 
                     
@@ -569,10 +605,11 @@ def gestao_produtos():
                             preco_vista_float = to_float(novo_preco_vista)
                             novo_preco_cartao = round(preco_vista_float / FATOR_CARTAO, 2) if preco_vista_float > 0 else 0.0
                             
+                            # ✨ ATUALIZADO: Adiciona CashbackPercent ao salvar
                             produtos.loc[produtos["ID"] == str(eid), [
                                 "Nome", "Marca", "Categoria", "Quantidade",
                                 "PrecoCusto", "PrecoVista", "PrecoCartao",
-                                "Validade", "FotoURL", "CodigoBarras"
+                                "Validade", "FotoURL", "CodigoBarras", "CashbackPercent"
                             ]] = [
                                 novo_nome.strip(),
                                 nova_marca.strip(),
@@ -581,9 +618,10 @@ def gestao_produtos():
                                 to_float(novo_preco_custo),
                                 preco_vista_float,
                                 novo_preco_cartao,
-                                nova_validade, # Já é um objeto date
+                                nova_validade,
                                 nova_foto.strip(),
-                                str(novo_cb).strip()
+                                str(novo_cb).strip(),
+                                novo_cashback_percent # ✨ NOVO
                             ]
                             st.session_state["produtos"] = produtos
                             if salvar_produtos_no_github(produtos, "Atualizando produto"):
