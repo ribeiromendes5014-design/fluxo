@@ -38,6 +38,41 @@ def highlight_value(row):
     color = row.get('Cor_Valor', 'black')
     return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
 
+# ==============================================================================
+# ✅ SOLUÇÃO DEFINITIVA PARA KeyError NO highlight_pendentes APLICADA AQUI
+# ==============================================================================
+def highlight_pendentes(row):
+    """
+    Aplica cores às dívidas conforme o vencimento.
+    Usa .get() e garante que o tamanho da lista corresponda ao número de colunas.
+    """
+    dias = row.get('Dias Até/Atraso', None)
+
+    # Se não existir a coluna ou o valor, retorna lista vazia (sem estilo)
+    if dias is None:
+        return ['' for _ in range(len(row.index))]
+
+    # Define as colunas que receberão o estilo (as colunas devem existir no DataFrame)
+    color_cols = {'Status', 'Data Pagamento'}
+    
+    # Define o estilo baseado no prazo
+    if dias < 0:
+        # Atrasado: Fundo levemente vermelho
+        style_list = [
+            'background-color: #fcece9' if col in color_cols else ''
+            for col in row.index
+        ]
+    elif dias <= 7:
+        # Vence em breve: Fundo levemente amarelo
+        style_list = [
+            'background-color: #fffac9' if col in color_cols else ''
+            for col in row.index
+        ]
+    else:
+        # Caso normal (sem cor)
+        style_list = ['' for _ in range(len(row.index))]
+        
+    return style_list
 
 
 def livro_caixa():
@@ -548,227 +583,202 @@ def livro_caixa():
             else: st.info("Nenhuma movimentação para operar com os filtros atuais.")
     
     with tab_rel:
-    st.subheader("📄 Relatório Detalhado e Comparativo")
+        st.subheader("📄 Relatório Detalhado e Comparativo")
 
-    # ===============================
-    # 🔹 BLOCO: Relatório Comparativo
-    # ===============================
-    with st.container(border=True):
-        st.markdown("#### Filtros do Relatório")
-        col_f1, col_f2 = st.columns(2)
+        # ===============================
+        # 🔹 BLOCO: Relatório Comparativo
+        # ===============================
+        with st.container(border=True):
+            st.markdown("#### Filtros do Relatório")
+            col_f1, col_f2 = st.columns(2)
 
-        with col_f1:
-            lojas_selecionadas = st.multiselect(
-                "Lojas/Empresas", LOJAS_DISPONIVEIS, default=LOJAS_DISPONIVEIS
-            )
-            tipo_movimentacao = st.radio(
-                "Tipo de Movimentação", ["Ambos", "Entrada", "Saída"],
-                horizontal=True, key="rel_tipo"
-            )
-
-        with col_f2:
-            min_date_geral = df_exibicao["Data"].min() or date.today()
-            max_date_geral = df_exibicao["Data"].max() or date.today()
-            data_inicio_rel = st.date_input(
-                "Data de Início", min_date_geral,
-                min_value=min_date_geral, max_value=max_date_geral, key="rel_data_ini"
-            )
-            data_fim_rel = st.date_input(
-                "Data de Fim", max_date_geral,
-                min_value=min_date_geral, max_value=max_date_geral, key="rel_data_fim"
-            )
-
-        if st.button("📊 Gerar Relatório", use_container_width=True, type="primary"):
-            df_relatorio = df_exibicao[
-                (df_exibicao['Status'] == 'Realizada') &
-                (df_exibicao['Loja'].isin(lojas_selecionadas)) &
-                (df_exibicao['Data'].between(data_inicio_rel, data_fim_rel)) &
-                ((df_exibicao['Tipo'] == tipo_movimentacao) if tipo_movimentacao != "Ambos" else True)
-            ].copy()
-
-            if df_relatorio.empty:
-                st.warning("Nenhum dado encontrado com os filtros selecionados.")
-            else:
-                df_relatorio['MesAno'] = pd.to_datetime(df_relatorio['Data']).dt.to_period('M').astype(str)
-                df_agrupado = (
-                    df_relatorio.groupby('MesAno')
-                    .apply(lambda x: pd.Series({
-                        'Entradas': x.loc[x['Valor'] > 0, 'Valor'].sum(),
-                        'Saídas': abs(x.loc[x['Valor'] < 0, 'Valor'].sum())
-                    }))
-                    .reset_index()
+            with col_f1:
+                lojas_selecionadas = st.multiselect(
+                    "Lojas/Empresas", LOJAS_DISPONIVEIS, default=LOJAS_DISPONIVEIS
                 )
-                df_agrupado['Saldo'] = df_agrupado['Entradas'] - df_agrupado['Saídas']
-                st.markdown("---")
-                st.subheader("Resultados do Relatório")
-                st.dataframe(df_agrupado, use_container_width=True)
+                tipo_movimentacao = st.radio(
+                    "Tipo de Movimentação", ["Ambos", "Entrada", "Saída"],
+                    horizontal=True, key="rel_tipo"
+                )
 
-    # ==========================
-    # 🔹 BLOCO: Dívidas Pendentes
-    # ==========================
-    st.markdown("---")
-    st.subheader("🚩 Dívidas Pendentes")
+            with col_f2:
+                min_date_geral = df_exibicao["Data"].min() or date.today()
+                max_date_geral = df_exibicao["Data"].max() or date.today()
+                data_inicio_rel = st.date_input(
+                    "Data de Início", min_date_geral,
+                    min_value=min_date_geral, max_value=max_date_geral, key="rel_data_ini"
+                )
+                data_fim_rel = st.date_input(
+                    "Data de Fim", max_date_geral,
+                    min_value=min_date_geral, max_value=max_date_geral, key="rel_data_fim"
+                )
 
-    df_pendentes = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
+            if st.button("📊 Gerar Relatório", use_container_width=True, type="primary"):
+                df_relatorio = df_exibicao[
+                    (df_exibicao['Status'] == 'Realizada') &
+                    (df_exibicao['Loja'].isin(lojas_selecionadas)) &
+                    (df_exibicao['Data'].between(data_inicio_rel, data_fim_rel)) &
+                    ((df_exibicao['Tipo'] == tipo_movimentacao) if tipo_movimentacao != "Ambos" else True)
+                ].copy()
 
-    if df_pendentes.empty:
-        st.success("🎉 Nenhuma dívida pendente registrada!")
-    else:
-        df_pendentes["Data Pagamento"] = pd.to_datetime(
-            df_pendentes["Data Pagamento"], errors='coerce'
-        ).dt.date
-
-        df_pendentes_ordenado = (
-            df_pendentes.sort_values(by=["Data Pagamento", "Tipo", "Data"])
-            .reset_index(drop=True)
-        )
-        df_pendentes_ordenado['Dias Até/Atraso'] = df_pendentes_ordenado['Data Pagamento'].apply(
-            lambda x: (x - date.today()).days if pd.notna(x) else float('inf')
-        )
-
-        total_receber = df_pendentes_ordenado.query("Tipo == 'Entrada'")["Valor"].abs().sum()
-        total_pagar = df_pendentes_ordenado.query("Tipo == 'Saída'")["Valor"].abs().sum()
-
-        col_res_1, col_res_2 = st.columns(2)
-        col_res_1.metric("Total a Receber", f"R$ {total_receber:,.2f}")
-        col_res_2.metric("Total a Pagar", f"R$ {total_pagar:,.2f}")
-        st.markdown("---")
-
-        # Função segura para destacar linhas
-        def highlight_pendentes(row):
-            dias = row.get('Dias Até/Atraso', None)
-            if dias is None:
-                return ['' for _ in row.index]
-            if dias < 0:
-                return [
-                    'background-color: #fcece9' if col in ['Status', 'Data Pagamento'] else ''
-                    for col in row.index
-                ]
-            elif dias <= 7:
-                return [
-                    'background-color: #fffac9' if col in ['Status', 'Data Pagamento'] else ''
-                    for col in row.index
-                ]
-            return ['' for _ in row.index]
-
-        # -------------------------------
-        # ✅ Formulário de Conclusão de Dívida
-        # -------------------------------
-        with st.form("form_concluir_divida"):
-            st.markdown("##### ✅ Concluir Dívida")
-            opcoes_pendentes = {
-                f"ID {row['ID Visível']} | {row['Tipo']} | R$ {calcular_valor_em_aberto(row):,.2f} | "
-                f"Venc: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/D'} | "
-                f"{row['Cliente']}": row['original_index']
-                for _, row in df_pendentes_ordenado.iterrows()
-            }
-
-            selecionado_str_concluir = st.selectbox(
-                "Selecione a Dívida:", ["Selecione..."] + list(opcoes_pendentes.keys())
-            )
-            idx_concluir = opcoes_pendentes.get(selecionado_str_concluir)
-
-            if idx_concluir is not None:
-                divida_para_concluir = df_pendentes_ordenado[
-                    df_pendentes_ordenado['original_index'] == idx_concluir
-                ].iloc[0]
-                valor_em_aberto = calcular_valor_em_aberto(divida_para_concluir)
-
-                st.markdown(f"**Valor em Aberto:** R$ {valor_em_aberto:,.2f}")
-                col_c1, col_c2, col_c3 = st.columns(3)
-                with col_c1:
-                    valor_pago = st.number_input("Valor Pago", 0.01, valor_em_aberto, valor_em_aberto, format="%.2f")
-                with col_c2:
-                    data_conclusao = st.date_input("Data do Pagamento", date.today())
-                with col_c3:
-                    forma_pagt_concluir = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO)
-
-                if st.form_submit_button("✅ Registrar Pagamento", use_container_width=True, type="primary"):
-                    valor_restante = round(valor_em_aberto - valor_pago, 2)
-                    row_original = st.session_state.df.loc[idx_concluir].copy()
-
-                    nova_transacao = {
-                        "Data": data_conclusao,
-                        "Loja": row_original['Loja'],
-                        "Cliente": f"{row_original['Cliente'].split(' (')[0]} (Pagto de R$ {valor_pago:,.2f})",
-                        "Valor": valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago,
-                        "Forma de Pagamento": forma_pagt_concluir,
-                        "Tipo": row_original['Tipo'],
-                        "Produtos Vendidos": row_original['Produtos Vendidos'],
-                        "Categoria": row_original['Categoria'],
-                        "Status": "Realizada",
-                        "Data Pagamento": data_conclusao,
-                        "RecorrenciaID": row_original['RecorrenciaID'],
-                        "TransacaoPaiID": idx_concluir
-                    }
-
-                    st.session_state.df = pd.concat(
-                        [st.session_state.df, pd.DataFrame([nova_transacao])],
-                        ignore_index=True
+                if df_relatorio.empty:
+                    st.warning("Nenhum dado encontrado com os filtros selecionados.")
+                else:
+                    df_relatorio['MesAno'] = pd.to_datetime(df_relatorio['Data']).dt.to_period('M').astype(str)
+                    df_agrupado = (
+                        df_relatorio.groupby('MesAno')
+                        .apply(lambda x: pd.Series({
+                            'Entradas': x.loc[x['Valor'] > 0, 'Valor'].sum(),
+                            'Saídas': abs(x.loc[x['Valor'] < 0, 'Valor'].sum())
+                        }))
+                        .reset_index()
                     )
+                    df_agrupado['Saldo'] = df_agrupado['Entradas'] - df_agrupado['Saídas']
+                    st.markdown("---")
+                    st.subheader("Resultados do Relatório")
+                    st.dataframe(df_agrupado, use_container_width=True)
 
-                    if valor_restante > 0.01:
-                        st.session_state.df.loc[idx_concluir, 'Valor'] = (
-                            valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
-                        )
-                        st.session_state.df.loc[idx_concluir, 'Cliente'] = (
-                            f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
-                        )
-                        commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f}."
-                    else:
-                        st.session_state.df = st.session_state.df.drop(idx_concluir, errors='ignore')
-                        if row_original["Tipo"] == "Entrada" and pd.notna(row_original["Produtos Vendidos"]):
-                            try:
-                                for item in ast.literal_eval(row_original['Produtos Vendidos']):
-                                    if item.get("Produto_ID"):
-                                        ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                                if salvar_produtos_no_github(st.session_state.produtos, "Débito por conclusão"):
-                                    inicializar_produtos.clear()
-                            except Exception:
-                                pass
-                        commit_msg = f"Pagamento total de R$ {valor_pago:,.2f}."
-
-                    if salvar_dados_no_github(st.session_state.df, commit_msg):
-                        st.cache_data.clear()
-                        st.rerun()
-            else:
-                st.info("Selecione uma dívida para concluir.")
-
-        # -------------------------------
-        # ✅ Tabela de Dívidas Pendentes
-        # -------------------------------
+        # ==========================
+        # 🔹 BLOCO: Dívidas Pendentes
+        # ==========================
         st.markdown("---")
-        st.markdown("##### Tabela Detalhada de Dívidas Pendentes")
+        st.subheader("🚩 Dívidas Pendentes")
 
-        if not df_pendentes_ordenado.empty and 'Dias Até/Atraso' in df_pendentes_ordenado.columns:
-            df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
-            df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(
-                lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
+        df_pendentes = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
+
+        if df_pendentes.empty:
+            st.success("🎉 Nenhuma dívida pendente registrada!")
+        else:
+            df_pendentes["Data Pagamento"] = pd.to_datetime(
+                df_pendentes["Data Pagamento"], errors='coerce'
+            ).dt.date
+
+            df_pendentes_ordenado = (
+                df_pendentes.sort_values(by=["Data Pagamento", "Tipo", "Data"])
+                .reset_index(drop=True)
+            )
+            df_pendentes_ordenado['Dias Até/Atraso'] = df_pendentes_ordenado['Data Pagamento'].apply(
+                lambda x: (x - date.today()).days if pd.notna(x) else float('inf')
             )
 
-            if 'Cor_Valor' not in df_para_mostrar_pendentes.columns:
-                df_para_mostrar_pendentes['Cor_Valor'] = 'black'
+            total_receber = df_pendentes_ordenado.query("Tipo == 'Entrada'")["Valor"].abs().sum()
+            total_pagar = df_pendentes_ordenado.query("Tipo == 'Saída'")["Valor"].abs().sum()
 
-            try:
-                df_styling_pendentes = (
-                    df_para_mostrar_pendentes
-                    .style
-                    .apply(highlight_pendentes, axis=1)
-                    .hide(subset=['Dias Até/Atraso'], axis=1)
+            col_res_1, col_res_2 = st.columns(2)
+            col_res_1.metric("Total a Receber", f"R$ {total_receber:,.2f}")
+            col_res_2.metric("Total a Pagar", f"R$ {total_pagar:,.2f}")
+            st.markdown("---")
+
+            # -------------------------------
+            # ✅ Formulário de Conclusão de Dívida
+            # -------------------------------
+            with st.form("form_concluir_divida"):
+                st.markdown("##### ✅ Concluir Dívida")
+                opcoes_pendentes = {
+                    f"ID {row['ID Visível']} | {row['Tipo']} | R$ {calcular_valor_em_aberto(row):,.2f} | "
+                    f"Venc: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/D'} | "
+                    f"{row['Cliente']}": row['original_index']
+                    for _, row in df_pendentes_ordenado.iterrows()
+                }
+
+                selecionado_str_concluir = st.selectbox(
+                    "Selecione a Dívida:", ["Selecione..."] + list(opcoes_pendentes.keys())
                 )
-                st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
-            except KeyError as e:
-                st.warning(f"Erro ao renderizar estilos: {e}")
-                st.dataframe(df_para_mostrar_pendentes, use_container_width=True, hide_index=True)
-        else:
-            st.info("Nenhuma dívida pendente disponível para exibição.")
+                idx_concluir = opcoes_pendentes.get(selecionado_str_concluir)
 
+                if idx_concluir is not None:
+                    divida_para_concluir = df_pendentes_ordenado[
+                        df_pendentes_ordenado['original_index'] == idx_concluir
+                    ].iloc[0]
+                    valor_em_aberto = calcular_valor_em_aberto(divida_para_concluir)
 
+                    st.markdown(f"**Valor em Aberto:** R$ {valor_em_aberto:,.2f}")
+                    col_c1, col_c2, col_c3 = st.columns(3)
+                    with col_c1:
+                        valor_pago = st.number_input("Valor Pago", 0.01, valor_em_aberto, valor_em_aberto, format="%.2f")
+                    with col_c2:
+                        data_conclusao = st.date_input("Data do Pagamento", date.today())
+                    with col_c3:
+                        forma_pagt_concluir = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO)
 
+                    if st.form_submit_button("✅ Registrar Pagamento", use_container_width=True, type="primary"):
+                        valor_restante = round(valor_em_aberto - valor_pago, 2)
+                        row_original = st.session_state.df.loc[idx_concluir].copy()
 
+                        nova_transacao = {
+                            "Data": data_conclusao,
+                            "Loja": row_original['Loja'],
+                            "Cliente": f"{row_original['Cliente'].split(' (')[0]} (Pagto de R$ {valor_pago:,.2f})",
+                            "Valor": valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago,
+                            "Forma de Pagamento": forma_pagt_concluir,
+                            "Tipo": row_original['Tipo'],
+                            "Produtos Vendidos": row_original['Produtos Vendidos'],
+                            "Categoria": row_original['Categoria'],
+                            "Status": "Realizada",
+                            "Data Pagamento": data_conclusao,
+                            "RecorrenciaID": row_original['RecorrenciaID'],
+                            "TransacaoPaiID": idx_concluir
+                        }
 
+                        st.session_state.df = pd.concat(
+                            [st.session_state.df, pd.DataFrame([nova_transacao])],
+                            ignore_index=True
+                        )
 
+                        if valor_restante > 0.01:
+                            st.session_state.df.loc[idx_concluir, 'Valor'] = (
+                                valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
+                            )
+                            st.session_state.df.loc[idx_concluir, 'Cliente'] = (
+                                f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
+                            )
+                            commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f}."
+                        else:
+                            st.session_state.df = st.session_state.df.drop(idx_concluir, errors='ignore')
+                            if row_original["Tipo"] == "Entrada" and pd.notna(row_original["Produtos Vendidos"]):
+                                try:
+                                    produtos_vendidos = ast.literal_eval(row_original['Produtos Vendidos'])
+                                    for item in produtos_vendidos:
+                                        if item.get("Produto_ID"):
+                                            ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                                    if salvar_produtos_no_github(st.session_state.produtos, "Débito por conclusão"):
+                                        inicializar_produtos.clear()
+                                except Exception:
+                                    pass
+                            commit_msg = f"Pagamento total de R$ {valor_pago:,.2f}."
 
+                        if salvar_dados_no_github(st.session_state.df, commit_msg):
+                            st.cache_data.clear()
+                            st.rerun()
+                else:
+                    st.info("Selecione uma dívida para concluir.")
 
+            # -------------------------------
+            # ✅ Tabela de Dívidas Pendentes (COM PROTEÇÃO CONTRA KEYERROR)
+            # -------------------------------
+            st.markdown("---")
+            st.markdown("##### Tabela Detalhada de Dívidas Pendentes")
 
+            if not df_pendentes_ordenado.empty and 'Dias Até/Atraso' in df_pendentes_ordenado.columns:
+                df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
+                df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(
+                    lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
+                )
 
+                if 'Cor_Valor' not in df_para_mostrar_pendentes.columns:
+                    df_para_mostrar_pendentes['Cor_Valor'] = 'black'
+
+                try:
+                    df_styling_pendentes = (
+                        df_para_mostrar_pendentes
+                        .style
+                        .apply(highlight_pendentes, axis=1) # Usando a função robusta
+                        .hide(subset=['Dias Até/Atraso'], axis=1)
+                    )
+                    st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+                except Exception as e: # Catch all exceptions during styling
+                    st.warning(f"Erro ao aplicar estilos: {e}")
+                    # Fallback para exibir o DataFrame sem estilos em caso de falha
+                    st.dataframe(df_para_mostrar_pendentes, use_container_width=True, hide_index=True)
+            else:
+                st.info("Nenhuma dívida pendente disponível para exibição.")
