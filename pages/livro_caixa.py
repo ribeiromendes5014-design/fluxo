@@ -639,174 +639,176 @@ def livro_caixa():
                     st.dataframe(df_agrupado, use_container_width=True)
 
         # ==========================
-        # 🔹 BLOCO: Dívidas Pendentes
-        # ==========================
-        st.markdown("---")
-        st.subheader("🚩 Dívidas Pendentes")
+# 🔹 BLOCO: Dívidas Pendentes
+# ==========================
+st.markdown("---")
+st.subheader("🚩 Dívidas Pendentes")
 
-        df_pendentes = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
+df_pendentes = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
 
-        if df_pendentes.empty:
-            st.success("🎉 Nenhuma dívida pendente registrada!")
-        else:
-            df_pendentes["Data Pagamento"] = pd.to_datetime(
-                df_pendentes["Data Pagamento"], errors='coerce'
-            ).dt.date
+if df_pendentes.empty:
+    st.success("🎉 Nenhuma dívida pendente registrada!")
+else:
+    df_pendentes["Data Pagamento"] = pd.to_datetime(
+        df_pendentes["Data Pagamento"], errors='coerce'
+    ).dt.date
 
-            df_pendentes_ordenado = (
-                df_pendentes.sort_values(by=["Data Pagamento", "Tipo", "Data"])
-                .reset_index(drop=True)
-            )
-            
-            # ✅ CORREÇÃO APLICADA: Garante que o tipo é string no DataFrame final usado pelo query.
-            # Isso resolve o TypeError.
-            df_pendentes_ordenado['Tipo'] = df_pendentes_ordenado['Tipo'].astype(str) 
+    df_pendentes_ordenado = (
+        df_pendentes.sort_values(by=["Data Pagamento", "Tipo", "Data"])
+        .reset_index(drop=True)
+    )
+    
+    # ✅ Garante que o tipo é string
+    df_pendentes_ordenado['Tipo'] = df_pendentes_ordenado['Tipo'].astype(str)
 
-            df_pendentes_ordenado['Dias Até/Atraso'] = df_pendentes_ordenado['Data Pagamento'].apply(
-                lambda x: (x - date.today()).days if pd.notna(x) else float('inf')
-            )
+    # ✅ Calcula dias até o vencimento
+    df_pendentes_ordenado['Dias Até/Atraso'] = df_pendentes_ordenado['Data Pagamento'].apply(
+        lambda x: (x - date.today()).days if pd.notna(x) else float('inf')
+    )
 
-            # Aplicação segura do .query()
-            total_receber = df_pendentes_ordenado.query("Tipo == 'Entrada'")["Valor"].abs().sum()
-            total_pagar = df_pendentes_ordenado.query("Tipo == 'Saída'")["Valor"].abs().sum()
+    # ✅ Totais
+    total_receber = df_pendentes_ordenado.query("Tipo == 'Entrada'")["Valor"].abs().sum()
+    total_pagar = df_pendentes_ordenado.query("Tipo == 'Saída'")["Valor"].abs().sum()
 
-            col_res_1, col_res_2 = st.columns(2)
-            col_res_1.metric("Total a Receber", f"R$ {total_receber:,.2f}")
-            col_res_2.metric("Total a Pagar", f"R$ {total_pagar:,.2f}")
-            st.markdown("---")
+    col_res_1, col_res_2 = st.columns(2)
+    col_res_1.metric("Total a Receber", f"R$ {total_receber:,.2f}")
+    col_res_2.metric("Total a Pagar", f"R$ {total_pagar:,.2f}")
+    st.markdown("---")
 
-            # -------------------------------
-            # ✅ Formulário de Conclusão de Dívida
-            # -------------------------------
-            with st.form("form_concluir_divida"):
-                st.markdown("##### ✅ Concluir Dívida")
-                opcoes_pendentes = {
-                    f"ID {row['ID Visível']} | {row['Tipo']} | R$ {calcular_valor_em_aberto(row):,.2f} | "
-                    f"Venc: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/D'} | "
-                    f"{row['Cliente']}": row['original_index']
-                    for _, row in df_pendentes_ordenado.iterrows()
+    # -------------------------------
+    # ✅ Formulário de Conclusão de Dívida
+    # -------------------------------
+    with st.form("form_concluir_divida"):
+        st.markdown("##### ✅ Concluir Dívida")
+        opcoes_pendentes = {
+            f"ID {row['ID Visível']} | {row['Tipo']} | R$ {calcular_valor_em_aberto(row):,.2f} | "
+            f"Venc: {row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/D'} | "
+            f"{row['Cliente']}": row['original_index']
+            for _, row in df_pendentes_ordenado.iterrows()
+        }
+
+        selecionado_str_concluir = st.selectbox(
+            "Selecione a Dívida:", ["Selecione..."] + list(opcoes_pendentes.keys())
+        )
+        idx_concluir = opcoes_pendentes.get(selecionado_str_concluir)
+
+        if idx_concluir is not None:
+            divida_para_concluir = df_pendentes_ordenado[
+                df_pendentes_ordenado['original_index'] == idx_concluir
+            ].iloc[0]
+            valor_em_aberto = calcular_valor_em_aberto(divida_para_concluir)
+
+            st.markdown(f"**Valor em Aberto:** R$ {valor_em_aberto:,.2f}")
+            col_c1, col_c2, col_c3 = st.columns(3)
+            with col_c1:
+                valor_pago = st.number_input("Valor Pago", 0.01, valor_em_aberto, valor_em_aberto, format="%.2f")
+            with col_c2:
+                data_conclusao = st.date_input("Data do Pagamento", date.today())
+            with col_c3:
+                forma_pagt_concluir = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO)
+
+            if st.form_submit_button("✅ Registrar Pagamento", use_container_width=True, type="primary"):
+                valor_restante = round(valor_em_aberto - valor_pago, 2)
+                row_original = st.session_state.df.loc[idx_concluir].copy()
+
+                nova_transacao = {
+                    "Data": data_conclusao,
+                    "Loja": row_original['Loja'],
+                    "Cliente": f"{row_original['Cliente'].split(' (')[0]} (Pagto de R$ {valor_pago:,.2f})",
+                    "Valor": valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago,
+                    "Forma de Pagamento": forma_pagt_concluir,
+                    "Tipo": row_original['Tipo'],
+                    "Produtos Vendidos": row_original['Produtos Vendidos'],
+                    "Categoria": row_original['Categoria'],
+                    "Status": "Realizada",
+                    "Data Pagamento": data_conclusao,
+                    "RecorrenciaID": row_original['RecorrenciaID'],
+                    "TransacaoPaiID": idx_concluir
                 }
 
-                selecionado_str_concluir = st.selectbox(
-                    "Selecione a Dívida:", ["Selecione..."] + list(opcoes_pendentes.keys())
-                )
-                idx_concluir = opcoes_pendentes.get(selecionado_str_concluir)
-
-                if idx_concluir is not None:
-                    divida_para_concluir = df_pendentes_ordenado[
-                        df_pendentes_ordenado['original_index'] == idx_concluir
-                    ].iloc[0]
-                    valor_em_aberto = calcular_valor_em_aberto(divida_para_concluir)
-
-                    st.markdown(f"**Valor em Aberto:** R$ {valor_em_aberto:,.2f}")
-                    col_c1, col_c2, col_c3 = st.columns(3)
-                    with col_c1:
-                        valor_pago = st.number_input("Valor Pago", 0.01, valor_em_aberto, valor_em_aberto, format="%.2f")
-                    with col_c2:
-                        data_conclusao = st.date_input("Data do Pagamento", date.today())
-                    with col_c3:
-                        forma_pagt_concluir = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO)
-
-                    if st.form_submit_button("✅ Registrar Pagamento", use_container_width=True, type="primary"):
-                        valor_restante = round(valor_em_aberto - valor_pago, 2)
-                        row_original = st.session_state.df.loc[idx_concluir].copy()
-
-                        nova_transacao = {
-                            "Data": data_conclusao,
-                            "Loja": row_original['Loja'],
-                            "Cliente": f"{row_original['Cliente'].split(' (')[0]} (Pagto de R$ {valor_pago:,.2f})",
-                            "Valor": valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago,
-                            "Forma de Pagamento": forma_pagt_concluir,
-                            "Tipo": row_original['Tipo'],
-                            "Produtos Vendidos": row_original['Produtos Vendidos'],
-                            "Categoria": row_original['Categoria'],
-                            "Status": "Realizada",
-                            "Data Pagamento": data_conclusao,
-                            "RecorrenciaID": row_original['RecorrenciaID'],
-                            "TransacaoPaiID": idx_concluir
-                        }
-
-                        st.session_state.df = pd.concat(
-                            [st.session_state.df, pd.DataFrame([nova_transacao])],
-                            ignore_index=True
-                        )
-
-                        if valor_restante > 0.01:
-                            st.session_state.df.loc[idx_concluir, 'Valor'] = (
-                                valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
-                            )
-                            st.session_state.df.loc[idx_concluir, 'Cliente'] = (
-                                f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
-                            )
-                            commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f}."
-                        else:
-                            st.session_state.df = st.session_state.df.drop(idx_concluir, errors='ignore')
-                            if row_original["Tipo"] == "Entrada" and pd.notna(row_original["Produtos Vendidos"]):
-                                try:
-                                    produtos_vendidos = ast.literal_eval(row_original['Produtos Vendidos'])
-                                    for item in produtos_vendidos:
-                                        if item.get("Produto_ID"):
-                                            ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                                    if salvar_produtos_no_github(st.session_state.produtos, "Débito por conclusão"):
-                                        inicializar_produtos.clear()
-                                except Exception:
-                                    pass
-                            commit_msg = f"Pagamento total de R$ {valor_pago:,.2f}."
-
-                        if salvar_dados_no_github(st.session_state.df, commit_msg):
-                            st.cache_data.clear()
-                            st.rerun()
-                else:
-                    st.info("Selecione uma dívida para concluir.")
-
-            # -------------------------------
-            # ✅ Tabela de Dívidas Pendentes (COM PROTEÇÃO CONTRA KEYERROR E VALUERROR)
-            # -------------------------------
-            st.markdown("---")
-            st.markdown("##### Tabela Detalhada de Dívidas Pendentes")
-
-            if not df_pendentes_ordenado.empty and 'Dias Até/Atraso' in df_pendentes_ordenado.columns:
-                df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
-                df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(
-                    lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
+                st.session_state.df = pd.concat(
+                    [st.session_state.df, pd.DataFrame([nova_transacao])],
+                    ignore_index=True
                 )
 
-                if 'Cor_Valor' not in df_para_mostrar_pendentes.columns:
-                    df_para_mostrar_pendentes['Cor_Valor'] = 'black'
-
-                # Colunas a serem exibidas (limpas)
-                colunas_exibir = [col for col in df_para_mostrar_pendentes.columns if col not in ['Dias Até/Atraso', 'Cor_Valor', 'Data_dt', 'original_index']]
-                df_para_estilizar = df_para_mostrar_pendentes[colunas_exibir + ['Dias Até/Atraso', 'Cor_Valor']].copy()
-
-
-                try:
-                    styled_df = (
-                        df_para_estilizar
-                        .style
-                        .apply(highlight_pendentes, axis=1)
-                        .hide(subset=['Dias Até/Atraso', 'Cor_Valor'], axis=1) # Esconde colunas auxiliares
+                if valor_restante > 0.01:
+                    st.session_state.df.loc[idx_concluir, 'Valor'] = (
+                        valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
                     )
-                    st.dataframe(styled_df, use_container_width=True, hide_index=True)
-                
-                except Exception as e: 
-                    # 🛑 CORREÇÃO FINAL PARA ValueError: Remove colunas auxiliares no fallback
-                    st.warning(f"Erro ao aplicar estilos: {e}. Exibindo tabela simples.")
-                    
-                    df_fallback = df_para_mostrar_pendentes.copy()
-                    
-                    # Colunas internas e auxiliares que não devem ser exibidas
-                    cols_to_drop = [
-                        'Dias Até/Atraso', 'Cor_Valor', 'Data_dt', 'original_index', 'Saldo Acumulado', 
-                        'Produtos Vendidos', 'RecorrenciaID', 'TransacaoPaiID'
-                    ]
-                    
-                    # Remove apenas as colunas que existem no DataFrame
-                    cols_existentes_drop = [col for col in cols_to_drop if col in df_fallback.columns]
-                    
-                    if cols_existentes_drop:
-                        df_fallback.drop(columns=cols_existentes_drop, inplace=True, errors='ignore')
+                    st.session_state.df.loc[idx_concluir, 'Cliente'] = (
+                        f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
+                    )
+                    commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f}."
+                else:
+                    st.session_state.df = st.session_state.df.drop(idx_concluir, errors='ignore')
+                    if row_original["Tipo"] == "Entrada" and pd.notna(row_original["Produtos Vendidos"]):
+                        try:
+                            produtos_vendidos = ast.literal_eval(row_original['Produtos Vendidos'])
+                            for item in produtos_vendidos:
+                                if item.get("Produto_ID"):
+                                    ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                            if salvar_produtos_no_github(st.session_state.produtos, "Débito por conclusão"):
+                                inicializar_produtos.clear()
+                        except Exception:
+                            pass
+                    commit_msg = f"Pagamento total de R$ {valor_pago:,.2f}."
 
-                    st.dataframe(df_fallback, use_container_width=True, hide_index=True)
-            
-            else:
-                st.info("Nenhuma dívida pendente disponível para exibição.")
+                if salvar_dados_no_github(st.session_state.df, commit_msg):
+                    st.cache_data.clear()
+                    st.rerun()
+        else:
+            st.info("Selecione uma dívida para concluir.")
+
+    # -------------------------------
+    # ✅ Tabela de Dívidas Pendentes (Protegida contra erros)
+    # -------------------------------
+    st.markdown("---")
+    st.markdown("##### Tabela Detalhada de Dívidas Pendentes")
+
+    if not df_pendentes_ordenado.empty and 'Dias Até/Atraso' in df_pendentes_ordenado.columns:
+        df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
+        df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(
+            lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
+        )
+
+        if 'Cor_Valor' not in df_para_mostrar_pendentes.columns:
+            df_para_mostrar_pendentes['Cor_Valor'] = 'black'
+
+        # ✅ Remove colunas duplicadas antes de exibir (CORREÇÃO PRINCIPAL)
+        df_para_mostrar_pendentes = df_para_mostrar_pendentes.loc[:, ~df_para_mostrar_pendentes.columns.duplicated()]
+
+        # Colunas a exibir (limpas)
+        colunas_exibir = [col for col in df_para_mostrar_pendentes.columns if col not in ['Dias Até/Atraso', 'Cor_Valor', 'Data_dt', 'original_index']]
+        df_para_estilizar = df_para_mostrar_pendentes[colunas_exibir + ['Dias Até/Atraso', 'Cor_Valor']].copy()
+
+        try:
+            styled_df = (
+                df_para_estilizar
+                .style
+                .apply(highlight_pendentes, axis=1)
+                .hide(subset=['Dias Até/Atraso', 'Cor_Valor'], axis=1)
+            )
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+        except Exception as e:
+            # 🛑 Fallback seguro
+            st.warning(f"Erro ao aplicar estilos: {e}. Exibindo tabela simples.")
+            df_fallback = df_para_mostrar_pendentes.copy()
+
+            cols_to_drop = [
+                'Dias Até/Atraso', 'Cor_Valor', 'Data_dt', 'original_index',
+                'Saldo Acumulado', 'Produtos Vendidos', 'RecorrenciaID', 'TransacaoPaiID'
+            ]
+            cols_existentes_drop = [col for col in cols_to_drop if col in df_fallback.columns]
+            if cols_existentes_drop:
+                df_fallback.drop(columns=cols_existentes_drop, inplace=True, errors='ignore')
+
+            # ✅ Garante colunas únicas também no fallback
+            df_fallback = df_fallback.loc[:, ~df_fallback.columns.duplicated()]
+
+            st.dataframe(df_fallback, use_container_width=True, hide_index=True)
+
+    else:
+        st.info("Nenhuma dívida pendente disponível para exibição.")
+
+
