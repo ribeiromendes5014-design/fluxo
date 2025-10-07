@@ -669,8 +669,11 @@ def livro_caixa():
             # Aplicação segura do .query()
             # ✅ Aplicação segura — sem usar .query()
             df_pendentes_ordenado["Tipo"] = df_pendentes_ordenado["Tipo"].astype(str).fillna("")
+            df_pendentes_ordenado["Valor"] = pd.to_numeric(df_pendentes_ordenado["Valor"], errors="coerce").fillna(0)
+
             total_receber = df_pendentes_ordenado.loc[df_pendentes_ordenado["Tipo"] == "Entrada", "Valor"].abs().sum()
             total_pagar = df_pendentes_ordenado.loc[df_pendentes_ordenado["Tipo"] == "Saída", "Valor"].abs().sum()
+
 
 
             col_res_1, col_res_2 = st.columns(2)
@@ -791,4 +794,5 @@ def livro_caixa():
                     st.dataframe(df_para_mostrar_pendentes, use_container_width=True, hide_index=True)
             else:
                 st.info("Nenhuma dívida pendente disponível para exibição.")
+
 
