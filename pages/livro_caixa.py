@@ -566,10 +566,10 @@ def livro_caixa():
                             st.dataframe(df_detalhe[['Produto', 'Quantidade', 'Preço Unitário', 'Total Venda', 'Lucro Bruto']], hide_index=True, use_container_width=True)
                         except: pass
                     col_op_1, col_op_2 = st.columns(2)
-                    if col_op_1.button(f"✏️ Editar", key=f"edit_{idx_selecionado}", use_container_width=True, type="secondary"):
+                    if col_op_1.button(f"✏️ Editar", key=f"edit_mov_{idx_selecionado}", use_container_width=True, type="secondary"):
                         st.session_state.edit_id, st.session_state.edit_id_loaded = idx_selecionado, None
                         st.rerun()
-                    if col_op_2.button(f"🗑️ Excluir", key=f"del_{idx_selecionado}", use_container_width=True, type="primary"):
+                    if col_op_2.button(f"🗑️ Excluir", key=f"del_mov_{idx_selecionado}", use_container_width=True, type="primary"):
                         if row['Status'] == 'Realizada' and row['Tipo'] == 'Entrada' and pd.notna(row['Produtos Vendidos']):
                             try:
                                 for item in ast.literal_eval(row['Produtos Vendidos']):
@@ -659,22 +659,16 @@ def livro_caixa():
             )
             
             # ✅ CORREÇÃO APLICADA: Garante que o tipo é string no DataFrame final usado pelo query.
-            # Isso resolve o TypeError na linha 664.
-            df_pendentes_ordenado['Tipo'] = df_pendentes_ordenado['Tipo'].astype(str)
+            # Isso resolve o TypeError.
+            df_pendentes_ordenado['Tipo'] = df_pendentes_ordenado['Tipo'].astype(str) 
 
             df_pendentes_ordenado['Dias Até/Atraso'] = df_pendentes_ordenado['Data Pagamento'].apply(
                 lambda x: (x - date.today()).days if pd.notna(x) else float('inf')
             )
 
             # Aplicação segura do .query()
-            # ✅ Aplicação segura — sem usar .query()
-            df_pendentes_ordenado["Tipo"] = df_pendentes_ordenado["Tipo"].astype(str).fillna("")
-            df_pendentes_ordenado["Valor"] = pd.to_numeric(df_pendentes_ordenado["Valor"], errors="coerce").fillna(0)
-
-            total_receber = df_pendentes_ordenado.loc[df_pendentes_ordenado["Tipo"] == "Entrada", "Valor"].abs().sum()
-            total_pagar = df_pendentes_ordenado.loc[df_pendentes_ordenado["Tipo"] == "Saída", "Valor"].abs().sum()
-
-
+            total_receber = df_pendentes_ordenado.query("Tipo == 'Entrada'")["Valor"].abs().sum()
+            total_pagar = df_pendentes_ordenado.query("Tipo == 'Saída'")["Valor"].abs().sum()
 
             col_res_1, col_res_2 = st.columns(2)
             col_res_1.metric("Total a Receber", f"R$ {total_receber:,.2f}")
@@ -766,7 +760,7 @@ def livro_caixa():
                     st.info("Selecione uma dívida para concluir.")
 
             # -------------------------------
-            # ✅ Tabela de Dívidas Pendentes (COM PROTEÇÃO CONTRA KEYERROR)
+            # ✅ Tabela de Dívidas Pendentes (COM PROTEÇÃO CONTRA KEYERROR E VALUERROR)
             # -------------------------------
             st.markdown("---")
             st.markdown("##### Tabela Detalhada de Dívidas Pendentes")
@@ -780,19 +774,39 @@ def livro_caixa():
                 if 'Cor_Valor' not in df_para_mostrar_pendentes.columns:
                     df_para_mostrar_pendentes['Cor_Valor'] = 'black'
 
+                # Colunas a serem exibidas (limpas)
+                colunas_exibir = [col for col in df_para_mostrar_pendentes.columns if col not in ['Dias Até/Atraso', 'Cor_Valor', 'Data_dt', 'original_index']]
+                df_para_estilizar = df_para_mostrar_pendentes[colunas_exibir + ['Dias Até/Atraso', 'Cor_Valor']].copy()
+
+
                 try:
-                    df_styling_pendentes = (
-                        df_para_mostrar_pendentes
+                    styled_df = (
+                        df_para_estilizar
                         .style
-                        .apply(highlight_pendentes, axis=1) # Usando a função robusta
-                        .hide(subset=['Dias Até/Atraso'], axis=1)
+                        .apply(highlight_pendentes, axis=1)
+                        .hide(subset=['Dias Até/Atraso', 'Cor_Valor'], axis=1) # Esconde colunas auxiliares
                     )
-                    st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
-                except Exception as e: # Catch all exceptions during styling
-                    st.warning(f"Erro ao aplicar estilos: {e}")
-                    # Fallback para exibir o DataFrame sem estilos em caso de falha
-                    st.dataframe(df_para_mostrar_pendentes, use_container_width=True, hide_index=True)
+                    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                
+                except Exception as e: 
+                    # 🛑 CORREÇÃO FINAL PARA ValueError: Remove colunas auxiliares no fallback
+                    st.warning(f"Erro ao aplicar estilos: {e}. Exibindo tabela simples.")
+                    
+                    df_fallback = df_para_mostrar_pendentes.copy()
+                    
+                    # Colunas internas e auxiliares que não devem ser exibidas
+                    cols_to_drop = [
+                        'Dias Até/Atraso', 'Cor_Valor', 'Data_dt', 'original_index', 'Saldo Acumulado', 
+                        'Produtos Vendidos', 'RecorrenciaID', 'TransacaoPaiID'
+                    ]
+                    
+                    # Remove apenas as colunas que existem no DataFrame
+                    cols_existentes_drop = [col for col in cols_to_drop if col in df_fallback.columns]
+                    
+                    if cols_existentes_drop:
+                        df_fallback.drop(columns=cols_existentes_drop, inplace=True, errors='ignore')
+
+                    st.dataframe(df_fallback, use_container_width=True, hide_index=True)
+            
             else:
                 st.info("Nenhuma dívida pendente disponível para exibição.")
-
-
