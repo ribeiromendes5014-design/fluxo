@@ -33,12 +33,9 @@ from constants_and_css import (
 def get_campos_grade(categoria: str) -> dict:
     """Retorna os campos de detalhe da grade (Cor, Tamanho) com base na categoria."""
     cat_lower = categoria.lower().strip()
-    # ✨ ALTERAÇÃO: A lógica da numeração de calçados foi movida para a interface,
-    # esta função agora apenas identifica as categorias de base.
     if "calçado" in cat_lower or "chinelo" in cat_lower:
         return {
             "Cor": {"type": "text", "help": "Ex: Preto, Azul, etc."},
-            # O campo de numeração será criado dinamicamente na UI
             "Tamanho/Numeração": {"type": "conditional_calçado"},
         }
     elif "roupa" in cat_lower:
@@ -102,7 +99,7 @@ def relatorio_produtos():
         (df_validade["Validade_dt"] <= limite_validade_dt)
     ].copy()
     if not df_vencimento.empty:
-        df_vencimento['Dias Restantes'] = df_vencimento['Validade'].apply(lambda x: (x - date.today()).days if pd.notna(x) and isinstance(x, date) else float('inf'))
+        df_vencimento['Dias Restantes'] = df_vencimento['Validade'].apply(lambda x: (x.date() - date.today()).days if pd.notna(x) else float('inf'))
         df_vencimento = df_vencimento.sort_values("Dias Restantes")
     if df_vencimento.empty:
         st.success("🎉 Nenhum produto próximo da validade encontrado.")
@@ -256,7 +253,6 @@ def gestao_produtos():
                     var_detalhes = {}
                     if campos_grade:
                         st.markdown("##### Detalhes da Variação (Cor/Tamanho)")
-                        # ✨ ALTERAÇÃO: Lógica para numeração única ou dupla de calçados
                         is_calçado = any(k in categoria.lower() for k in ["calçado", "chinelo"])
 
                         if is_calçado:
@@ -272,7 +268,7 @@ def gestao_produtos():
                                     num1 = num_c1.number_input("De", min_value=1, step=1, value=35, key=f"var_det_num1_{i}")
                                     num2 = num_c2.number_input("Até", min_value=1, step=1, value=36, key=f"var_det_num2_{i}")
                                     var_detalhes["Tamanho/Numeração"] = f"{int(num1)}/{int(num2)}"
-                        else: # Lógica original para outras categorias
+                        else:
                             cols_add = st.columns(len(campos_grade))
                             col_idx = 0
                             for label, config in campos_grade.items():
@@ -286,7 +282,7 @@ def gestao_produtos():
                                     valor = cols_add[col_idx].selectbox(label, config.get("options", []), index=index, help=config.get("help"), key=key_detalhe)
                                 var_detalhes[label] = valor
                                 col_idx += 1
-                    
+
                     foto_lida = var_foto_upload or var_foto_cam
                     if foto_lida:
                         imagem_bytes = foto_lida.getvalue() if var_foto_upload else foto_lida.getbuffer()
@@ -334,7 +330,7 @@ def gestao_produtos():
             if "PaiID" not in produtos_filtrados.columns: produtos_filtrados["PaiID"] = None
             if "CashbackPercent" not in produtos_filtrados.columns: produtos_filtrados["CashbackPercent"] = 0.0
             if "DetalhesGrade" not in produtos_filtrados.columns: produtos_filtrados["DetalhesGrade"] = "{}"
-        
+
         st.markdown("### Lista de produtos")
         if produtos_filtrados.empty:
             st.info("Nenhum produto encontrado.")
@@ -364,8 +360,11 @@ def gestao_produtos():
                     filhos_do_pai = produtos_filho[produtos_filho["PaiID"] == str(pai["ID"])]
                     if not filhos_do_pai.empty: estoque_total = filhos_do_pai['Quantidade'].sum()
                     c[2].markdown(f"**{estoque_total}**")
-                    validade_formatada = str(pai['Validade'].date()) if pd.notna(pai['Validade']) else "—"
+                    
+                    # ✨ CORREÇÃO: Removido o .date() para evitar o erro
+                    validade_formatada = str(pai['Validade']) if pd.notna(pai['Validade']) else "—"
                     c[3].write(validade_formatada)
+                    
                     pv = to_float(pai['PrecoVista'])
                     pc_calc = round(pv / FATOR_CARTAO, 2)
                     c[4].markdown(f'<div class="custom-price-block"><small>C: R$ {to_float(pai["PrecoCusto"]):,.2f}</small><br>**V:** R$ {pv:,.2f}<br>**C:** R$ {pc_calc:,.2f}</div>', unsafe_allow_html=True)
@@ -413,8 +412,9 @@ def gestao_produtos():
 
             if "edit_prod" in st.session_state:
                 eid = st.session_state["edit_prod"]
-                row = produtos[produtos["ID"] == str(eid)].iloc[0]
-                if not row.empty:
+                row_df = produtos[produtos["ID"] == str(eid)]
+                if not row_df.empty:
+                    row = row_df.iloc[0]
                     st.subheader(f"Editar produto ID: {eid} ({row['Nome']})")
                     current_details_grade = ast.literal_eval(row.get("DetalhesGrade", "{}")) if isinstance(row.get("DetalhesGrade"), str) and row.get("DetalhesGrade") else row.get("DetalhesGrade", {})
                     campos_grade_edicao = get_campos_grade(row.get("Categoria", ""))
@@ -432,7 +432,7 @@ def gestao_produtos():
                         edit_tem_validade = st.checkbox("Produto com data de validade?", value=produto_tem_validade, key=f"edit_tem_validade_{eid}")
                         nova_validade = pd.NaT
                         if edit_tem_validade:
-                            data_padrao = row["Validade"].date() if produto_tem_validade else date.today()
+                            data_padrao = row["Validade"] if produto_tem_validade else date.today()
                             nova_validade = st.date_input("Data de Validade", value=data_padrao, key=f"edit_val_{eid}")
                         nova_foto = st.text_input("URL da Foto", value=row.get("FotoURL", ""), key=f"edit_foto_{eid}")
                         novo_cb = st.text_input("Código de Barras", value=str(row.get("CodigoBarras", "")), key=f"edit_cb_{eid}")
@@ -441,7 +441,6 @@ def gestao_produtos():
                     col_details, col_cashback = st.columns([2, 1])
                     edited_details = current_details_grade.copy()
                     with col_details:
-                        # ✨ ALTERAÇÃO: Lógica de edição para numeração de calçados
                         is_calçado_edit = any(k in nova_cat.lower() for k in ["calçado", "chinelo"])
                         if is_calçado_edit:
                             st.markdown("Detalhes da Grade:")
@@ -454,7 +453,7 @@ def gestao_produtos():
                             edited_details["Cor"] = c_edit1.text_input("Cor", value=current_details_grade.get("Cor", ""), key=f"edit_det_cor_{eid}")
                             with c_edit2:
                                 if tipo_numeração_edit == "Única":
-                                    default_val = int(current_num) if not is_dupla_inicial and current_num else 38
+                                    default_val = int(current_num) if not is_dupla_inicial and str(current_num).isdigit() else 38
                                     num_unica = st.number_input("Numeração", min_value=1, step=1, value=default_val, key=f"edit_det_num_unica_{eid}")
                                     edited_details["Tamanho/Numeração"] = num_unica
                                 else:
@@ -465,8 +464,6 @@ def gestao_produtos():
                                     edited_details["Tamanho/Numeração"] = f"{int(num1)}/{int(num2)}"
                         elif campos_grade_edicao:
                             st.markdown("Detalhes da Grade:")
-                            # Lógica original para outras categorias
-                            # ... (Este bloco pode ser expandido se houver outras categorias com grade)
                         else:
                             st.info("Nenhum detalhe de grade para esta categoria.")
                     with col_cashback:
