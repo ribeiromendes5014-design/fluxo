@@ -24,7 +24,7 @@ try:
     TOKEN = st.secrets["GITHUB_TOKEN"]
     OWNER = st.secrets["REPO_OWNER"]
     REPO_NAME = st.secrets["REPO_NAME"]
-    CSV_PATH = st.secrets["CSV_PATH"] 
+    CSV_PATH = st.secrets["livro_caixa"]["CSV_PATH"]
     BRANCH = st.secrets.get("BRANCH", "main")
     GITHUB_TOKEN = TOKEN
     GITHUB_REPO = f"{OWNER}/{REPO_NAME}"
@@ -33,7 +33,7 @@ except KeyError:
     TOKEN = "TOKEN_FICTICIO"
     OWNER = "user"
     REPO_NAME = "repo_default"
-    CSV_PATH = "livro_caixa"
+    CSV_PATH = "contas_a_pagar_receber.csv"
     BRANCH = "main"
     GITHUB_TOKEN = TOKEN
     GITHUB_REPO = f"{OWNER}/{REPO_NAME}"
@@ -166,4 +166,5 @@ def render_custom_header(paginas_ordenadas, paginas_map):
         st.markdown('<div class="header-container">', unsafe_allow_html=True)
         render_header(paginas_ordenadas, paginas_map)
         st.markdown('</div>', unsafe_allow_html=True)
+
 
