@@ -1136,7 +1136,9 @@ def livro_caixa():
             df_para_mostrar['Produtos Resumo'] = df_para_mostrar['Produtos Vendidos'].apply(format_produtos_resumo)
             
             colunas_tabela = ['ID Visível', 'Data', 'Loja', 'Cliente', 'Categoria', 'Valor', 'Forma de Pagamento', 'Tipo', 'Status', 'Data Pagamento', 'Produtos Resumo', 'Saldo Acumulado']
-            
+            # --- Correção: garante que a coluna 'Cor_Valor' exista ---
+           if 'Cor_Valor' not in df_para_mostrar.columns:
+               df_para_mostrar['Cor_Valor'] = 'black'
             df_styling = df_para_mostrar[colunas_tabela + ['Cor_Valor']].copy()
             styled_df = df_styling.style.apply(highlight_value, axis=1)
             styled_df = styled_df.hide(subset=['Cor_Valor'], axis=1)
@@ -1558,6 +1560,7 @@ styled_df = df_styling.style.apply(highlight_value, axis=1)
 styled_df = styled_df.hide(subset=['Cor_Valor'], axis=1)
 
 # Pronto! A variável 'styled_df' agora pode ser passada para o st.dataframe().
+
 
 
 
