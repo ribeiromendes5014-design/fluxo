@@ -16,10 +16,10 @@ from utils import (
     carregar_livro_caixa,
     parse_date_yyyy_mm_dd,
     ler_codigo_barras_api,
-    callback_salvar_novo_produto, 
+    callback_salvar_novo_produto,
     to_float,
     salvar_produtos_no_github,
-    save_data_github_produtos, 
+    save_data_github_produtos,
 )
 
 from constants_and_css import (
@@ -37,8 +37,9 @@ def get_campos_grade(categoria: str) -> dict:
     if "calçado" in cat_lower or "chinelo" in cat_lower:
         return {
             "Cor": {"type": "text", "help": "Ex: Preto, Azul, etc."},
-            # 🚨 CORREÇÃO: min_value=1 para tamanhos/numeração
-            "Tamanho/Numeração": {"type": "number", "min_value": 1, "step": 1, "value": 0, "help": "Ex: 38, 40, etc."},
+            # 🚨 CORREÇÃO APLICADA: O valor padrão (value) foi alterado de 0 para 38.
+            # Isso evita o erro 'StreamlitValueBelowMinError', pois 38 é >= ao min_value (1).
+            "Tamanho/Numeração": {"type": "number", "min_value": 1, "step": 1, "value": 38, "help": "Ex: 38, 40, etc."},
         }
     elif "roupa" in cat_lower:
         return {
@@ -293,7 +294,7 @@ def gestao_produtos():
 
                 for i in range(int(qtd_variações)):
                     st.markdown(f"--- **Variação {i+1}** ---")
-                    
+
                     # Colunas para Nome, Qtd, Preços e Foto da variação
                     var_c1, var_c2, var_c3, var_c4 = st.columns(4)
 
@@ -304,10 +305,10 @@ def gestao_produtos():
                         var_preco_custo = st.text_input(f"Preço de Custo variação {i+1}", value="0,00", key=f"var_pc_{i}")
                     with var_c4:
                         var_preco_vista = st.text_input(f"Preço à Vista variação {i+1}", value="0,00", key=f"var_pv_{i}")
-                    
+
                     # 🚨 NOVO: Foto e Código de Barras da variação
                     var_foto_url = st.text_input(f"URL Foto Variação {i+1} (Opcional)", key=f"var_foto_url_{i}")
-                    
+
                     st.markdown("##### Código de Barras e Cashback")
                     var_cb_c1, var_cb_c2, var_cb_c3, var_cb_c4 = st.columns([2, 1, 1, 1.5])
 
@@ -339,41 +340,41 @@ def gestao_produtos():
                         var_oferece_cashback = st.checkbox(f"Cashback? {i+1}", key=f"var_cbk_chk_{i}")
                         if var_oferece_cashback:
                             var_cashback_percent = st.number_input(f"Cashback % {i+1}", min_value=0.0, max_value=100.0, value=3.0, step=0.5, key=f"var_cbk_percent_{i}")
-                    
-                    
+
+
                     # 🚨 NOVO: Campos dinâmicos de grade (Cor, Tamanho)
                     var_detalhes = {}
                     if campos_grade:
                         st.markdown("##### Detalhes da Variação (Cor/Tamanho)")
                         cols_add = st.columns(len(campos_grade))
                         col_idx = 0
-                        
+
                         for label, config in campos_grade.items():
                             key_detalhe = f"var_det_{label.replace(' ', '_')}_{i}"
-                            
+
                             if config["type"] == "text":
                                 valor = cols_add[col_idx].text_input(label, help=config.get("help"), key=key_detalhe)
                             elif config["type"] == "number":
                                 # 🚨 CORREÇÃO: Valor inicial seguro para number_input
                                 valor = cols_add[col_idx].number_input(
-                                    label, 
-                                    min_value=config.get("min_value", 0), 
-                                    step=config.get("step", 1), 
+                                    label,
+                                    min_value=config.get("min_value", 0),
+                                    step=config.get("step", 1),
                                     value=config.get("value", 0), # Valor inicial 0 é seguro para min_value=1
-                                    help=config.get("help"), 
+                                    help=config.get("help"),
                                     key=key_detalhe
                                 )
                             elif config["type"] == "selectbox":
                                 # 🚨 ATENÇÃO: Se o primeiro item do options for "", use index 0 para inicializar como vazio
-                                index = 0 if config.get("options", [""])[0] == "" else None 
+                                index = 0 if config.get("options", [""])[0] == "" else None
                                 valor = cols_add[col_idx].selectbox(
-                                    label, 
-                                    config.get("options", []), 
+                                    label,
+                                    config.get("options", []),
                                     index=index,
-                                    help=config.get("help"), 
+                                    help=config.get("help"),
                                     key=key_detalhe
                                 )
-                            
+
                             var_detalhes[label] = valor
                             col_idx += 1
 
@@ -462,10 +463,10 @@ def gestao_produtos():
                             return False
                         except:
                             return False
-                    
+
                     # Filtra onde o termo aparece em qualquer valor do dicionário DetalhesGrade
                     produtos_filtrados = produtos[produtos["DetalhesGrade"].apply(search_details)]
-            
+
             # Garante que colunas importantes para a exibição existam
             if "PaiID" not in produtos_filtrados.columns:
                 produtos_filtrados["PaiID"] = None
@@ -649,7 +650,7 @@ def gestao_produtos():
                                     c_var[5].markdown(cashback_var_html, unsafe_allow_html=True)
                                 else:
                                     c_var[5].write("—")
-                                
+
                                 # 🚨 NOVO: Detalhes da Grade da Variação
                                 c_var[6].markdown(format_details(var.get('DetalhesGrade', None)), unsafe_allow_html=True)
 
@@ -679,7 +680,7 @@ def gestao_produtos():
                 if not row.empty:
                     st.subheader(f"Editar produto ID: {eid} ({row.iloc[0]['Nome']})")
                     row = row.iloc[0]
-                    
+
                     # 🚨 Adicionado: Tenta carregar DetalhesGrade
                     current_details_grade = {}
                     try:
@@ -689,10 +690,10 @@ def gestao_produtos():
                             current_details_grade = ast.literal_eval(details_json) if details_json.strip().startswith('{') else json.loads(details_json)
                     except:
                         current_details_grade = {}
-                    
+
                     # Usa a categoria da linha para determinar os campos de edição
                     campos_grade_edicao = get_campos_grade(row.get("Categoria", ""))
-                    
+
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         novo_nome = st.text_input("Nome", value=row["Nome"], key=f"edit_nome_{eid}")
@@ -709,14 +710,14 @@ def gestao_produtos():
                         except Exception:
                             vdata = date.today()
                         nova_validade = st.date_input("Validade", value=vdata, key=f"edit_val_{eid}")
-                        
+
                         # 🚨 ATUALIZADO: Edição da Foto URL (agora individual para variação/pai)
                         nova_foto = st.text_input("URL da Foto", value=row.get("FotoURL", ""), key=f"edit_foto_{eid}")
                         novo_cb = st.text_input("Código de Barras", value=str(row.get("CodigoBarras", "")), key=f"edit_cb_{eid}")
 
                     # --- Edição dos Detalhes da Grade e Cashback (em colunas separadas para organização) ---
                     st.markdown("##### Detalhes da Grade e Cashback")
-                    
+
                     col_details, col_cashback = st.columns([2, 1])
 
                     # 🚨 NOVO: Campos de Edição de Detalhe da Grade (se houver)
@@ -729,7 +730,7 @@ def gestao_produtos():
                             for label, config in campos_grade_edicao.items():
                                 current_value = current_details_grade.get(label, config.get("value", ""))
                                 key_edit_detalhe = f"edit_det_{label.replace(' ', '_')}_{eid}"
-                                
+
                                 if config["type"] == "text":
                                     valor = cols_edit_add[col_idx].text_input(label, value=current_value, key=key_edit_detalhe)
                                 elif config["type"] == "number":
@@ -737,9 +738,9 @@ def gestao_produtos():
                                     safe_value = current_value if isinstance(current_value, (int, float)) and current_value >= config.get("min_value", 0) else config.get("value", 0)
 
                                     valor = cols_edit_add[col_idx].number_input(
-                                        label, 
-                                        min_value=config.get("min_value", 0), 
-                                        step=config.get("step", 1), 
+                                        label,
+                                        min_value=config.get("min_value", 0),
+                                        step=config.get("step", 1),
                                         value=int(safe_value), # Garante que é inteiro para numeração
                                         key=key_edit_detalhe
                                     )
@@ -749,15 +750,15 @@ def gestao_produtos():
                                         index = options.index(str(current_value))
                                     except ValueError:
                                         # Default para o primeiro ou vazio
-                                        index = 0 if "" in options else 0 
+                                        index = 0 if "" in options else 0
 
                                     valor = cols_edit_add[col_idx].selectbox(label, options, index=index, key=key_edit_detalhe)
-                                
+
                                 edited_details[label] = valor
                                 col_idx += 1
                         else:
                             st.info("Nenhum detalhe de grade para esta categoria.")
-                    
+
                     # Edição do Cashback
                     with col_cashback:
                         st.markdown("Cashback:")
@@ -782,7 +783,7 @@ def gestao_produtos():
                         if st.button("💾 Salvar", key=f"save_{eid}", type="primary", use_container_width=True, help="Salvar Alterações"):
                             preco_vista_float = to_float(novo_preco_vista)
                             novo_preco_cartao = round(preco_vista_float / FATOR_CARTAO, 2) if preco_vista_float > 0 else 0.0
-                            
+
                             # 🚨 ATUALIZADO: Adiciona FotoURL e DetalhesGrade ao salvar
                             produtos.loc[produtos["ID"] == str(eid), [
                                 "Nome", "Marca", "Categoria", "Quantidade",
