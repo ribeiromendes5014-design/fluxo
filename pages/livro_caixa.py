@@ -649,10 +649,6 @@ def livro_caixa():
         if df_pendentes.empty:
             st.success("🎉 Nenhuma dívida pendente registrada!")
         else:
-            # Esta linha já existia na sua última correção, mas garantiremos que o tipo seja aplicado
-            # no DataFrame final (df_pendentes_ordenado) para máxima segurança.
-            # df_pendentes['Tipo'] = df_pendentes['Tipo'].astype(str) # Comentado para mover para o final
-
             df_pendentes["Data Pagamento"] = pd.to_datetime(
                 df_pendentes["Data Pagamento"], errors='coerce'
             ).dt.date
@@ -662,9 +658,9 @@ def livro_caixa():
                 .reset_index(drop=True)
             )
             
-            # ✅ CORREÇÃO APLICADA NOVAMENTE: Garante que o tipo é string no DataFrame final usado pelo query.
-            # Isso resolve o TypeError.
-            df_pendentes_ordenado['Tipo'] = df_pendentes_ordenado['Tipo'].astype(str) 
+            # ✅ CORREÇÃO APLICADA: Garante que o tipo é string no DataFrame final usado pelo query.
+            # Isso resolve o TypeError na linha 664.
+            df_pendentes_ordenado['Tipo'] = df_pendentes_ordenado['Tipo'].astype(str)
 
             df_pendentes_ordenado['Dias Até/Atraso'] = df_pendentes_ordenado['Data Pagamento'].apply(
                 lambda x: (x - date.today()).days if pd.notna(x) else float('inf')
@@ -792,4 +788,3 @@ def livro_caixa():
                     st.dataframe(df_para_mostrar_pendentes, use_container_width=True, hide_index=True)
             else:
                 st.info("Nenhuma dívida pendente disponível para exibição.")
-
