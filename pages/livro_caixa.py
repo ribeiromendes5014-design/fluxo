@@ -1525,10 +1525,11 @@ def livro_caixa():
                 lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
             )
             df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
-
-            # --- CORREÇÃO ADICIONADA AQUI ---
-            # Oculta a coluna de cálculo antes de exibir para evitar erros de renderização.
-            df_styling_pendentes.hide(columns=['Dias Até/Atraso'])
+            
+            # --- SINTAXE CORRIGIDA PARA VERSÕES ANTIGAS DO PANDAS ---
+            # A versão correta para o seu ambiente usa 'subset' e 'axis=1'.
+            df_styling_pendentes = df_styling_pendentes.hide(subset=['Dias Até/Atraso'], axis=1)
 
             st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+
 
