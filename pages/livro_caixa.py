@@ -31,7 +31,7 @@ from constants_and_css import (
 )
 
 # ==============================================================================
-# 💡 MELHORIA SUGERIDA APLICADA AQUI
+# 💡 FUNÇÃO DE ESTILO PARA TABELAS
 # ==============================================================================
 def highlight_value(row):
     """Função auxiliar para colorir o valor na tabela de movimentações."""
@@ -39,7 +39,7 @@ def highlight_value(row):
     return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
 
 # ==============================================================================
-# ✅ SOLUÇÃO DEFINITIVA PARA KeyError NO highlight_pendentes APLICADA AQUI
+# ✅ SOLUÇÃO ROBUSTA PARA ESTILIZAÇÃO DE DÍVIDAS PENDENTES (Corrigido KeyError)
 # ==============================================================================
 def highlight_pendentes(row):
     """
@@ -49,10 +49,10 @@ def highlight_pendentes(row):
     dias = row.get('Dias Até/Atraso', None)
 
     # Se não existir a coluna ou o valor, retorna lista vazia (sem estilo)
-    if dias is None:
+    if dias is None or dias == float('inf'):
         return ['' for _ in range(len(row.index))]
 
-    # Define as colunas que receberão o estilo (as colunas devem existir no DataFrame)
+    # Define as colunas que receberão o estilo
     color_cols = {'Status', 'Data Pagamento'}
     
     # Define o estilo baseado no prazo
@@ -649,6 +649,8 @@ def livro_caixa():
         if df_pendentes.empty:
             st.success("🎉 Nenhuma dívida pendente registrada!")
         else:
+            # ✅ CORREÇÃO APLICADA: Converte a coluna 'Tipo' para string para evitar TypeError no .query()
+            df_pendentes['Tipo'] = df_pendentes['Tipo'].astype(str)
             df_pendentes["Data Pagamento"] = pd.to_datetime(
                 df_pendentes["Data Pagamento"], errors='coerce'
             ).dt.date
@@ -661,6 +663,7 @@ def livro_caixa():
                 lambda x: (x - date.today()).days if pd.notna(x) else float('inf')
             )
 
+            # Aplicação segura do .query()
             total_receber = df_pendentes_ordenado.query("Tipo == 'Entrada'")["Valor"].abs().sum()
             total_pagar = df_pendentes_ordenado.query("Tipo == 'Saída'")["Valor"].abs().sum()
 
@@ -753,37 +756,32 @@ def livro_caixa():
                 else:
                     st.info("Selecione uma dívida para concluir.")
 
-            # ... (Bloco com tab_rel)
+            # -------------------------------
+            # ✅ Tabela de Dívidas Pendentes (COM PROTEÇÃO CONTRA KEYERROR)
+            # -------------------------------
+            st.markdown("---")
+            st.markdown("##### Tabela Detalhada de Dívidas Pendentes")
 
-        # ==========================
-        # 🔹 BLOCO: Dívidas Pendentes
-        # ==========================
-        st.markdown("---")
-        st.subheader("🚩 Dívidas Pendentes")
+            if not df_pendentes_ordenado.empty and 'Dias Até/Atraso' in df_pendentes_ordenado.columns:
+                df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
+                df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(
+                    lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
+                )
 
-        df_pendentes = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
+                if 'Cor_Valor' not in df_para_mostrar_pendentes.columns:
+                    df_para_mostrar_pendentes['Cor_Valor'] = 'black'
 
-        if df_pendentes.empty:
-            st.success("🎉 Nenhuma dívida pendente registrada!")
-        else:
-            # 💡 CORREÇÃO DO TypeError: Garantir que 'Tipo' é string antes de usar .query()
-            df_pendentes['Tipo'] = df_pendentes['Tipo'].astype(str)
-            df_pendentes["Data Pagamento"] = pd.to_datetime(
-                df_pendentes["Data Pagamento"], errors='coerce'
-            ).dt.date
-
-            df_pendentes_ordenado = (
-                df_pendentes.sort_values(by=["Data Pagamento", "Tipo", "Data"])
-                .reset_index(drop=True)
-            )
-            df_pendentes_ordenado['Dias Até/Atraso'] = df_pendentes_ordenado['Data Pagamento'].apply(
-                lambda x: (x - date.today()).days if pd.notna(x) else float('inf')
-            )
-
-            # Aplicação segura do .query()
-            total_receber = df_pendentes_ordenado.query("Tipo == 'Entrada'")["Valor"].abs().sum()
-            total_pagar = df_pendentes_ordenado.query("Tipo == 'Saída'")["Valor"].abs().sum()
-
-            col_res_1, col_res_2 = st.columns(2)
-# ... (restante do código no bloco `with tab_rel:` continua igual)
-
+                try:
+                    df_styling_pendentes = (
+                        df_para_mostrar_pendentes
+                        .style
+                        .apply(highlight_pendentes, axis=1) # Usando a função robusta
+                        .hide(subset=['Dias Até/Atraso'], axis=1)
+                    )
+                    st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+                except Exception as e: # Catch all exceptions during styling
+                    st.warning(f"Erro ao aplicar estilos: {e}")
+                    # Fallback para exibir o DataFrame sem estilos em caso de falha
+                    st.dataframe(df_para_mostrar_pendentes, use_container_width=True, hide_index=True)
+            else:
+                st.info("Nenhuma dívida pendente disponível para exibição.")
