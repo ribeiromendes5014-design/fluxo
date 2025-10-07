@@ -667,7 +667,7 @@ def livro_caixa():
 
             # Totais
             total_receber = df_pendentes_ordenado.query("Tipo == 'Entrada'")["Valor"].abs().sum()
-            total_pagar = df_pendentes_ordenado.query("Tipo == 'Saída'")["Valor"].abs().sum()
+            total_pagar = df_pendentes_ordenado[df_pendentes_ordenado["Tipo"] == "Saída"]["Valor"].abs().sum()
 
             col_res_1, col_res_2 = st.columns(2)
             col_res_1.metric("Total a Receber", f"R$ {total_receber:,.2f}")
@@ -805,3 +805,4 @@ def livro_caixa():
                     df_fallback = df_fallback.loc[:, ~df_fallback.columns.duplicated()]
                     st.dataframe(df_fallback, use_container_width=True, hide_index=True)
         
+
