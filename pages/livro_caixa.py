@@ -629,5 +629,8 @@ def livro_caixa():
             df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
             df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje"))
             df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1).hide(subset=['Dias Até/Atraso'], axis=1)
+            if 'Cor_Valor' not in df_styling_pendentes.columns:
+            df_styling_pendentes['Cor_Valor'] = 'black'
             st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+
 
