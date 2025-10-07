@@ -10,16 +10,16 @@ import ast
 # 🚨 CORREÇÃO: Bloco de Importação das Funções Auxiliares do utils.py
 # (Funções usadas neste arquivo)
 # ==============================================================================
-# Supondo que você atualizou 'utils.py' para aceitar o 'DetalhesGrade' e 'FotoURL' na variação
+# Assumindo que essas funções foram implementadas corretamente em utils.py
 from utils import (
     inicializar_produtos,
     carregar_livro_caixa,
     parse_date_yyyy_mm_dd,
     ler_codigo_barras_api,
-    callback_salvar_novo_produto, # Função deve ser atualizada para lidar com a nova estrutura da 'variações'
+    callback_salvar_novo_produto, 
     to_float,
     salvar_produtos_no_github,
-    save_data_github_produtos, # Função auxiliar de persistência (placeholder)
+    save_data_github_produtos, 
 )
 
 from constants_and_css import (
@@ -37,12 +37,13 @@ def get_campos_grade(categoria: str) -> dict:
     if "calçado" in cat_lower or "chinelo" in cat_lower:
         return {
             "Cor": {"type": "text", "help": "Ex: Preto, Azul, etc."},
-            "Tamanho/Numeração": {"type": "number", "min_value": 1, "step": 1, "help": "Ex: 38, 40, etc."},
+            # 🚨 CORREÇÃO: min_value=1 para tamanhos/numeração
+            "Tamanho/Numeração": {"type": "number", "min_value": 1, "step": 1, "value": 0, "help": "Ex: 38, 40, etc."},
         }
     elif "roupa" in cat_lower:
         return {
             "Cor": {"type": "text", "help": "Ex: Vermelho, Branco, etc."},
-            "Tamanho": {"type": "selectbox", "options": ["P", "M", "G", "GG", "Único", ""], "help": "Selecione o tamanho padrão."},
+            "Tamanho": {"type": "selectbox", "options": ["", "P", "M", "G", "GG", "Único"], "help": "Selecione o tamanho padrão."},
         }
     return {}
 
@@ -353,19 +354,22 @@ def gestao_produtos():
                             if config["type"] == "text":
                                 valor = cols_add[col_idx].text_input(label, help=config.get("help"), key=key_detalhe)
                             elif config["type"] == "number":
+                                # 🚨 CORREÇÃO: Valor inicial seguro para number_input
                                 valor = cols_add[col_idx].number_input(
                                     label, 
                                     min_value=config.get("min_value", 0), 
                                     step=config.get("step", 1), 
-                                    value=config.get("value", 0),
+                                    value=config.get("value", 0), # Valor inicial 0 é seguro para min_value=1
                                     help=config.get("help"), 
                                     key=key_detalhe
                                 )
                             elif config["type"] == "selectbox":
+                                # 🚨 ATENÇÃO: Se o primeiro item do options for "", use index 0 para inicializar como vazio
+                                index = 0 if config.get("options", [""])[0] == "" else None 
                                 valor = cols_add[col_idx].selectbox(
                                     label, 
                                     config.get("options", []), 
-                                    index=len(config.get("options", [])) - 1 if "" in config.get("options", []) else 0,
+                                    index=index,
                                     help=config.get("help"), 
                                     key=key_detalhe
                                 )
@@ -401,8 +405,6 @@ def gestao_produtos():
 
             st.markdown("", unsafe_allow_html=True)
             # --- BOTÃO SALVAR PRODUTO (CHAMANDO CALLBACK) ---
-            # 🚨 ATENÇÃO: A função callback_salvar_novo_produto (em utils.py) DEVE lidar
-            # com a nova estrutura do dicionário 'variações' (FotoURL e DetalhesGrade)
             if st.button(
                 "💾 Salvar",
                 use_container_width=True,
@@ -683,7 +685,8 @@ def gestao_produtos():
                     try:
                         details_json = row.get("DetalhesGrade")
                         if pd.notna(details_json) and details_json:
-                            current_details_grade = ast.literal_eval(details_json)
+                            # Tenta ast.literal_eval primeiro, depois json.loads
+                            current_details_grade = ast.literal_eval(details_json) if details_json.strip().startswith('{') else json.loads(details_json)
                     except:
                         current_details_grade = {}
                     
@@ -730,16 +733,25 @@ def gestao_produtos():
                                 if config["type"] == "text":
                                     valor = cols_edit_add[col_idx].text_input(label, value=current_value, key=key_edit_detalhe)
                                 elif config["type"] == "number":
+                                    # 🚨 CORREÇÃO: Tratamento do valor inicial para number_input na edição
+                                    safe_value = current_value if isinstance(current_value, (int, float)) and current_value >= config.get("min_value", 0) else config.get("value", 0)
+
                                     valor = cols_edit_add[col_idx].number_input(
                                         label, 
                                         min_value=config.get("min_value", 0), 
                                         step=config.get("step", 1), 
-                                        value=current_value if current_value != "" else config.get("value", 0),
+                                        value=int(safe_value), # Garante que é inteiro para numeração
                                         key=key_edit_detalhe
                                     )
                                 elif config["type"] == "selectbox":
-                                    index = config["options"].index(current_value) if current_value in config["options"] else (len(config["options"]) - 1 if "" in config["options"] else 0)
-                                    valor = cols_edit_add[col_idx].selectbox(label, config.get("options", []), index=index, key=key_edit_detalhe)
+                                    options = config.get("options", [])
+                                    try:
+                                        index = options.index(str(current_value))
+                                    except ValueError:
+                                        # Default para o primeiro ou vazio
+                                        index = 0 if "" in options else 0 
+
+                                    valor = cols_edit_add[col_idx].selectbox(label, options, index=index, key=key_edit_detalhe)
                                 
                                 edited_details[label] = valor
                                 col_idx += 1
