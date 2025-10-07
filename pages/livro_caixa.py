@@ -1526,10 +1526,6 @@ def livro_caixa():
             )
             df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
             
-            # --- SINTAXE CORRIGIDA PARA VERSÕES ANTIGAS DO PANDAS ---
-            # A versão correta para o seu ambiente usa 'subset' e 'axis=1'.
-            df_styling_pendentes = df_styling_pendentes.hide(subset=['Dias Até/Atraso'], axis=1)
-
-            st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+            
 
 
