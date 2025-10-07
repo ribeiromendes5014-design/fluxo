@@ -626,26 +626,26 @@ def livro_caixa():
                 else: st.info("Selecione uma dívida para concluir.")
             st.markdown("---")
             st.markdown("##### Tabela Detalhada de Dívidas Pendentes")
+            
+            df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
+            df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(
+                lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
+            )
 
-df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
-df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(
-    lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
-)
+            if 'Cor_Valor' not in df_para_mostrar_pendentes.columns:
+                df_para_mostrar_pendentes['Cor_Valor'] = 'black'
 
-# 🔧 Correção preventiva de erro KeyError (coluna Cor_Valor ausente)
-if 'Cor_Valor' not in df_para_mostrar_pendentes.columns:
-    df_para_mostrar_pendentes['Cor_Valor'] = 'black'
+            df_styling_pendentes = (
+                df_para_mostrar_pendentes
+                .style
+                .apply(highlight_pendentes, axis=1)
+                .hide(subset=['Dias Até/Atraso'], axis=1)
+            )
 
-# Estilização da tabela de pendentes
-df_styling_pendentes = (
-    df_para_mostrar_pendentes
-    .style
-    .apply(highlight_pendentes, axis=1)
-    .hide(subset=['Dias Até/Atraso'], axis=1)
-)
+            st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
 
-# Exibição segura no Streamlit
-st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+
+
 
 
 
