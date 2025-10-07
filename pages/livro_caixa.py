@@ -1526,4 +1526,9 @@ def livro_caixa():
             )
             df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
 
+            # --- CORREÇÃO ADICIONADA AQUI ---
+            # Oculta a coluna de cálculo antes de exibir para evitar erros de renderização.
+            df_styling_pendentes.hide(columns=['Dias Até/Atraso'])
+
             st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+
