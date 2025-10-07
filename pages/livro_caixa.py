@@ -35,9 +35,9 @@ from constants_and_css import (
 # ==============================================================================
 def highlight_value(row):
     """Função auxiliar para colorir o valor na tabela de movimentações."""
-    # .get() é mais seguro, pois retorna 'black' se a coluna 'Cor_Valor' não existir.
     color = row.get('Cor_Valor', 'black')
     return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
+
 
 
 def livro_caixa():
@@ -630,3 +630,4 @@ def livro_caixa():
             df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje"))
             df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1).hide(subset=['Dias Até/Atraso'], axis=1)
             st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+
