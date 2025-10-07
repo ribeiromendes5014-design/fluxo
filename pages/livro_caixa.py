@@ -1526,6 +1526,38 @@ def livro_caixa():
             )
             df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
             
-            
+            # ==============================================================================
+# SEÇÃO DE ESTILIZAÇÃO DA TABELA DE MOVIMENTAÇÕES
+# ==============================================================================
+
+# ETAPA 1: Preparação do DataFrame
+# ------------------------------------------------------------------------------
+# Medida de segurança para garantir que a coluna de controle de cor exista.
+# Se 'Cor_Valor' não estiver presente, uma cor padrão ('black') é adicionada.
+if 'Cor_Valor' not in df_para_mostrar.columns:
+    df_para_mostrar['Cor_Valor'] = 'black'
+
+# Cria um novo DataFrame ('df_styling') contendo apenas as colunas necessárias.
+# Isso inclui as colunas visíveis ('colunas_tabela') e a coluna de controle de cor.
+# O uso de .copy() é uma boa prática para evitar avisos do Pandas.
+colunas_para_estilizar = colunas_tabela + ['Cor_Valor']
+df_styling = df_para_mostrar[colunas_para_estilizar].copy()
+
+
+# ETAPA 2: Aplicação do Estilo
+# ------------------------------------------------------------------------------
+# Aplica a função 'highlight_value' a cada linha do DataFrame (axis=1).
+# O resultado é um objeto 'Styler' do Pandas, que armazena os dados e o estilo.
+styled_df = df_styling.style.apply(highlight_value, axis=1)
+
+
+# ETAPA 3: Limpeza da Visualização Final
+# ------------------------------------------------------------------------------
+# Oculta a coluna de controle 'Cor_Valor' da tabela que será exibida ao usuário.
+# Ela é necessária apenas para a lógica da cor e não precisa ser visível.
+styled_df = styled_df.hide(subset=['Cor_Valor'], axis=1)
+
+# Pronto! A variável 'styled_df' agora pode ser passada para o st.dataframe().
+
 
 
