@@ -51,6 +51,9 @@ def relatorio_produtos():
     st.subheader("⚠️ Relatório e Alertas de Estoque")
 
     produtos = inicializar_produtos().copy()
+    # Garante que a coluna de validade seja do tipo data, tratando erros
+    produtos['Validade'] = pd.to_datetime(produtos['Validade'], errors='coerce').dt.date
+
     df_movimentacoes = carregar_livro_caixa()
     vendas = df_movimentacoes[df_movimentacoes["Tipo"] == "Entrada"].copy()
 
@@ -90,17 +93,18 @@ def relatorio_produtos():
 
     st.markdown(f"#### ⏳ Alerta de Vencimento (Até {dias_validade_alerta} dias)")
     limite_validade = date.today() + timedelta(days=int(dias_validade_alerta))
-    df_validade = produtos.copy()
-    df_validade['Validade_dt'] = pd.to_datetime(df_validade['Validade'], errors='coerce')
-    limite_validade_dt = datetime.combine(limite_validade, datetime.min.time())
-    df_vencimento = df_validade[
-        (df_validade["Quantidade"] > 0) &
-        (df_validade["Validade_dt"].notna()) &
-        (df_validade["Validade_dt"] <= limite_validade_dt)
+
+    df_vencimento = produtos[
+        (produtos["Quantidade"] > 0) &
+        (produtos["Validade"].notna()) &
+        (produtos["Validade"] <= limite_validade)
     ].copy()
+
     if not df_vencimento.empty:
-        df_vencimento['Dias Restantes'] = df_vencimento['Validade'].apply(lambda x: (x.date() - date.today()).days if pd.notna(x) else float('inf'))
+        # ✨ CORREÇÃO: Removido o `.date()` de 'x.date()' pois 'x' já é um objeto date.
+        df_vencimento['Dias Restantes'] = df_vencimento['Validade'].apply(lambda x: (x - date.today()).days if pd.notna(x) else float('inf'))
         df_vencimento = df_vencimento.sort_values("Dias Restantes")
+
     if df_vencimento.empty:
         st.success("🎉 Nenhum produto próximo da validade encontrado.")
     else:
@@ -138,7 +142,7 @@ def relatorio_produtos():
         ultima_venda = pd.DataFrame(columns=["IDProduto", "UltimaVenda"])
     produtos_parados = produtos.merge(ultima_venda, left_on="ID", right_on="IDProduto", how="left")
     produtos_parados["UltimaVenda"] = pd.to_datetime(produtos_parados["UltimaVenda"], errors='coerce')
-    limite_dt = datetime.combine(date.today() - timedelta(days=int(dias_sem_venda)), datetime.min.time())
+    limite_dt = datetime.now() - timedelta(days=int(dias_sem_venda))
     df_parados_sugeridos = produtos_parados[
         (produtos_parados["Quantidade"] > 0) &
         (produtos_parados["UltimaVenda"].isna() | (produtos_parados["UltimaVenda"] < limite_dt))
@@ -360,11 +364,10 @@ def gestao_produtos():
                     filhos_do_pai = produtos_filho[produtos_filho["PaiID"] == str(pai["ID"])]
                     if not filhos_do_pai.empty: estoque_total = filhos_do_pai['Quantidade'].sum()
                     c[2].markdown(f"**{estoque_total}**")
-                    
-                    # ✨ CORREÇÃO: Removido o .date() para evitar o erro
+
                     validade_formatada = str(pai['Validade']) if pd.notna(pai['Validade']) else "—"
                     c[3].write(validade_formatada)
-                    
+
                     pv = to_float(pai['PrecoVista'])
                     pc_calc = round(pv / FATOR_CARTAO, 2)
                     c[4].markdown(f'<div class="custom-price-block"><small>C: R$ {to_float(pai["PrecoCusto"]):,.2f}</small><br>**V:** R$ {pv:,.2f}<br>**C:** R$ {pc_calc:,.2f}</div>', unsafe_allow_html=True)
@@ -416,8 +419,16 @@ def gestao_produtos():
                 if not row_df.empty:
                     row = row_df.iloc[0]
                     st.subheader(f"Editar produto ID: {eid} ({row['Nome']})")
-                    current_details_grade = ast.literal_eval(row.get("DetalhesGrade", "{}")) if isinstance(row.get("DetalhesGrade"), str) and row.get("DetalhesGrade") else row.get("DetalhesGrade", {})
-                    campos_grade_edicao = get_campos_grade(row.get("Categoria", ""))
+                    current_details_grade = {}
+                    try:
+                        details_str = row.get("DetalhesGrade", "{}")
+                        if pd.notna(details_str) and isinstance(details_str, str):
+                            current_details_grade = ast.literal_eval(details_str)
+                        elif isinstance(details_str, dict):
+                            current_details_grade = details_str
+                    except:
+                        pass # Mantém current_details_grade como {}
+
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         novo_nome = st.text_input("Nome", value=row["Nome"], key=f"edit_nome_{eid}")
@@ -446,9 +457,9 @@ def gestao_produtos():
                             st.markdown("Detalhes da Grade:")
                             current_num = current_details_grade.get("Tamanho/Numeração", "")
                             is_dupla_inicial = isinstance(current_num, str) and "/" in current_num
-                            
+
                             tipo_numeração_edit = st.radio("Tipo de Numeração", ["Única", "Dupla"], index=1 if is_dupla_inicial else 0, key=f"edit_tipo_num_{eid}", horizontal=True)
-                            
+
                             c_edit1, c_edit2 = st.columns(2)
                             edited_details["Cor"] = c_edit1.text_input("Cor", value=current_details_grade.get("Cor", ""), key=f"edit_det_cor_{eid}")
                             with c_edit2:
@@ -462,8 +473,6 @@ def gestao_produtos():
                                     num1 = num_c1.number_input("De", min_value=1, step=1, value=int(num1_val), key=f"edit_det_num1_{eid}")
                                     num2 = num_c2.number_input("Até", min_value=1, step=1, value=int(num2_val), key=f"edit_det_num2_{eid}")
                                     edited_details["Tamanho/Numeração"] = f"{int(num1)}/{int(num2)}"
-                        elif campos_grade_edicao:
-                            st.markdown("Detalhes da Grade:")
                         else:
                             st.info("Nenhum detalhe de grade para esta categoria.")
                     with col_cashback:
@@ -473,7 +482,7 @@ def gestao_produtos():
                         novo_cashback_percent = 0.0
                         if edit_oferece_cashback:
                             novo_cashback_percent = st.number_input("Cashback (%)", min_value=0.0, max_value=100.0, value=current_cashback if current_cashback > 0 else 3.0, step=0.5, key=f"edit_cbk_val_{eid}")
-                    
+
                     _, col_save, col_cancel = st.columns([3, 1.5, 1.5])
                     if col_save.button("💾 Salvar", key=f"save_{eid}", type="primary", use_container_width=True):
                         preco_vista_float = to_float(novo_preco_vista)
