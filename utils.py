@@ -406,7 +406,6 @@ def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str):
     Salva o DataFrame de produtos localmente como backup e o envia para o GitHub.
     Evita sobrescrever o CSV remoto quando o DataFrame está vazio.
     """
-
     # 🚨 Proteção contra sobrescrita acidental
     if df is None or df.empty:
         st.warning("⚠️ Nenhum produto para salvar — operação ignorada para evitar sobrescrever o CSV no GitHub.")
@@ -892,5 +891,6 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
