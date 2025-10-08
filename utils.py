@@ -176,29 +176,45 @@ def norm_promocoes(df_promocoes: pd.DataFrame) -> pd.DataFrame:
     ].copy()
     return df_ativas[COLUNAS_PROMO_NOVAS]
 
-def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
-    """Função genérica para salvar o livro caixa (dividas/movimentações) no GitHub."""
+def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
+    """
+    Função para salvar o Livro Caixa (movimentações) no GitHub. 
+    (Substitui 'salvar_historico_no_github' para maior clareza de uso).
+    """
+    # Importa as constantes necessárias (melhor deixar fora do try/except se possível)
     try:
         from constants_and_css import PATH_DIVIDAS as CONST_PATH, OWNER as CONST_OWNER, REPO_NAME as CONST_REPO, BRANCH as CONST_BRANCH
+        from constants_and_css import GITHUB_TOKEN, ARQ_LOCAL # Garante a importação de GITHUB_TOKEN e ARQ_LOCAL
     except Exception:
+        # Se as constantes não carregarem, a falha é estrutural.
         return False
+        
+    # --- 1. Busca de Credenciais ---
+    # Usando o GITHUB_TOKEN já importado, garantindo o fallback
     token = (st.secrets.get("GITHUB_TOKEN") or st.secrets.get("github_token") or GITHUB_TOKEN)
     repo_owner = st.secrets.get("REPO_OWNER") or st.secrets.get("owner") or CONST_OWNER
     repo_name = st.secrets.get("REPO_NAME") or st.secrets.get("repo") or CONST_REPO
     branch = st.secrets.get("BRANCH") or CONST_BRANCH
     csv_remote_path = CONST_PATH or "movimentacoes.csv"
+    
     if not token:
         st.warning("⚠️ Nenhum token do GitHub encontrado. Salve manualmente.")
         return False
+        
+    # --- 2. Backup Local (Corrigido index=True para index=False se for Livro Caixa) ---
     try:
-        df.to_csv(ARQ_LOCAL, index=True, encoding="utf-8-sig")
+        # Nota: Livro Caixa geralmente não usa index=True, mas mantive o original se for seu requisito
+        df.to_csv(ARQ_LOCAL, index=False, encoding="utf-8-sig") 
     except Exception as e:
         st.error(f"Erro ao salvar localmente: {e}")
+        
+    # --- 3. Envio para o GitHub ---
     try:
         from github import Github
         g = Github(token)
         repo = g.get_repo(f"{repo_owner}/{repo_name}")
         csv_content = df.to_csv(index=False, encoding="utf-8-sig")
+        
         try:
             contents = repo.get_contents(csv_remote_path, ref=branch)
             repo.update_file(contents.path, commit_message, csv_content, contents.sha, branch=branch)
@@ -206,8 +222,12 @@ def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
         except Exception:
             repo.create_file(csv_remote_path, commit_message, csv_content, branch=branch)
             st.success("📁 Arquivo de dados criado no GitHub!")
+            
+        # A LINHA CRÍTICA: LIMPEZA DO CACHE PARA FORÇAR O RELOAD
         carregar_livro_caixa.clear()
+        
         return True
+        
     except Exception as e:
         st.warning(f"Falha ao enviar dados para o GitHub — backup local mantido. ({e})")
         return False
@@ -648,6 +668,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
