@@ -159,11 +159,9 @@ def relatorio_produtos():
 
 
 def gestao_produtos():
-        # Evita apagar o CSV quando o DataFrame está vazio
-    if produtos is not None and not produtos.empty:
-        save_data_github_produtos(produtos, ARQ_PRODUTOS, COMMIT_MESSAGE_PROD)
-    else:
-        st.warning("⚠️ Produtos não carregados — nada foi salvo no GitHub para evitar sobrescrita.")
+    produtos = inicializar_produtos()
+    st.header("📦 Gestão de Produtos e Estoque")
+    save_data_github_produtos(produtos, ARQ_PRODUTOS, COMMIT_MESSAGE_PROD)
 
     tab_cadastro, tab_lista, tab_relatorio = st.tabs(["📝 Cadastro de Produtos", "📑 Lista & Busca", "📈 Relatório e Alertas"])
 
@@ -306,16 +304,6 @@ def gestao_produtos():
 
     with tab_lista:
         st.subheader("📑 Lista & Busca de Produtos")
-
-        # NOVO BOTÃO PARA RECARREGAR OS DADOS
-        if st.button("🔄 Recarregar Dados do CSV", help="Força a releitura do arquivo de produtos do GitHub."):
-            try:
-                inicializar_produtos.clear()
-                st.success("Cache de produtos limpo! Recarregando os dados mais recentes...")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Ocorreu um erro ao tentar limpar o cache: {e}")
-
         with st.expander("🔍 Pesquisar produto", expanded=True):
             criterio = st.selectbox("Pesquisar por:", ["Nome", "Marca", "Código de Barras", "Valor", "Detalhe de Grade (Cor, Tamanho, etc.)"])
             termo = st.text_input("Digite para buscar:")
@@ -509,6 +497,3 @@ def gestao_produtos():
 
     with tab_relatorio:
         relatorio_produtos()
-
-
-
