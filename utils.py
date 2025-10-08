@@ -505,7 +505,7 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
         )
         if salvar_produtos_no_github(produtos, f"Novo produto simples: {nome} (ID {new_id})"):
             st.session_state.produtos = produtos
-            inicializar_produtos.clear()
+            carregar_produtos.clear()
             st.success(f"Produto '{nome}' cadastrado com sucesso!")
             st.session_state.cad_nome = ""
             st.session_state.cad_marca = ""
@@ -638,3 +638,4 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
