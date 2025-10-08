@@ -160,6 +160,12 @@ def relatorio_produtos():
 
 def gestao_produtos():
     produtos = inicializar_produtos()
+
+    # ADICIONE AS LINHAS ABAIXO PARA TESTAR
+    st.write("Debug: Conteúdo do DataFrame carregado:")
+    st.dataframe(produtos)
+    st.stop() # Para a execução do app aqui
+
     st.header("📦 Gestão de Produtos e Estoque")
     
 
@@ -497,4 +503,5 @@ def gestao_produtos():
 
     with tab_relatorio:
         relatorio_produtos()
+
 
