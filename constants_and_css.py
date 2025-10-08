@@ -60,6 +60,8 @@ URL_NOVIDADES = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mi
 
 # ==================== FUNÇÕES DE CONFIGURAÇÃO DO APP ====================
 
+# ==================== FUNÇÕES DE CONFIGURAÇÃO DO APP ====================
+
 def render_global_config():
     """Define a configuração da página e injeta o CSS customizado."""
     st.set_page_config(
@@ -71,70 +73,7 @@ def render_global_config():
     # Adiciona CSS customizado
     st.markdown("""
         <style>
-        /* Oculta menu padrão e footer */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-
-        /* Oculta a toolbar (menu de 3 pontos e deploy do topo) */
-        [data-testid="stToolbar"] {display: none !important; height: 0 !important;}
-
-        /* === Remove links/botões externos do Streamlit (perfil, share, report, etc.) === */
-        a[href*="streamlit.io"],
-        a[href*="share.streamlit.io"],
-        a[href*="discuss.streamlit.io"],
-        a[href*="twitter.com/streamlit"],
-        a[href*="github.com/streamlit"],
-        a[target="_blank"][rel="noopener noreferrer"],
-        a[data-testid="stAppDeployButton"],
-        [data-testid="stStatusWidget"],
-        [data-testid="stDecoration"] {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-            height: 0 !important;
-            width: 0 !important;
-        }
-
-        /* Fundo global */
-        .stApp { background-color: #f7f7f7; }
-
-        /* Header customizado */
-        div.header-container {
-            padding: 10px 0;
-            background-color: #E91E63;
-            color: white;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 100%;
-        }
-
-        /* Botões da nav */
-        .stButton > button {
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
-        }
-
-        /* Oculta a sidebar */
-        [data-testid="stSidebar"] {
-            visibility: hidden; 
-            width: 0 !important;
-        }
-
-        /* Estilos adicionais */
-        .homepage-title { color: #E91E63; font-size: 3em; font-weight: 700; text-shadow: 2px 2px #fbcfe8; }
-        .homepage-subtitle { color: #880E4F; font-size: 1.5em; margin-top: -10px; margin-bottom: 20px; }
-        .insta-card { background-color: white; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.1); padding: 15px; height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
-        .insta-header { display: flex; align-items: center; font-weight: bold; color: #E91E63; margin-bottom: 10px; }
-        .product-card { background-color: white; border-radius: 10px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); text-align: center; height: 100%; width: 250px; flex-shrink: 0; margin-right: 15px; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.2s; }
-        .product-card:hover { transform: translateY(-5px); }
-        .buy-button { background-color: #E91E63; color: white; font-weight: bold; border-radius: 20px; border: none; padding: 8px 15px; cursor: pointer; width: 100%; margin-top: 10px; }
-        .carousel-outer-container { width: 100%; overflow-x: auto; padding-bottom: 20px; }
-        .product-wrapper { display: flex; flex-direction: row; justify-content: flex-start; gap: 15px; padding: 0 50px; min-width: fit-content; margin: 0 auto; }
-        .section-header-img { max-width: 400px; height: auto; display: block; margin: 0 auto 10px; }
+        # ... (todo o seu CSS aqui dentro) ...
         </style>
     """, unsafe_allow_html=True)
 
@@ -166,5 +105,6 @@ def render_custom_header(paginas_ordenadas, paginas_map):
         st.markdown('<div class="header-container">', unsafe_allow_html=True)
         render_header(paginas_ordenadas, paginas_map)
         st.markdown('</div>', unsafe_allow_html=True)
+
 
 
