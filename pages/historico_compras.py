@@ -1,6 +1,7 @@
 # pages/historico_compras.py
 
 import streamlit as st
+import plotly.express as px 
 import pandas as pd
 from datetime import date, timedelta
 # ... (outros imports)
@@ -325,6 +326,7 @@ def historico_compras():
                         st.rerun()
             else:
                 st.info("Selecione um item no menu acima para editar ou excluir.")
+
 
 
 
