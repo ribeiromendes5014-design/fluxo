@@ -133,17 +133,43 @@ def format_produtos_resumo(produtos_json):
 
 # =================================================================================
 # 🔍 Utilitários de carregamento remoto (GitHub raw)
+# =================================================================================
+
+# Substitua a sua função antiga por esta versão melhorada
 def load_csv_github(url: str) -> pd.DataFrame | None:
+    """
+    Carrega um CSV de uma URL raw do GitHub com tratamento de erro aprimorado.
+    """
     try:
         response = requests.get(url, timeout=15)
+        
+        # Levanta um erro HTTP para respostas ruins (404, 500, etc.)
         response.raise_for_status()
+        
+        # Tenta ler o CSV a partir do conteúdo de texto da resposta
         df = pd.read_csv(StringIO(response.text), dtype=str)
-        # Padroniza as colunas imediatamente após a leitura para MAIÚSCULAS com underscore
-        df.columns = [col.upper().replace(' ', '_') for col in df.columns]
+        
+        # Padroniza as colunas imediatamente após a leitura
+        if not df.empty:
+            df.columns = [str(col).upper().replace(' ', '_') for col in df.columns]
+
         if df is None or df.empty or len(df.columns) < 2:
+            st.warning(f"⚠️ O arquivo CSV carregado da URL '{url}' está vazio ou mal formatado.")
             return None
+            
         return df
-    except Exception:
+
+    except requests.exceptions.RequestException as e:
+        # Erro específico para problemas de rede, URL, permissão, etc.
+        st.error(f"❌ Erro de Conexão/HTTP ao tentar acessar: {url}")
+        st.error(f"Detalhes do Erro: {e}")
+        st.info("Verifique se as suas 'secrets' (REPO_OWNER, REPO_NAME, GITHUB_TOKEN) estão corretas e se o repositório é público ou se o token tem permissão.")
+        return None
+        
+    except Exception as e:
+        # Captura outros erros inesperados (ex: erro de parsing do CSV)
+        st.error(f"❌ Ocorreu um erro inesperado ao processar o arquivo de: {url}")
+        st.error(f"Detalhes do Erro: {e}")
         return None
 
 
@@ -708,5 +734,6 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
