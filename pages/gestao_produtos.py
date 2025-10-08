@@ -159,15 +159,11 @@ def relatorio_produtos():
 
 
 def gestao_produtos():
-    produtos = inicializar_produtos()
-    st.header("📦 Gestão de Produtos e Estoque")
-
-# Evita apagar o CSV quando o DataFrame está vazio
-   if produtos is not None and not produtos.empty:
-    save_data_github_produtos(produtos, ARQ_PRODUTOS, COMMIT_MESSAGE_PROD)
-   else:
-      st.warning("⚠️ Produtos não carregados — nada foi salvo no GitHub para evitar sobrescrita.")
-
+        # Evita apagar o CSV quando o DataFrame está vazio
+    if produtos is not None and not produtos.empty:
+        save_data_github_produtos(produtos, ARQ_PRODUTOS, COMMIT_MESSAGE_PROD)
+    else:
+        st.warning("⚠️ Produtos não carregados — nada foi salvo no GitHub para evitar sobrescrita.")
 
     tab_cadastro, tab_lista, tab_relatorio = st.tabs(["📝 Cadastro de Produtos", "📑 Lista & Busca", "📈 Relatório e Alertas"])
 
@@ -513,5 +509,6 @@ def gestao_produtos():
 
     with tab_relatorio:
         relatorio_produtos()
+
 
 
