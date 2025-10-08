@@ -13,7 +13,6 @@ import ast
 import calendar
 import os
 
-
 # =================================================================================
 # Importa as constantes de negócio e de arquivo
 from constants_and_css import (
@@ -23,7 +22,6 @@ from constants_and_css import (
     COLUNAS_PRODUTOS, FATOR_CARTAO, COMMIT_MESSAGE, COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
 )
 # =================================================================================
-
 
 # ==================== FUNÇÕES DE TRATAMENTO BÁSICO ====================
 
@@ -419,11 +417,24 @@ def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str):
         g = Github(token)
         repo = g.get_repo(f"{repo_owner}/{repo_name}")
 
-        # Garante que as colunas no CSV estejam em CamelCase como esperado no arquivo
-        camel_case_map = {c.upper(): c for c in COLUNAS_PRODUTOS}
+        # CRIA O MAPA COM TODAS AS COLUNAS ESPERADAS (Assumindo que Cash/Detalhe foram adicionados)
+        COLUNAS_PRODUTOS_COMPLETAS = COLUNAS_PRODUTOS + ["CashbackPercent", "DetalhesGrade"]
+        camel_case_map = {c.upper(): c for c in COLUNAS_PRODUTOS_COMPLETAS}
+
         df_to_save = df.copy()
+        
+        # Garante que as colunas existam no DF a ser salvo antes de renomear e converter
+        for col_camel, col_upper in camel_case_map.items():
+             if col_camel not in df_to_save.columns:
+                 # Se a coluna CamelCase não existe (e deveria), cria com valor padrão
+                 df_to_save[col_camel] = ''
+
+        # Renomeia do formato MAIÚSCULO/UNDERSCORE (se vier assim) para CamelCase
         df_to_save.rename(columns=camel_case_map, inplace=True, errors='ignore')
         
+        # Reordena para garantir que o CSV tenha a ordem correta
+        df_to_save = df_to_save[[c for c in COLUNAS_PRODUTOS_COMPLETAS if c in df_to_save.columns]]
+
         # Converte o DataFrame para CSV
         csv_content = df_to_save.to_csv(index=False, encoding="utf-8-sig")
 
@@ -502,9 +513,6 @@ def carregar_livro_caixa():
     return processar_dataframe(df)
 
 
-# =================================================================================
-# 🔄 Funções de carregamento com cache
-# =================================================================================
 @st.cache_data(show_spinner="Carregando produtos do estoque...")
 def inicializar_produtos():
     if "produtos" not in st.session_state:
@@ -524,11 +532,11 @@ def inicializar_produtos():
         else:
             df_base = df_carregado
 
-        # CORREÇÃO 1: Adicionar colunas ausentes e padronizá-las para CamelCase
-        # Assumindo a lista completa de colunas, mesmo que COLUNAS_PRODUTOS esteja incompleta
+        # CRIA A LISTA COMPLETA DE COLUNAS (incluindo as que estavam faltando)
         COLUNAS_PRODUTOS_COMPLETAS = COLUNAS_PRODUTOS + ["CashbackPercent", "DetalhesGrade"]
         COLUNAS_PRODUTOS_UPPER = [c.upper() for c in COLUNAS_PRODUTOS_COMPLETAS]
-
+        
+        # Processamento dos dados (em MAIÚSCULAS)
         for col in COLUNAS_PRODUTOS_UPPER:
             if col not in df_base.columns:
                 df_base[col] = ''
@@ -542,13 +550,13 @@ def inicializar_produtos():
         
         # 🚨 CORREÇÃO CRÍTICA: Conversão de tipos para as novas colunas
         df_base["CASHBACKPERCENT"] = pd.to_numeric(df_base["CASHBACKPERCENT"], errors='coerce').fillna(0.0)
+        # Garante que DetalhesGrade seja sempre uma string representando um dicionário vazio se for nulo
         df_base["DETALHESGRADE"] = df_base["DETALHESGRADE"].astype(str).replace('nan', '{}').replace('', '{}')
         
-        # Filtra apenas as colunas necessárias (agora a lista contém todas as 14)
+        # Filtra apenas as colunas necessárias
         df_base = df_base[[col for col in COLUNAS_PRODUTOS_UPPER if col in df_base.columns]]
         
         # --- BLOCO CRÍTICO: Renomear de volta para o formato CamelCase esperado pelas páginas ---
-        # Usa todas as colunas para o mapeamento
         camel_case_map = {c.upper(): c for c in COLUNAS_PRODUTOS_COMPLETAS}
         df_base.rename(columns=camel_case_map, inplace=True, errors='ignore')
         # --- FIM DO BLOCO CRÍTICO ---
@@ -634,14 +642,19 @@ def ler_codigo_barras_api(image_bytes):
 
 
 # ==================== FUNÇÕES DE CALLBACK (PRODUTOS) ====================
-# (Mantidas)
+# CORRIGIDO: Adiciona CashbackPercent e DetalhesGrade
 # =================================================================================
-def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variacoes, cashback_percent=0.0): # 🚨 Alterado
+# ATENÇÃO: A função callback_salvar_novo_produto no arquivo 'py.py' (enviado anteriormente)
+# tem 13 argumentos. Para compatibilidade, é preciso garantir que a assinatura aqui também tenha 13.
+# O py.py tinha: callback_salvar_novo_produto(produtos.copy(), tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações, cashback_percent)
+# O código original (que estava incompleto) tinha 12.
+def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variacoes, cashback_percent=0.0):
     if not nome:
         st.error("O nome do produto é obrigatório.")
         return False
 
-    def add_product_row(df, p_id, p_nome, p_marca, p_categoria, p_qtd, p_custo, p_vista, p_cartao, p_validade, p_foto, p_cb, p_pai_id=None, p_cashback=0.0, p_detalhes="{}"): # 🚨 Alterado
+    # CORRIGIDO: Adiciona p_cashback e p_detalhes na definição da linha
+    def add_product_row(df, p_id, p_nome, p_marca, p_categoria, p_qtd, p_custo, p_vista, p_cartao, p_validade, p_foto, p_cb, p_pai_id=None, p_cashback=0.0, p_detalhes="{}"):
         novo_id = prox_id(df, "ID")
         # Mantém as chaves CamelCase aqui para que a escrita use o cabeçalho original se for o caso
         novo = {
@@ -657,8 +670,8 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             "FotoURL": p_foto.strip(),
             "CodigoBarras": str(p_cb).strip(),
             "PaiID": str(p_pai_id).strip() if p_pai_id else "",
-            "CashbackPercent": to_float(p_cashback), # 🚨 Nova coluna
-            "DetalhesGrade": p_detalhes # 🚨 Nova coluna
+            "CashbackPercent": to_float(p_cashback),  # 🚨 Nova coluna
+            "DetalhesGrade": p_detalhes              # 🚨 Nova coluna
         }
         return pd.concat([df, pd.DataFrame([novo])], ignore_index=True), novo_id
 
@@ -668,10 +681,22 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             qtd, preco_custo, preco_vista,
             round(to_float(preco_vista) / FATOR_CARTAO, 2) if to_float(preco_vista) > 0 else 0.0,
             validade, foto_url, codigo_barras,
-            p_cashback=cashback_percent # 🚨 Passa o cashback
+            p_cashback=cashback_percent # Passa o cashback
         )
         if salvar_produtos_no_github(produtos, f"Novo produto simples: {nome} (ID {new_id})"):
-            # ... (código de sucesso e limpeza de session_state)
+            st.session_state.produtos = produtos
+            inicializar_produtos.clear()
+            st.success(f"Produto '{nome}' cadastrado com sucesso!")
+            st.session_state.cad_nome = ""
+            st.session_state.cad_marca = ""
+            st.session_state.cad_categoria = ""
+            st.session_state.cad_qtd = 0
+            st.session_state.cad_preco_custo = "0,00"
+            st.session_state.cad_preco_vista = "0,00"
+            if "cad_validade" in st.session_state: st.session_state.cad_validade = date.today()
+            st.session_state.cad_foto_url = ""
+            if "codigo_barras" in st.session_state:
+                del st.session_state["codigo_barras"]
             return True
         return False
 
@@ -681,11 +706,10 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             0, 0.0, 0.0, 0.0,
             validade, foto_url, codigo_barras,
             p_pai_id=None,
-            p_cashback=cashback_percent # 🚨 Passa o cashback do pai
+            p_cashback=cashback_percent # Passa o cashback do pai
         )
         cont_variacoes = 0
         for var in variacoes:
-            # Converte DetalhesGrade para string JSON ou representation
             detalhes_grade_str = str(var.get("DetalhesGrade", "{}"))
             
             if var.get("Nome") and var.get("Quantidade", 0) > 0:
@@ -695,17 +719,28 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
                     var["Quantidade"], var["PrecoCusto"], var["PrecoVista"], var["PrecoCartao"],
                     validade, var.get("FotoURL", foto_url), var.get("CodigoBarras", ""),
                     p_pai_id=pai_id,
-                    p_cashback=var.get("CashbackPercent", 0.0), # 🚨 Passa o cashback da variação
-                    p_detalhes=detalhes_grade_str # 🚨 Passa os detalhes da grade
+                    p_cashback=var.get("CashbackPercent", 0.0), # Passa o cashback da variação
+                    p_detalhes=detalhes_grade_str # Passa os detalhes da grade
                 )
                 cont_variacoes += 1
 
         if cont_variacoes > 0:
             if salvar_produtos_no_github(produtos, f"Novo produto com grade: {nome} ({cont_variacoes} variações)"):
-                # ... (código de sucesso e limpeza de session_state)
+                st.session_state.produtos = produtos
+                inicializar_produtos.clear()
+                st.success(f"Produto '{nome}' com {cont_variacoes} variações cadastrado com sucesso!")
+                st.session_state.cad_nome = ""
+                st.session_state.cad_marca = ""
+                st.session_state.cad_categoria = ""
+                if "cad_validade" in st.session_state: st.session_state.cad_validade = date.today()
+                st.session_state.cad_foto_url = ""
+                if "codigo_barras" in st.session_state:
+                    del st.session_state["codigo_barras"]
+                st.session_state.cb_grade_lidos = {}
                 return True
             return False
         else:
+            # Exclui o produto pai que foi criado se não houver variações válidas
             produtos = produtos[produtos["ID"] != pai_id]
             st.session_state.produtos = produtos
             st.error("Nenhuma variação válida foi fornecida. O produto principal não foi salvo.")
@@ -818,9 +853,3 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
-
-
-
-
-
-
