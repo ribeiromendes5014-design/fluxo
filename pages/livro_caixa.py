@@ -13,204 +13,21 @@ import plotly.express as px
 import base64
 import calendar 
 
+# Importando constantes e funções de renderização
+from constants_and_css import * # Importa todas as constantes
+from render_utils import render_global_config, render_custom_header # Importa as funções de renderização
+
 # ==============================================================================
-# CONFIGURAÇÃO GERAL E INÍCIO DO APP (Mantido)
+# CONFIGURAÇÃO GERAL E INÍCIO DO APP (Movido para render_utils)
 # ==============================================================================
 
-# Configuração da página para ter largura total e usar o estilo web
-# Define o tema de cores com base no estilo da imagem (predominantemente rosa/magenta)
-st.set_page_config(
-    layout="wide", 
-    page_title="Doce&Bella | Gestão Financeira", 
-    page_icon="🌸"
-)
+# Executa a configuração global e injeta o CSS
+render_global_config()
 
-# Caminho para o logo carregado. 
-# ATUALIZAÇÃO: Usando a URL do CloudFront para maior estabilidade.
-LOGO_DOCEBELLA_FILENAME = "logo_docebella.jpg"
-LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png" # Link direto para o logo
+# ==============================================================================
+# FUNÇÕES CORE (Mantidas e verificadas para persistência)
+# ==============================================================================
 
-# URLs das Imagens de Seção (CloudFront)
-URL_MAIS_VENDIDOS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-queridinhos1.png"
-URL_OFERTAS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-oferta.png"   
-URL_NOVIDADES = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-novidades.png"
-
-
-# Adiciona CSS para simular a navegação no topo e o tema pink/magenta
-st.markdown("""
-    <style>
-    /* 1. Oculta o menu padrão do Streamlit e o footer */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    
-    /* 2. Estilo Global e Cor de Fundo do Header (simulando a barra superior) */
-    .stApp {
-        background-color: #f7f7f7; /* Fundo mais claro */
-    }
-    
-    /* 3. Container customizado do Header (cor Magenta da Loja) */
-    div.header-container {
-        padding: 10px 0;
-        background-color: #E91E63; /* Cor Magenta Forte */
-        color: white;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        width: 100%;
-    }
-    
-    /* 4. Estilo dos botões/abas de Navegação (dentro do header) */
-    .nav-button-group {
-        display: flex;
-        gap: 20px;
-        align-items: center;
-        padding-right: 20px;
-    }
-    
-    /* Remove a Sidebar do Streamlit padrão, pois usaremos a navegação customizada no topo */
-    [data-testid="stSidebar"] {
-        width: 350px; 
-    }
-    
-    /* Estilo para a homepage */
-    .homepage-title {
-        color: #E91E63;
-        font-size: 3em;
-        font-weight: 700;
-        text-shadow: 2px 2px #fbcfe8; /* Sombra suave rosa claro */
-    }
-    .homepage-subtitle {
-        color: #880E4F;
-        font-size: 1.5em;
-        margin-top: -10px;
-        margin-bottom: 20px;
-    }
-
-    /* Estilo para simular os cards de redes sociais (Novidades) */
-    .insta-card {
-        background-color: white;
-        border-radius: 15px;
-        overflow: hidden;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-        padding: 15px;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
-    .insta-header {
-        display: flex;
-        align-items: center;
-        font-weight: bold;
-        color: #E91E63;
-        margin-bottom: 10px;
-    }
-    
-    /* --- Estilo dos Cards de Produto (Para dentro do carrossel) --- */
-    .product-card {
-        background-color: white;
-        border-radius: 10px;
-        padding: 15px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        text-align: center;
-        height: 100%;
-        width: 250px; /* Largura Fixa para o Card no Carrossel */
-        flex-shrink: 0; /* Impede o encolhimento */
-        margin-right: 15px; /* Espaçamento entre os cards */
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        transition: transform 0.2s;
-    }
-    .product-card:hover {
-        transform: translateY(-5px);
-    }
-    .product-card img {
-        height: 150px;
-        object-fit: contain;
-        margin: 0 auto 10px;
-        border-radius: 5px;
-    }
-    .price-original {
-        color: #888;
-        text-decoration: line-through;
-        font-size: 0.85em;
-        margin-right: 5px;
-    }
-    .price-promo {
-        color: #E91E63;
-        font-weight: bold;
-        font-size: 1.2em;
-    }
-    /* CORREÇÃO: CSS para o botão em HTML */
-    .buy-button {
-        background-color: #E91E63;
-        color: white;
-        font-weight: bold;
-        border-radius: 20px;
-        border: none;
-        padding: 8px 15px;
-        cursor: pointer;
-        width: 100%;
-        margin-top: 10px; /* Adiciona margem para separação */
-    }
-    
-    /* --- Estilo da Seção de Ofertas (Fundo Rosa) --- */
-    .offer-section {
-        background-color: #F8BBD0; /* Rosa mais claro para o fundo */
-        padding: 40px 20px;
-        border-radius: 15px;
-        margin-top: 40px;
-        text-align: center;
-    }
-    .offer-title {
-        color: #E91E63;
-        font-size: 2.5em;
-        font-weight: 700;
-        margin-bottom: 20px;
-    }
-    .megaphone-icon {
-        color: #E91E63;
-        font-size: 3em;
-        margin-bottom: 10px;
-        display: inline-block;
-    }
-
-    /* --- CLASSES PARA CARROSSEL HORIZONTAL --- */
-    /* Contêiner que controla a barra de rolagem e centraliza o conteúdo */
-    .carousel-outer-container {
-        width: 100%;
-        overflow-x: auto;
-        padding-bottom: 20px; 
-    }
-    
-    /* Wrapper interno que força o alinhamento horizontal e permite centralização */
-    .product-wrapper {
-        display: flex; /* FORÇA OS CARDS A FICAREM LADO A LADO */
-        flex-direction: row;
-        justify-content: flex-start; 
-        gap: 15px;
-        padding: 0 50px; 
-        min-width: fit-content; 
-        margin: 0 auto; 
-    }
-    
-    /* Classe para controlar o tamanho das imagens de título */
-    .section-header-img {
-        max-width: 400px; 
-        height: auto;
-        display: block;
-        margin: 0 auto 10px; 
-    }
-
-    </style>
-""", unsafe_allow_html=True)
-
-
-# --- Funções e Constantes de Persistência (Mantidas do original) ---
-
-# Importa a biblioteca PyGithub para gerenciamento de persistência
 try:
     from github import Github
 except ImportError:
@@ -221,55 +38,29 @@ except ImportError:
         def create_file(self, path, msg, content, branch): pass
 
 def ler_codigo_barras_api(image_bytes):
-    """
-    Decodifica códigos de barras (1D e QR) usando a API pública ZXing.
-    Mais robusta que WebQR porque suporta EAN/UPC/Code128 além de QR Codes.
-    """
+    """Decodifica códigos de barras usando a API pública ZXing."""
     URL_DECODER_ZXING = "https://zxing.org/w/decode"
     
     try:
-        # ⚠️ IMPORTANTE: ZXing espera o arquivo no campo 'f', não 'file'
         files = {"f": ("barcode.png", image_bytes, "image/png")}
-        
         response = requests.post(URL_DECODER_ZXING, files=files, timeout=30)
-
         if response.status_code != 200:
-            if 'streamlit' in globals():
-                st.error(f"❌ Erro na API ZXing. Status HTTP: {response.status_code}")
+            if 'streamlit' in globals(): st.error(f"❌ Erro na API ZXing. Status HTTP: {response.status_code}")
             return []
-
         text = response.text
         codigos = []
-
-        # Parse simples do HTML retornado
         if "<pre>" in text:
             partes = text.split("<pre>")
             for p in partes[1:]:
                 codigo = p.split("</pre>")[0].strip()
                 if codigo and not codigo.startswith("Erro na decodificação"):
                     codigos.append(codigo)
-
         if not codigos and 'streamlit' in globals():
-            # Alterado para toast para menos intrusão, caso a leitura falhe
             st.toast("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
-
         return codigos
-
-    except ConnectionError as ce:
-        if 'streamlit' in globals():
-            st.error(f"❌ Erro de Conexão: O servidor ZXing recusou a conexão. Detalhe: {ce}")
-        return []
-        
-    except RequestException as e:
-        if 'streamlit' in globals():
-            st.error(f"❌ Erro de Requisição (Timeout/Outro): Falha ao completar a chamada à API ZXing. Detalhe: {e}")
-        return []
-    
     except Exception as e:
-        if 'streamlit' in globals():
-            st.error(f"❌ Erro inesperado: {e}")
+        if 'streamlit' in globals(): st.error(f"❌ Erro inesperado: {e}")
         return []
-
 
 def add_months(d: date, months: int) -> date:
     """Adiciona um número específico de meses a uma data."""
@@ -278,57 +69,6 @@ def add_months(d: date, months: int) -> date:
     month = (month - 1) % 12 + 1
     day = min(d.day, calendar.monthrange(year, month)[1])
     return date(year, month, day)
-
-# ==================== CONFIGURAÇÕES DO APLICATIVO E CONSTANTES ====================
-try:
-    TOKEN = st.secrets["GITHUB_TOKEN"]
-    OWNER = st.secrets["REPO_OWNER"]
-    REPO_NAME = st.secrets["REPO_NAME"]
-    CSV_PATH = st.secrets["CSV_PATH"] 
-    BRANCH = st.secrets.get("BRANCH", "main")
-    
-    GITHUB_TOKEN = TOKEN
-    GITHUB_REPO = f"{OWNER}/{REPO_NAME}"
-    GITHUB_BRANCH = BRANCH
-    
-except KeyError:
-    TOKEN = "TOKEN_FICTICIO"
-    OWNER = "user"
-    REPO_NAME = "repo_default"
-    CSV_PATH = "contas_a_pagar_receber.csv"
-    BRANCH = "main"
-
-    GITHUB_TOKEN = TOKEN
-    GITHUB_REPO = f"{OWNER}/{REPO_NAME}"
-    GITHUB_BRANCH = BRANCH
-
-# Caminhos dos arquivos
-URL_BASE_REPOS = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/"
-ARQ_PRODUTOS = "produtos_estoque.csv"
-ARQ_LOCAL = "livro_caixa.csv" # Usado para backup local e constante
-PATH_DIVIDAS = CSV_PATH
-ARQ_COMPRAS = "historico_compras.csv"
-ARQ_PROMOCOES = "promocoes.csv" 
-COLUNAS_COMPRAS = ["Data", "Produto", "Quantidade", "Valor Total", "Cor", "FotoURL"] 
-
-COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit (com produtos/categorias)"
-COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa"
-COMMIT_MESSAGE_EDIT = "Edita movimentação via Streamlit"
-COMMIT_MESSAGE_DEBT_REALIZED = "Conclui dívidas pendentes"
-COMMIT_MESSAGE_PROD = "Atualização automática de estoque/produtos"
-
-COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo", "Produtos Vendidos", "Categoria", "Status", "Data Pagamento"]
-# Adicionando TransacaoPaiID para rastrear pagamentos parciais
-COLUNAS_PADRAO_COMPLETO = COLUNAS_PADRAO + ["RecorrenciaID", "TransacaoPaiID"]
-COLUNAS_COMPLETAS_PROCESSADAS = COLUNAS_PADRAO + ["ID Visível", "original_index", "Data_dt", "Saldo Acumulado", "Cor_Valor"]
-
-FATOR_CARTAO = 0.8872
-LOJAS_DISPONIVEIS = ["Doce&bella", "Papelaria", "Fotografia", "Outro"]
-CATEGORIAS_SAIDA = ["Aluguel", "Salários/Pessoal", "Marketing/Publicidade", "Fornecedores/Matéria Prima", "Despesas Fixas", "Impostos/Taxas", "Outro/Diversos", "Não Categorizado"]
-FORMAS_PAGAMENTO = ["Dinheiro", "Cartão", "PIX", "Transferência", "Outro"]
-
-
-# --- Funções de Persistência (Comentários omitidos para brevidade) ---
 
 def to_float(valor_str):
     try:
@@ -346,15 +86,6 @@ def prox_id(df, coluna_id="ID"):
             return str(pd.to_numeric(df[coluna_id], errors='coerce').fillna(0).astype(int).max() + 1)
         except:
             return str(len(df) + 1)
-
-def hash_df(df):
-    df_temp = df.copy()
-    for col in df_temp.select_dtypes(include=['datetime64[ns]']).columns:
-        df_temp[col] = df_temp[col].astype(str)
-    try:
-        return hashlib.md5(df_temp.to_json().encode('utf-8')).hexdigest()
-    except Exception:
-        return "error" 
 
 def load_csv_github(url: str) -> pd.DataFrame | None:
     try:
@@ -410,13 +141,11 @@ def carregar_historico_compras():
             df[col] = "" 
     return df[[col for col in COLUNAS_COMPRAS if col in df.columns]]
 
-# Manter essa função para compatibilidade, mas ela é apenas um placeholder no 333.py original
 def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
-    # CORREÇÃO DE PERSISTÊNCIA: Adiciona a chamada real para salvar no GitHub/local
+    """Salva o histórico de compras. CORRIGIDO para usar o ARQ_COMPRAS."""
     try:
         from github import Github
     except ImportError:
-        # Se a biblioteca não estiver instalada, o salvamento no github falhará, mas o backup local será feito
         pass
         
     # 1. Backup local 
@@ -425,10 +154,8 @@ def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
     except Exception:
         pass
 
-    # 2. Envio para o GitHub (usando a mesma lógica de salvar_dados_no_github, mas para o ARQ_COMPRAS)
+    # 2. Envio para o GitHub (usando ARQ_COMPRAS)
     df_temp = df.copy()
-    
-    # Prepara os dados de data para serem salvos como string no formato YYYY-MM-DD
     for col_date in ['Data']:
         if col_date in df_temp.columns:
             df_temp[col_date] = pd.to_datetime(df_temp[col_date], errors='coerce').apply(
@@ -443,15 +170,13 @@ def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
         try:
             contents = repo.get_contents(ARQ_COMPRAS, ref=BRANCH)
             repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
-            # st.success("📁 Histórico de Compras atualizado no GitHub!")
         except Exception:
             repo.create_file(ARQ_COMPRAS, commit_message, csv_string, branch=BRANCH)
-            # st.success("📁 Arquivo de Histórico de Compras criado no GitHub!")
 
+        carregar_historico_compras.clear()
         return True
 
     except Exception as e:
-        # st.error(f"❌ Erro ao salvar histórico de compras no GitHub: {e}")
         return False
 
 @st.cache_data(show_spinner="Carregando dados...")
@@ -496,7 +221,6 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
     
     # 1. Backup local (Tenta salvar, ignora se falhar)
     try:
-        # ARQ_LOCAL = "livro_caixa.csv"
         df.to_csv(ARQ_LOCAL, index=False, encoding="utf-8-sig") 
     except Exception:
         pass
@@ -518,7 +242,6 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
 
         try:
             # Tenta obter o SHA do conteúdo atual
-            # PATH_DIVIDAS = CSV_PATH (Caminho do arquivo no repositório)
             contents = repo.get_contents(PATH_DIVIDAS, ref=BRANCH)
             # Atualiza o arquivo
             repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
@@ -581,16 +304,9 @@ def calcular_resumo(df):
     saldo = df_realizada["Valor"].sum()
     return total_entradas, total_saidas, saldo
 
-# ==============================================================================
-# NOVA FUNÇÃO: Tratamento rigoroso de valor em aberto
-# ==============================================================================
 def calcular_valor_em_aberto(linha):
-    """
-    Calcula o valor absoluto e arredondado para 2 casas decimais de uma linha do DataFrame.
-    Essencial para resolver problemas de float em campos de input do Streamlit.
-    """
+    """Calcula o valor absoluto e arredondado para 2 casas decimais de uma linha do DataFrame."""
     try:
-        # A linha pode ser um DataFrame de 1 linha ou uma Series
         if isinstance(linha, pd.DataFrame) and not linha.empty:
             valor_raw = pd.to_numeric(linha['Valor'].iloc[0], errors='coerce')
         elif isinstance(linha, pd.Series):
@@ -598,14 +314,10 @@ def calcular_valor_em_aberto(linha):
         else:
             return 0.0
             
-        # Garante que é um float único e não NaN
         valor_float = float(valor_raw) if pd.notna(valor_raw) and not isinstance(valor_raw, pd.Series) else 0.0
-        
-        # Retorna o valor absoluto e arredondado
         return round(abs(valor_float), 2)
     except Exception:
         return 0.0
-# ==============================================================================
 
 
 def format_produtos_resumo(produtos_json):
@@ -3054,11 +2766,10 @@ def livro_caixa():
                         commit_msg = f"Cadastro de Dívida Recorrente ({num_parcelas_int} parcelas)"
                         
                     else:
-                        # CORREÇÃO CRÍTICA: Define a categoria para Entradas como a Loja (ou "")
+                        # CORREÇÃO DA CATEGORIA: Define a categoria como Loja (ou "") se for Entrada
                         categoria_final = categoria_selecionada
                         if tipo == "Entrada":
-                            # Se for Entrada (venda), a categoria não deve ser de Saída.
-                            categoria_final = loja_selecionada # Ou use "" se preferir vazia
+                            categoria_final = loja_selecionada # Correção: usa a Loja como Categoria, não a categoria de Saída.
                         
                         # [Bloco de adição/edição de item único]
                         nova_linha_data = {
@@ -3627,42 +3338,11 @@ if "pagina_atual" not in st.session_state:
 
 # --- Renderiza o Header e a Navegação no Topo ---
 
-def render_header():
-    """Renderiza o header customizado com a navegação em botões."""
-    
-    col_logo, col_nav = st.columns([1, 4])
-    
-    with col_logo:
-        # AQUI É A LINHA CORRIGIDA: usa o link direto para o logo.
-        # Se a imagem falhar, o CSS garante que a seção não quebre o layout.
-        st.image(LOGO_DOCEBELLA_URL, width=150)
-        
-    with col_nav:
-        cols_botoes = st.columns([1] * len(PAGINAS))
-        
-        # Cria a lista de páginas na ordem desejada
-        paginas_ordenadas = ["Home", "Livro Caixa", "Produtos", "Promoções", "Histórico de Compra"]
-        
-        for i, nome in enumerate(paginas_ordenadas):
-            if nome in PAGINAS:
-                is_active = st.session_state.pagina_atual == nome
-                
-                # Ajusta o estilo do botão para parecer um item de navegação
-                button_style = "color: white; font-weight: bold; border: none; background: none; cursor: pointer; padding: 10px 5px;"
-                if is_active:
-                    button_style += "border-bottom: 3px solid #FFCDD2; /* Linha de destaque rosa claro */"
-                
-                # Usando st.markdown e st.button em combinação para obter o efeito de botão customizado.
-                if cols_botoes[i].button(nome, key=f"nav_{nome}", use_container_width=True, help=f"Ir para {nome}"):
-                    st.session_state.pagina_atual = nome
-                    st.rerun()
-
-# O Streamlit nativamente não permite HTML/Markdown fora do corpo principal
-# Simulamos o Header customizado no topo da página
-with st.container():
-    st.markdown('<div class="header-container">', unsafe_allow_html=True)
-    render_header()
-    st.markdown('</div>', unsafe_allow_html=True)
+# Usando a função importada de render_utils
+render_custom_header(
+    paginas_ordenadas=["Home", "Livro Caixa", "Produtos", "Promoções", "Histórico de Compra"],
+    paginas_map=PAGINAS
+)
 
 
 # --- RENDERIZAÇÃO DO CONTEÚDO DA PÁGINA ---
