@@ -538,6 +538,7 @@ def carregar_livro_caixa():
 
 @st.cache_data(show_spinner="Carregando produtos do estoque...")
 def inicializar_produtos():
+    st.write("🔗 URL de carregamento:", f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}")
     if "produtos" not in st.session_state:
         # 1. Tenta carregar do GitHub (prioridade)
         url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}"
@@ -876,6 +877,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
