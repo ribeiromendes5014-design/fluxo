@@ -13,12 +13,11 @@ import plotly.express as px
 import base64
 import calendar 
 
-# Importando constantes e funções de renderização
-from constants_and_css import * # Importa todas as constantes
-from render_utils import render_global_config, render_custom_header # Importa as funções de renderização
+# Importando o arquivo de constantes e o utilitário de renderização
+from constants_and_css import * from render_utils import render_global_config, render_custom_header 
 
 # ==============================================================================
-# CONFIGURAÇÃO GERAL E INÍCIO DO APP (Movido para render_utils)
+# CONFIGURAÇÃO GERAL E INÍCIO DO APP (Usando render_global_config)
 # ==============================================================================
 
 # Executa a configuração global e injeta o CSS
