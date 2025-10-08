@@ -19,7 +19,7 @@ COLUNAS_PRODUTOS = [
 ]
 COLUNAS_COMPRAS = ["Data", "Produto", "Quantidade", "Valor Total", "Cor", "FotoURL"] 
 
-# GITHUB SECRETS (Leitura ajustada ao seu secrets.toml)
+# GITHUB SECRETS (Leitura ajustada)
 try:
     # Tenta ler as chaves de nível superior
     TOKEN = st.secrets["GITHUB_TOKEN"]
@@ -30,25 +30,18 @@ try:
     # Lendo o caminho do CSV da seção [livro_caixa]
     CSV_PATH = st.secrets["livro_caixa"]["CSV_PATH"]
     
+    # Configura variáveis globais com sucesso
     GITHUB_TOKEN = TOKEN
     GITHUB_REPO = f"{OWNER}/{REPO_NAME}"
     GITHUB_BRANCH = BRANCH
-except KeyError:
-    # Fallback para valores padrão
+    
+except Exception as e:
+    # Fallback para valores padrão caso qualquer chave falhe
+    print(f"Erro ao ler secrets.toml: {e}. Usando valores padrão.")
     TOKEN = "TOKEN_FICTICIO"
     OWNER = "user"
     REPO_NAME = "repo_default"
-    CSV_PATH = "contas_a_pagar_receber.csv"
-    BRANCH = "main"
-    GITHUB_TOKEN = TOKEN
-    GITHUB_REPO = f"{OWNER}/{REPO_NAME}"
-    GITHUB_BRANCH = BRANCH
-except Exception:
-    # Fallback genérico
-    TOKEN = "TOKEN_FICTICIO"
-    OWNER = "user"
-    REPO_NAME = "repo_default"
-    CSV_PATH = "contas_a_pagar_receber.csv"
+    CSV_PATH = "contas_a_pagar_receber.csv"  # <-- Certifique-se de que este é o fallback correto
     BRANCH = "main"
     GITHUB_TOKEN = TOKEN
     GITHUB_REPO = f"{OWNER}/{REPO_NAME}"
@@ -72,3 +65,4 @@ LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
 URL_MAIS_VENDIDOS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-queridinhos1.png"
 URL_OFERTAS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-oferta.png"   
 URL_NOVIDADES = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-novidades.png"
+
