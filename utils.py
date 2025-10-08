@@ -14,16 +14,16 @@ import calendar
 import os
 
 # =================================================================================
-# Importa as constantes de negócio e de arquivo
+# No arquivo utils.py, corrija o bloco para:
 from constants_and_css import (
     TOKEN, OWNER, REPO_NAME, BRANCH, GITHUB_TOKEN, GITHUB_REPO, GITHUB_BRANCH,
     PATH_DIVIDAS, ARQ_PRODUTOS, ARQ_LOCAL, ARQ_COMPRAS, ARQ_PROMOCOES,
     COLUNAS_COMPRAS, 
     COLUNAS_PADRAO, 
-    COLUNAS_PADRAO_COMPLETO, # <<< GARANTA QUE ESTA LINHA EXISTA
+    COLUNAS_PADRAO_COMPLETO,
     COLUNAS_COMPLETAS_PROCESSADAS,
-    COLUNAS_PRODUTOS, 
-    COLUNAS_PRODUTOS_COMPLETAS, 
+    COLUNAS_PRODUTOS,  # <<< Manter
+    # REMOVA a linha COLUNAS_PRODUTOS_COMPLETAS
     FATOR_CARTAO, COMMIT_MESSAGE, COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
 )
 # =================================================================================
@@ -648,6 +648,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
