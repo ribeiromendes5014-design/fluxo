@@ -419,8 +419,7 @@ def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str):
     except Exception as e:
         st.error(f"Erro ao salvar produtos localmente: {e}")
         return False
-
-
+        
     # --- 2) Tentar salvar no GitHub ---
     token = (
         st.secrets.get("GITHUB_TOKEN")
@@ -877,5 +876,6 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
