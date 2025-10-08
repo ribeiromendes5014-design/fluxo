@@ -538,76 +538,16 @@ def carregar_livro_caixa():
 
 @st.cache_data(show_spinner="Carregando produtos do estoque...")
 def inicializar_produtos():
-    st.write("🔗 URL de carregamento:", f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}")
-    if "produtos" not in st.session_state:
-        # 1. Tenta carregar do GitHub (prioridade)
-        url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}"
-        df_carregado = load_csv_github(url_raw) 
-        
-        # 2. Se o carregamento remoto falhar ou retornar vazio, tenta carregar localmente
-        if df_carregado is None or df_carregado.empty:
-            st.warning("⚠️ Falha ao carregar produtos do GitHub. Tentando carregar o arquivo local...")
-            try:
-                df_base = pd.read_csv(ARQ_PRODUTOS, dtype=str) 
-                df_base.columns = [col.upper() for col in df_base.columns] 
-            except Exception as e:
-                st.error(f"❌ Falha ao carregar o arquivo local ({ARQ_PRODUTOS}): {e}")
-                df_base = pd.DataFrame(columns=[c.upper() for c in COLUNAS_PRODUTOS])
-        else:
-            df_base = df_carregado
-
-        # CRIA A LISTA COMPLETA DE COLUNAS (incluindo as que estavam faltando)
-        COLUNAS_PRODUTOS_COMPLETAS = COLUNAS_PRODUTOS + ["CashbackPercent", "DetalhesGrade"]
-        COLUNAS_PRODUTOS_UPPER = [c.upper() for c in COLUNAS_PRODUTOS_COMPLETAS]
-        
-        # Processamento dos dados (em MAIÚSCULAS)
-        for col in COLUNAS_PRODUTOS_UPPER:
-            if col not in df_base.columns:
-                df_base[col] = ''
-
-        # Conversão de tipos (usando MAIÚSCULAS)
-        df_base["QUANTIDADE"] = pd.to_numeric(df_base["QUANTIDADE"], errors='coerce').fillna(0).astype(int)
-        df_base["PRECOCUSTO"] = pd.to_numeric(df_base["PRECOCUSTO"], errors='coerce').fillna(0.0)
-        df_base["PRECOVISTA"] = pd.to_numeric(df_base["PRECOVISTA"], errors='coerce').fillna(0.0)
-        df_base["PRECOCARTAO"] = pd.to_numeric(df_base["PRECOCARTAO"], errors='coerce').fillna(0.0)
-        df_base["VALIDADE"] = pd.to_datetime(df_base["VALIDADE"], errors='coerce').dt.date
-        
-        # 🚨 CORREÇÃO CRÍTICA: Conversão de tipos para as novas colunas
-        df_base["CASHBACKPERCENT"] = pd.to_numeric(df_base["CASHBACKPERCENT"], errors='coerce').fillna(0.0)
-        # Garante que DetalhesGrade seja sempre uma string representando um dicionário vazio se for nulo
-        df_base["DETALHESGRADE"] = df_base["DETALHESGRADE"].astype(str).replace('nan', '{}').replace('', '{}')
-        
-        # Filtra apenas as colunas necessárias
-        df_base = df_base[[col for col in COLUNAS_PRODUTOS_UPPER if col in df_base.columns]]
-        
-        # --- BLOCO CRÍTICO: Renomear de volta para o formato CamelCase esperado pelas páginas ---
-        camel_case_map = {c.upper(): c for c in COLUNAS_PRODUTOS_COMPLETAS}
-        df_base.rename(columns=camel_case_map, inplace=True, errors='ignore')
-        # --- FIM DO BLOCO CRÍTICO ---
-        
-        st.session_state.produtos = df_base
+    """
+    Garante que os dados dos produtos sejam carregados e processados
+    apenas uma vez e armazenados no session_state.
+    """
+    if "produtos" not in st.session_state or st.session_state.produtos.empty:
+        # Chama a função que faz o trabalho pesado (carregar e processar)
+        df_produtos = carregar_produtos()
+        st.session_state.produtos = df_produtos
+    
     return st.session_state.produtos
-
-
-@st.cache_data(show_spinner="Carregando histórico de compras...")
-def carregar_historico_compras():
-    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_COMPRAS}"
-    df = load_csv_github(url_raw)
-    
-    COLUNAS_COMPRAS_UPPER = [c.upper() for c in COLUNAS_COMPRAS]
-    
-    if df is None or df.empty:
-        df = pd.DataFrame(columns=COLUNAS_COMPRAS_UPPER)
-        
-    for col in COLUNAS_COMPRAS_UPPER:
-        if col not in df.columns:
-            df[col] = ""
-            
-    # Renomear colunas para o formato esperado pela página de exibição
-    camel_case_map = {c.upper(): c for c in COLUNAS_COMPRAS}
-    df.rename(columns=camel_case_map, inplace=True, errors='ignore')
-            
-    return df[[col for col in COLUNAS_COMPRAS if col in df.columns]]
 
 
 # ==================== FUNÇÕES DE LÓGICA DE NEGÓCIO (PRODUTOS/ESTOQUE) ====================
@@ -877,6 +817,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
