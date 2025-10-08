@@ -1,2 +1,2 @@
-ID,Nome,Marca,Categoria,Quantidade,PrecoCusto,PrecoVista,PrecoCartao,Validade,FotoURL,CodigoBarras,PaiID,CashbackPercent
+ID,Nome,Marca,Categoria,Quantidade,PrecoCusto,PrecoVista,PrecoCartao,Validade,FotoURL,CodigoBarras,PaiID,CashbackPercent,DetalhesGrade
 1,teste,,,1,0.0,52.0,58.61,2026-10-08,,,,0.0
