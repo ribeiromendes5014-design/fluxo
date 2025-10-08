@@ -164,6 +164,9 @@ def gestao_produtos():
 
     # Evita sobrescrever o CSV remoto se não houver produtos
     if produtos is not None and not produtos.empty:
+        # Garante que a coluna exista antes de salvar (necessário para persistência)
+        if "DescricaoLonga" not in produtos.columns:
+            produtos["DescricaoLonga"] = ""
         save_data_github_produtos(produtos, ARQ_PRODUTOS, COMMIT_MESSAGE_PROD)
     else:
         st.warning("⚠️ Nenhum produto carregado — nada foi salvo no GitHub para evitar sobrescrita.")
@@ -184,6 +187,8 @@ def gestao_produtos():
                 nome = st.text_input("Nome", key="cad_nome")
                 marca = st.text_input("Marca", key="cad_marca")
                 categoria = st.text_input("Categoria (Ex: Calçado, Roupa, Geral)", key="cad_categoria")
+                # NOVO CAMPO DE DESCRIÇÃO LONGA
+                descricao_longa = st.text_area("Descrição Detalhada do Produto", help="Escreva detalhes importantes, composição ou características.", key="cad_descricao_longa")
             with c2:
                 qtd = 0
                 preco_custo = "0,00"
@@ -304,7 +309,8 @@ def gestao_produtos():
                             st.error("❌ Não foi possível ler nenhum código.")
                     variações.append({"Nome": var_nome.strip(), "Quantidade": int(var_qtd), "PrecoCusto": to_float(var_preco_custo), "PrecoVista": to_float(var_preco_vista), "PrecoCartao": round(to_float(var_preco_vista) / FATOR_CARTAO, 2) if to_float(var_preco_vista) > 0 else 0.0, "CodigoBarras": var_codigo_barras, "CashbackPercent": var_cashback_percent, "FotoURL": var_foto_url.strip(), "DetalhesGrade": var_detalhes})
 
-            if st.button("💾 Salvar", use_container_width=True, key="cad_salvar", on_click=lambda: st.rerun() if callback_salvar_novo_produto(produtos.copy(), tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações, cashback_percent) else None, help="Salvar Novo Produto Completo"):
+            # CHAMADA DA FUNÇÃO DE SALVAR ATUALIZADA COM O NOVO PARÂMETRO
+            if st.button("💾 Salvar", use_container_width=True, key="cad_salvar", on_click=lambda: st.rerun() if callback_salvar_novo_produto(produtos.copy(), tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações, cashback_percent, descricao_longa) else None, help="Salvar Novo Produto Completo"):
                 st.rerun()
 
     with tab_lista:
@@ -339,6 +345,9 @@ def gestao_produtos():
             if "PaiID" not in produtos_filtrados.columns: produtos_filtrados["PaiID"] = None
             if "CashbackPercent" not in produtos_filtrados.columns: produtos_filtrados["CashbackPercent"] = 0.0
             if "DetalhesGrade" not in produtos_filtrados.columns: produtos_filtrados["DetalhesGrade"] = "{}"
+            # GARANTE QUE A NOVA COLUNA ESTEJA NO DATAFRAME FILTRADO
+            if "DescricaoLonga" not in produtos_filtrados.columns: produtos_filtrados["DescricaoLonga"] = ""
+
 
         st.markdown("### Lista de produtos")
         if produtos_filtrados.empty:
@@ -439,6 +448,8 @@ def gestao_produtos():
                         novo_nome = st.text_input("Nome", value=row["Nome"], key=f"edit_nome_{eid}")
                         nova_marca = st.text_input("Marca", value=row["Marca"], key=f"edit_marca_{eid}")
                         nova_cat = st.text_input("Categoria", value=row["Categoria"], key=f"edit_cat_{eid}")
+                        # NOVO CAMPO DE DESCRIÇÃO LONGA NA EDIÇÃO
+                        nova_descricao_longa = st.text_area("Descrição Detalhada", value=row.get("DescricaoLonga", ""), help="Descrição completa do produto.", key=f"edit_descricao_longa_{eid}")
                     with c2:
                         nova_qtd = st.number_input("Quantidade", min_value=0, step=1, value=int(row["Quantidade"]), key=f"edit_qtd_{eid}")
                         novo_preco_custo = st.text_input("Preço de Custo", value=f"{to_float(row['PrecoCusto']):.2f}".replace(".", ","), key=f"edit_pc_{eid}")
@@ -491,7 +502,8 @@ def gestao_produtos():
                     _, col_save, col_cancel = st.columns([3, 1.5, 1.5])
                     if col_save.button("💾 Salvar", key=f"save_{eid}", type="primary", use_container_width=True):
                         preco_vista_float = to_float(novo_preco_vista)
-                        produtos.loc[produtos["ID"] == str(eid), ["Nome", "Marca", "Categoria", "Quantidade", "PrecoCusto", "PrecoVista", "PrecoCartao", "Validade", "FotoURL", "CodigoBarras", "CashbackPercent", "DetalhesGrade"]] = [novo_nome.strip(), nova_marca.strip(), nova_cat.strip(), int(nova_qtd), to_float(novo_preco_custo), preco_vista_float, round(preco_vista_float / FATOR_CARTAO, 2), nova_validade, nova_foto.strip(), str(novo_cb).strip(), novo_cashback_percent, str(edited_details)]
+                        # LINHA DE ATUALIZAÇÃO DO DATAFRAME CORRIGIDA PARA INCLUIR DescricaoLonga
+                        produtos.loc[produtos["ID"] == str(eid), ["Nome", "Marca", "Categoria", "Quantidade", "PrecoCusto", "PrecoVista", "PrecoCartao", "Validade", "FotoURL", "CodigoBarras", "CashbackPercent", "DetalhesGrade", "DescricaoLonga"]] = [novo_nome.strip(), nova_marca.strip(), nova_cat.strip(), int(nova_qtd), to_float(novo_preco_custo), preco_vista_float, round(preco_vista_float / FATOR_CARTAO, 2), nova_validade, nova_foto.strip(), str(novo_cb).strip(), novo_cashback_percent, str(edited_details), nova_descricao_longa.strip()]
                         st.session_state["produtos"] = produtos
                         if salvar_produtos_no_github(produtos, "Atualizando produto"): inicializar_produtos.clear()
                         del st.session_state["edit_prod"]
@@ -502,4 +514,3 @@ def gestao_produtos():
 
     with tab_relatorio:
         relatorio_produtos()
-
