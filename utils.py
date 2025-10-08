@@ -444,30 +444,47 @@ def inicializar_produtos():
         url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}"
         df_carregado = load_csv_github(url_raw)
 
+        df_base = pd.DataFrame(columns=[c.upper() for c in COLUNAS_PRODUTOS])
+        carregado_com_sucesso = False
+
         if df_carregado is None or df_carregado.empty:
+            # ⚠️ TENTATIVA DE CARREGAMENTO LOCAL (PLANO B ROBUSTO)
             st.warning("⚠️ Falha ao carregar produtos do GitHub. Tentando carregar o arquivo local...")
-            try:
-                df_base = pd.read_csv(ARQ_PRODUTOS, dtype=str)
-                df_base.columns = [col.upper() for col in df_base.columns]
-            except Exception as e:
-                st.error(f"❌ Falha ao carregar o arquivo local ({ARQ_PRODUTOS}): {e}")
-                df_base = pd.DataFrame(columns=[c.upper() for c in COLUNAS_PRODUTOS])
+            
+            # --- CORREÇÃO APLICADA AQUI ---
+            # 1. Verifica se o arquivo existe no disco
+            if os.path.exists(ARQ_PRODUTOS):
+                try:
+                    # 2. Tenta ler o arquivo local
+                    df_base = pd.read_csv(ARQ_PRODUTOS, dtype=str)
+                    df_base.columns = [col.upper() for col in df_base.columns]
+                    carregado_com_sucesso = True
+                except Exception as e:
+                    st.error(f"❌ Falha ao processar o arquivo local ({ARQ_PRODUTOS}): {e}")
+            else:
+                st.info(f"📁 O arquivo de produtos local '{ARQ_PRODUTOS}' não foi encontrado. Iniciando com estoque vazio.")
+            # --- FIM DA CORREÇÃO ---
+            
         else:
             df_base = df_carregado
+            carregado_com_sucesso = True
 
+        # Garante que o DataFrame tem as colunas padrão, mesmo que esteja vazio
         COLUNAS_PRODUTOS_UPPER = [c.upper() for c in COLUNAS_PRODUTOS]
         for col in COLUNAS_PRODUTOS_UPPER:
             if col not in df_base.columns:
                 df_base[col] = ''
 
-        df_base["QUANTIDADE"] = pd.to_numeric(df_base["QUANTIDADE"], errors='coerce').fillna(0).astype(int)
-        df_base["PRECOCUSTO"] = pd.to_numeric(df_base["PRECOCUSTO"], errors='coerce').fillna(0.0)
-        df_base["PRECOVISTA"] = pd.to_numeric(df_base["PRECOVISTA"], errors='coerce').fillna(0.0)
-        df_base["PRECOCARTAO"] = pd.to_numeric(df_base["PRECOCARTAO"], errors='coerce').fillna(0.0)
-        df_base["VALIDADE"] = pd.to_datetime(df_base["VALIDADE"], errors='coerce').dt.date
+        # Se carregou algo, garante que os tipos de dados estão corretos
+        if carregado_com_sucesso and not df_base.empty:
+            df_base["QUANTIDADE"] = pd.to_numeric(df_base["QUANTIDADE"], errors='coerce').fillna(0).astype(int)
+            df_base["PRECOCUSTO"] = pd.to_numeric(df_base["PRECOCUSTO"], errors='coerce').fillna(0.0)
+            df_base["PRECOVISTA"] = pd.to_numeric(df_base["PRECOVISTA"], errors='coerce').fillna(0.0)
+            df_base["PRECOCARTAO"] = pd.to_numeric(df_base["PRECOCARTAO"], errors='coerce').fillna(0.0)
+            df_base["VALIDADE"] = pd.to_datetime(df_base["VALIDADE"], errors='coerce').dt.date
 
+        # Seleciona e renomeia as colunas finais
         df_base = df_base[[col for col in COLUNAS_PRODUTOS_UPPER if col in df_base.columns]]
-
         camel_case_map = {c.upper(): c for c in COLUNAS_PRODUTOS}
         df_base.rename(columns=camel_case_map, inplace=True, errors='ignore')
 
@@ -691,3 +708,4 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
