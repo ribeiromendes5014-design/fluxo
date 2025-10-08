@@ -7,9 +7,11 @@ import plotly.express as px
 import json
 import ast
 
-# As importações relativas estão corretas para a estrutura do projeto
+# --- CORREÇÃO FINAL ---
+# Como todos os arquivos estão na mesma pasta, a importação é direta.
 from utils import carregar_historico_compras, salvar_historico_no_github, to_float, prox_id
 from constants_and_css import COLUNAS_COMPRAS
+# --- FIM DA CORREÇÃO ---
 
 
 def historico_compras():
@@ -106,7 +108,6 @@ def historico_compras():
                 st.plotly_chart(fig_mensal, use_container_width=True)
 
     with tab_cadastro:
-
         edit_mode_compra = st.session_state.get('edit_compra_idx') is not None
 
         if edit_mode_compra:
@@ -126,10 +127,8 @@ def historico_compras():
                 default_qtd_float = float(default_qtd)
                 valor_unitario_existente = valor_total_compra / default_qtd_float if default_qtd_float > 0 else valor_total_compra
                 default_valor = float(valor_unitario_existente)
-
                 default_cor = compra_data['Cor']
                 default_foto_url = compra_data['FotoURL']
-
                 st.subheader("📝 Editar Compra Selecionada")
                 st.warning(f"Editando item: **{default_produto}** (ID Interno: {original_idx_to_edit})")
             else:
@@ -147,7 +146,6 @@ def historico_compras():
             default_foto_url = ""
 
         with st.form("form_compra", clear_on_submit=not edit_mode_compra):
-
             col1, col2, col3, col4 = st.columns(4)
 
             with col1:
@@ -257,10 +255,8 @@ def historico_compras():
 
             df_para_mostrar = df_filtrado.copy()
             df_para_mostrar['Foto'] = df_para_mostrar['FotoURL'].fillna('').astype(str).apply(lambda x: '📷' if x.strip() else '')
-
             df_display_cols = ['ID', 'Data Formatada', 'Produto', 'Quantidade', 'Valor Total', 'Foto', 'Cor', 'original_index']
             df_styling = df_para_mostrar[df_display_cols].copy()
-
             styled_df = df_styling.style.apply(highlight_color_compras, axis=1)
             styled_df = styled_df.hide(subset=['Cor', 'original_index'], axis=1)
 
@@ -293,12 +289,10 @@ def historico_compras():
                 index=0,
                 key="select_compra_operacao"
             )
-
             original_idx_selecionado = opcoes_compra_operacao.get(compra_selecionada_str)
             item_selecionado_str = compra_selecionada_str
 
             if original_idx_selecionado is not None:
-
                 col_edit, col_delete = st.columns(2)
 
                 if col_edit.button(f"✏️ Editar: {item_selecionado_str}", type="secondary", use_container_width=True):
@@ -313,4 +307,3 @@ def historico_compras():
                         st.rerun()
             else:
                 st.info("Selecione um item no menu acima para editar ou excluir.")
-
