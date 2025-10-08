@@ -18,15 +18,15 @@ from pages.cashback_system import cashback_system # <<< Importação CORRETA do 
 render_global_config() 
 
 # --- 2. MAPA DE PÁGINAS ---
-PAGINAS = {
-    "Home": homepage,
-    "Livro Caixa": livro_caixa,
-    "Precificação": precificacao_completa,
-    "Cashback": cashback_system, # <<< NOVA PÁGINA MAPEADA
-    "Produtos": gestao_produtos,
-    "Promoções": gestao_promocoes,
-    "Histórico de Compra": historico_compras,
-}
+paginas_ordenadas = [
+    "Home", 
+    "Livro Caixa", 
+    "Precificação", 
+    "Cashback", 
+    "Produtos", 
+    "Promoções", 
+    "Histórico de Compra"
+] 
 
 # --- 3. NAVEGAÇÃO ---
 if "pagina_atual" not in st.session_state:
@@ -38,3 +38,4 @@ render_custom_header(paginas_ordenadas, PAGINAS)
 
 # --- 4. RENDERIZAÇÃO DO CONTEÚDO ---
 PAGINAS[st.session_state.pagina_atual]()
+
