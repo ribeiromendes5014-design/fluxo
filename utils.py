@@ -412,17 +412,39 @@ def carregar_historico_compras():
     """Carrega o histórico de compras do GitHub, com fallback para o arquivo local."""
     url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_COMPRAS}"
     df = load_csv_github(url_raw)
+    
+    # Use uma lista de mapeamento para os nomes finais esperados
+    colunas_esperadas = COLUNAS_COMPRAS 
+    
     if df is None or df.empty:
         try:
             df = pd.read_csv(ARQ_COMPRAS, dtype=str)
+            
+            # Padroniza as colunas do arquivo local para facilitar o mapeamento
             df.columns = [col.upper().replace(' ', '_') for col in df.columns]
         except Exception:
-            df = pd.DataFrame(columns=COLUNAS_COMPRAS)
-    for col in COLUNAS_COMPRAS:
-        col_padronizada = col.upper().replace(' ', '_')
-        if col_padronizada not in df.columns:
-            df[col_padronizada] = ""
-    return df
+            # Em caso de falha total, cria o DF vazio com as colunas esperadas
+            return pd.DataFrame(columns=colunas_esperadas)
+    
+    # 1. Cria o mapeamento de colunas padronizadas para as colunas esperadas
+    col_mapping = {
+        col.upper().replace(' ', '_'): col
+        for col in colunas_esperadas
+    }
+    
+    # 2. Renomeia as colunas no DataFrame, usando o mapeamento
+    # Isso converte 'DATA' para 'Data', 'VALOR_TOTAL' para 'Valor Total', etc.
+    df.rename(columns=col_mapping, inplace=True)
+    
+    # 3. Garante que TODAS as colunas esperadas existam (e na ordem correta)
+    df_final = pd.DataFrame(columns=colunas_esperadas)
+    for col in colunas_esperadas:
+        if col in df.columns:
+            df_final[col] = df[col]
+        else:
+            df_final[col] = "" # Adiciona coluna vazia se estiver faltando
+            
+    return df_final
 
 # --- BLOCO DE FUNÇÕES PARA CARREGAMENTO DE PRODUTOS ---
 def processar_produtos(df_bruto):
@@ -669,6 +691,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
