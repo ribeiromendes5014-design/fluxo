@@ -4,11 +4,10 @@ from datetime import date, timedelta
 import plotly.express as px
 import json
 import ast
-import sys, os
-sys.path.append(os.path.abspath(os.path.dirname(__file__) + "/.."))
 
+# Importa as funções auxiliares e constantes
 from utils import carregar_historico_compras, salvar_historico_no_github, to_float, prox_id
-from constants_and_css import COLUNAS_COMPRAS
+from constants_and_css import COLUNAS_COMPRAS # Constante de colunas para garantir o DataFrame
 
 
 
@@ -313,6 +312,7 @@ def historico_compras():
                         st.rerun()
             else:
                 st.info("Selecione um item no menu acima para editar ou excluir.")
+
 
 
 
