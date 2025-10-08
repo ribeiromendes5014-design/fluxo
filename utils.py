@@ -181,7 +181,7 @@ def norm_promocoes(df_promocoes: pd.DataFrame) -> pd.DataFrame:
     return df_ativas[COLUNAS_PROMO_NOVAS] 
 
 
-def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
+def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
     """
     Função genérica para salvar o livro caixa (dividas/movimentações) no GitHub.
     Usa constantes definidas em constants_and_css.
@@ -819,4 +819,5 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
