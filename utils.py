@@ -448,9 +448,9 @@ def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str):
         
         # Garante que as colunas existam no DF a ser salvo antes de renomear e converter
         for col_camel, col_upper in camel_case_map.items():
-             if col_camel not in df_to_save.columns:
-                 # Se a coluna CamelCase não existe (e deveria), cria com valor padrão
-                 df_to_save[col_camel] = ''
+            if col_camel not in df_to_save.columns:
+                # Se a coluna CamelCase não existe (e deveria), cria com valor padrão
+                df_to_save[col_camel] = ''
 
         # Renomeia do formato MAIÚSCULO/UNDERSCORE (se vier assim) para CamelCase
         df_to_save.rename(columns=camel_case_map, inplace=True, errors='ignore')
@@ -535,6 +535,35 @@ def carregar_livro_caixa():
             df[col] = "REALIZADA" if col == "STATUS" else ""
 
     return processar_dataframe(df)
+
+@st.cache_data(show_spinner="Carregando histórico de compras...")
+def carregar_historico_compras():
+    """
+    Carrega o histórico de compras do GitHub, com fallback para o arquivo local.
+    Garante que as colunas definidas em COLUNAS_COMPRAS existam.
+    """
+    # Constrói a URL para o arquivo no GitHub
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_COMPRAS}"
+    df = load_csv_github(url_raw)
+    
+    # Se falhar, tenta carregar a cópia local
+    if df is None or df.empty:
+        try:
+            df = pd.read_csv(ARQ_COMPRAS, dtype=str)
+            # Padroniza as colunas para o formato que o app espera
+            df.columns = [col.upper().replace(' ', '_') for col in df.columns]
+        except Exception:
+            # Se tudo falhar, cria uma tabela vazia com as colunas certas
+            df = pd.DataFrame(columns=COLUNAS_COMPRAS)
+            
+    # Garante que todas as colunas essenciais existam no DataFrame
+    for col in COLUNAS_COMPRAS:
+        # Converte a coluna da lista para o padrão (MAIÚSCULA_COM_UNDERSCORE)
+        col_padronizada = col.upper().replace(' ', '_')
+        if col_padronizada not in df.columns:
+            df[col_padronizada] = ""
+            
+    return df
 
 
 # --- BLOCO DE FUNÇÕES PARA CARREGAMENTO DE PRODUTOS (CORRIGIDO) ---
@@ -874,35 +903,4 @@ def get_most_sold_products(df_movimentacoes):
 try:
     get_most_sold = get_most_sold_products
 except Exception:
-
-
-    @st.cache_data(show_spinner="Carregando histórico de compras...")
-def carregar_historico_compras():
-    """
-    Carrega o histórico de compras do GitHub, com fallback para o arquivo local.
-    Garante que as colunas definidas em COLUNAS_COMPRAS existam.
-    """
-    # Constrói a URL para o arquivo no GitHub
-    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_COMPRAS}"
-    df = load_csv_github(url_raw)
-    
-    # Se falhar, tenta carregar a cópia local
-    if df is None or df.empty:
-        try:
-            df = pd.read_csv(ARQ_COMPRAS, dtype=str)
-            # Padroniza as colunas para o formato que o app espera
-            df.columns = [col.upper().replace(' ', '_') for col in df.columns]
-        except Exception:
-            # Se tudo falhar, cria uma tabela vazia com as colunas certas
-            df = pd.DataFrame(columns=COLUNAS_COMPRAS)
-            
-    # Garante que todas as colunas essenciais existam no DataFrame
-    for col in COLUNAS_COMPRAS:
-        # Converte a coluna da lista para o padrão (MAIÚSCULA_COM_UNDERSCORE)
-        col_padronizada = col.upper().replace(' ', '_')
-        if col_padronizada not in df.columns:
-            df[col_padronizada] = ""
-            
-    return df
     pass
-
