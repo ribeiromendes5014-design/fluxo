@@ -1,7 +1,6 @@
 # pages/historico_compras.py
 
 import streamlit as st
-import plotly.express as px 
 import pandas as pd
 from datetime import date, timedelta
 # ... (outros imports)
@@ -10,6 +9,7 @@ from constants_and_css import COLUNAS_COMPRAS # Constante de colunas para garant
 
 
 def historico_compras():
+    import plotly.express as px
 
     st.header("🛒 Histórico de Compras de Insumos")
     st.info("Utilize esta página para registrar produtos (insumos, materiais, estoque) comprados. Estes dados são **separados** do controle de estoque principal e do Livro Caixa.")
@@ -326,6 +326,7 @@ def historico_compras():
                         st.rerun()
             else:
                 st.info("Selecione um item no menu acima para editar ou excluir.")
+
 
 
 
