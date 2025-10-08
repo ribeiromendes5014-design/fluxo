@@ -383,23 +383,73 @@ def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza
 
 
 # =================================================================================
-# 🔧 Funções de persistência auxiliares (placeholders)
-def salvar_produtos_no_github(dataframe, commit_message):
-    """Placeholder de persistência (manter a função original)."""
+# 🔧 Funções de persistência para PRODUTOS (CORRIGIDO)
+# =================================================================================
+
+def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str):
+    """
+    Salva o DataFrame de produtos localmente como backup e o envia para o GitHub.
+    """
+    # --- 1) Salvar localmente (backup) ---
     try:
+        df.to_csv(ARQ_PRODUTOS, index=False, encoding="utf-8-sig")
+        st.toast("💾 Produtos salvos localmente!")
+    except Exception as e:
+        st.error(f"Erro ao salvar produtos localmente: {e}")
+        return False
+
+    # --- 2) Tentar salvar no GitHub ---
+    token = (
+        st.secrets.get("GITHUB_TOKEN")
+        or st.secrets.get("github_token")
+        or GITHUB_TOKEN
+    )
+    repo_owner = st.secrets.get("REPO_OWNER") or st.secrets.get("owner") or OWNER
+    repo_name = st.secrets.get("REPO_NAME") or st.secrets.get("repo") or REPO_NAME
+    branch = st.secrets.get("BRANCH") or BRANCH
+    csv_remote_path = ARQ_PRODUTOS
+
+    if not token:
+        st.warning("⚠️ Nenhum token do GitHub encontrado — apenas backup local foi salvo.")
+        return False
+
+    try:
+        from github import Github
+        g = Github(token)
+        repo = g.get_repo(f"{repo_owner}/{repo_name}")
+
+        # Garante que as colunas no CSV estejam em CamelCase como esperado no arquivo
+        camel_case_map = {c.upper(): c for c in COLUNAS_PRODUTOS}
+        df_to_save = df.copy()
+        df_to_save.rename(columns=camel_case_map, inplace=True, errors='ignore')
+        
+        # Converte o DataFrame para CSV
+        csv_content = df_to_save.to_csv(index=False, encoding="utf-8-sig")
+
+        try:
+            # Tenta atualizar o arquivo existente
+            contents = repo.get_contents(csv_remote_path, ref=branch)
+            repo.update_file(contents.path, commit_message, csv_content, contents.sha, branch=branch)
+            st.success("📁 Produtos atualizados no GitHub!")
+        except Exception:
+            # Se não existir, cria o arquivo
+            repo.create_file(csv_remote_path, commit_message, csv_content, branch=branch)
+            st.success("📁 Arquivo de produtos criado no GitHub!")
+        
+        # Limpa o cache para forçar a releitura dos dados na próxima vez
+        inicializar_produtos.clear()
         return True
-    except Exception:
+
+    except Exception as e:
+        st.warning(f"Falha ao enviar produtos para o GitHub — backup local mantido. Erro: ({e})")
         return False
 
 
-def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
-    """Placeholder de persistência (manter a função original)."""
-    return True
-
-
 def save_data_github_produtos(df, path, commit_message):
-    """Placeholder de persistência (manter a função original)."""
-    return False
+    """
+    Função de compatibilidade que agora chama a função de salvar correta.
+    """
+    return salvar_produtos_no_github(df, commit_message)
 
 
 # =================================================================================
@@ -769,3 +819,4 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
