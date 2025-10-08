@@ -3,7 +3,7 @@
 import streamlit as st
 
 # 1. Importa a configuração global e o CSS
-from constants_and_css import render_global_config, render_custom_header
+from render_utils import render_global_config, render_custom_header
 
 # 2. Importa as funções de cada página da pasta pages
 from pages.homepage import homepage
@@ -38,3 +38,4 @@ render_custom_header(paginas_ordenadas, PAGINAS)
 
 # --- 4. RENDERIZAÇÃO DO CONTEÚDO ---
 PAGINAS[st.session_state.pagina_atual]()
+
