@@ -6,17 +6,8 @@ from datetime import date, timedelta
 import plotly.express as px
 import json
 import ast
-
-# --- INÍCIO DA CORREÇÃO ---
-# Adiciona o diretório raiz do projeto ao sys.path para encontrar os módulos
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-# --- FIM DA CORREÇÃO ---
-
-# Agora as importações funcionarão corretamente
-from utils import carregar_historico_compras, salvar_historico_no_github, to_float, prox_id
-from constants_and_css import COLUNAS_COMPRAS # Constante de colunas para garantir o DataFrame
+from ..utils import carregar_historico_compras, salvar_historico_no_github, to_float, prox_id
+from ..constants_and_css import COLUNAS_COMPRAS
 
 
 def historico_compras():
@@ -322,4 +313,5 @@ def historico_compras():
                         st.rerun()
             else:
                 st.info("Selecione um item no menu acima para editar ou excluir.")
+
 
