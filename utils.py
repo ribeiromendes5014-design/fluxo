@@ -371,7 +371,7 @@ def carregar_livro_caixa():
             df = pd.DataFrame(columns=[c.upper().replace(' ', '_') for c in COLUNAS_PADRAO])
     if df.empty:
         df = pd.DataFrame(columns=[c.upper().replace(' ', '_') for c in COLUNAS_PADRAO])
-    for col in [c.upper().replace(' ', '_') for c in COLUNAS_PADRAO_COMPLETAS]:
+    for col in [c.upper().replace(' ', '_') for c in COLUNAS_PADRAO_COMPLETO]:
         if col not in df.columns:
             df[col] = "REALIZADA" if col == "STATUS" else ""
     return processar_dataframe(df)
@@ -638,4 +638,5 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
