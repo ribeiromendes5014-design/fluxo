@@ -368,17 +368,22 @@ def carregar_promocoes():
 def carregar_livro_caixa():
     url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{PATH_DIVIDAS}"
     df = load_csv_github(url_raw)
+    
     if df is None or df.empty:
         try:
             df = pd.read_csv(ARQ_LOCAL, dtype=str)
             df.columns = [col.upper().replace(' ', '_') for col in df.columns]
         except Exception:
             df = pd.DataFrame(columns=[c.upper().replace(' ', '_') for c in COLUNAS_PADRAO])
+            
     if df.empty:
         df = pd.DataFrame(columns=[c.upper().replace(' ', '_') for c in COLUNAS_PADRAO])
+        
+    # Assegura que as colunas essenciais existam em MAIÚSCULAS/UNDERSCORE
     for col in [c.upper().replace(' ', '_') for c in COLUNAS_PADRAO_COMPLETO]:
         if col not in df.columns:
             df[col] = "REALIZADA" if col == "STATUS" else ""
+
     return processar_dataframe(df)
 
 @st.cache_data(show_spinner="Carregando histórico de compras...")
@@ -643,6 +648,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
