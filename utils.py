@@ -19,7 +19,7 @@ from constants_and_css import (
     TOKEN, OWNER, REPO_NAME, BRANCH, GITHUB_TOKEN, GITHUB_REPO, GITHUB_BRANCH,
     PATH_DIVIDAS, ARQ_PRODUTOS, ARQ_LOCAL, ARQ_COMPRAS, ARQ_PROMOCOES,
     COLUNAS_COMPRAS, COLUNAS_PADRAO, COLUNAS_PADRAO_COMPLETO, COLUNAS_COMPLETAS_PROCESSADAS,
-    COLUNAS_PRODUTOS, FATOR_CARTAO, COMMIT_MESSAGE, COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
+    COLUNAS_PRODUTOS, COLUNAS_PRODUTOS_COMPLETAS, FATOR_CARTAO, COMMIT_MESSAGE, COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
 )
 # =================================================================================
 
@@ -53,7 +53,7 @@ def hash_df(df):
     for col in df_temp.select_dtypes(include=['datetime64[ns]']).columns:
         df_temp[col] = df_temp[col].astype(str)
     try:
-        return hashlib.md5(df_temp.to_json().encode('utf-8')).hexdigest() 
+        return hashlib.md5(df_temp.to_json().encode('utf-8')).hexdigest()
     except Exception:
         return "error"
 
@@ -193,7 +193,7 @@ def norm_promocoes(df_promocoes: pd.DataFrame) -> pd.DataFrame:
     ].copy()
     
     # Retorna apenas as colunas do novo cabeçalho
-    return df_ativas[COLUNAS_PROMO_NOVAS] 
+    return df_ativas[COLUNAS_PROMO_NOVAS]
 
 
 def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
@@ -490,6 +490,7 @@ def save_data_github_produtos(df, path, commit_message):
 # =================================================================================
 # 🔄 Funções de carregamento com cache
 # =================================================================================
+
 @st.cache_data(show_spinner="Carregando promoções...")
 def carregar_promocoes():
     # ATUALIZAÇÃO: Usa as colunas do NOVO cabeçalho
@@ -536,18 +537,75 @@ def carregar_livro_caixa():
     return processar_dataframe(df)
 
 
+# --- BLOCO DE FUNÇÕES PARA CARREGAMENTO DE PRODUTOS (CORRIGIDO) ---
+# Este bloco substitui a antiga função 'inicializar_produtos' por uma estrutura mais organizada.
+
+def processar_produtos(df_bruto):
+    """
+    FUNÇÃO 1: A ESPECIALISTA EM LIMPEZA.
+    Recebe um DataFrame e aplica toda a limpeza de dados: converte tipos,
+    trata valores nulos e renomeia colunas para o padrão final.
+    """
+    df = df_bruto.copy() # Trabalha com uma cópia para segurança
+
+    # --- Bloco de Conversão de Tipos ---
+    df["QUANTIDADE"] = pd.to_numeric(df.get("QUANTIDADE"), errors='coerce').fillna(0).astype(int)
+    df["PRECOCUSTO"] = pd.to_numeric(df.get("PRECOCUSTO"), errors='coerce').fillna(0.0)
+    df["PRECOVISTA"] = pd.to_numeric(df.get("PRECOVISTA"), errors='coerce').fillna(0.0)
+    df["PRECOCARTAO"] = pd.to_numeric(df.get("PRECOCARTAO"), errors='coerce').fillna(0.0)
+    df["VALIDADE"] = pd.to_datetime(df.get("VALIDADE"), errors='coerce').dt.date
+    df["CASHBACKPERCENT"] = pd.to_numeric(df.get("CASHBACKPERCENT"), errors='coerce').fillna(0.0)
+    df["DETALHESGRADE"] = df.get("DETALHESGRADE", pd.Series(dtype='str')).astype(str).replace('nan', '{}').replace('', '{}')
+
+    # --- Bloco de Renomeação ---
+    COLUNAS_PRODUTOS_UPPER = [c.upper() for c in COLUNAS_PRODUTOS_COMPLETAS]
+    df = df[[col for col in COLUNAS_PRODUTOS_UPPER if col in df.columns]] # Garante a ordem e filtra colunas extras
+    
+    camel_case_map = {c.upper(): c for c in COLUNAS_PRODUTOS_COMPLETAS}
+    df.rename(columns=camel_case_map, inplace=True, errors='ignore')
+
+    return df
+
 @st.cache_data(show_spinner="Carregando produtos do estoque...")
+def carregar_produtos():
+    """
+    FUNÇÃO 2: A RESPONSÁVEL PELO CARREGAMENTO.
+    Busca os dados do GitHub (ou local), garante a estrutura mínima e
+    chama a função de processamento para fazer a limpeza.
+    """
+    st.write("🔗 URL de carregamento:", f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}")
+    
+    df_base = load_csv_github(f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}")
+
+    if df_base is None or df_base.empty:
+        st.warning("⚠️ Falha ao carregar do GitHub. Tentando carregar o arquivo local...")
+        try:
+            df_base = pd.read_csv(ARQ_PRODUTOS, dtype=str)
+        except Exception as e:
+            st.error(f"❌ Falha ao carregar o arquivo local ({ARQ_PRODUTOS}): {e}")
+            df_base = pd.DataFrame(columns=COLUNAS_PRODUTOS)
+
+    # Garante que todas as colunas necessárias existam com valores padrão
+    df_base.columns = [col.upper() for col in df_base.columns]
+    for col in [c.upper() for c in COLUNAS_PRODUTOS_COMPLETAS]:
+        if col not in df_base.columns:
+            df_base[col] = ''
+            
+    df_processado = processar_produtos(df_base)
+    return df_processado
+
 def inicializar_produtos():
     """
-    Garante que os dados dos produtos sejam carregados e processados
-    apenas uma vez e armazenados no session_state.
+    FUNÇÃO 3: A GERENTE.
+    É a função que você chama no seu app. Ela garante que os produtos
+    sejam carregados apenas uma vez por sessão.
     """
     if "produtos" not in st.session_state or st.session_state.produtos.empty:
-        # Chama a função que faz o trabalho pesado (carregar e processar)
-        df_produtos = carregar_produtos()
-        st.session_state.produtos = df_produtos
+        st.session_state.produtos = carregar_produtos()
     
     return st.session_state.produtos
+
+# --- FIM DO BLOCO CORRIGIDO ---
 
 
 # ==================== FUNÇÕES DE LÓGICA DE NEGÓCIO (PRODUTOS/ESTOQUE) ====================
@@ -635,7 +693,7 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             "CodigoBarras": str(p_cb).strip(),
             "PaiID": str(p_pai_id).strip() if p_pai_id else "",
             "CashbackPercent": to_float(p_cashback),  # 🚨 Nova coluna
-            "DetalhesGrade": p_detalhes              # 🚨 Nova coluna
+            "DetalhesGrade": p_detalhes                # 🚨 Nova coluna
         }
         return pd.concat([df, pd.DataFrame([novo])], ignore_index=True), novo_id
 
@@ -817,8 +875,3 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
-
-
-
-
-
