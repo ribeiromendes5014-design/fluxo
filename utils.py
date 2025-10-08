@@ -128,14 +128,30 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
     try:
         response = requests.get(url, timeout=15)
         response.raise_for_status()
-        df = pd.read_csv(StringIO(response.text), dtype=str)
-        # Padroniza as colunas imediatamente após a leitura para MAIÚSCULAS com underscore
-        df.columns = [col.upper().replace(' ', '_') for col in df.columns] 
-        if df is None or df.empty or len(df.columns) < 2:
-            return None
+
+        # 🔧 tenta detectar automaticamente o delimitador
+        import csv
+        sample = response.text[:500]
+        sniffer = csv.Sniffer()
+        delimiter = ","  # padrão
+        try:
+            delimiter = sniffer.sniff(sample).delimiter
+        except Exception:
+            pass
+
+        df = pd.read_csv(StringIO(response.text), dtype=str, sep=delimiter, encoding="utf-8-sig")
+
+        # Padroniza colunas
+        df.columns = [col.upper().replace(' ', '_') for col in df.columns]
+
+        # Não descarta se tiver 1 coluna — apenas avisa
+        if df.empty:
+            st.warning("⚠️ O arquivo CSV está vazio ou sem dados válidos.")
         return df
-    except Exception:
+    except Exception as e:
+        st.error(f"❌ Erro ao ler CSV do GitHub: {e}")
         return None
+
 
 
 # =================================================================================
@@ -853,3 +869,4 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
