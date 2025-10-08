@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime, timedelta, date
 import json
 import ast
-import hashlib # Importação necessária para gerar o RecorrenciaID
+import hashlib # <--- CORREÇÃO: Importação necessária para gerar o RecorrenciaID
 import time # Adicionando time para garantir que COMMIT_MESSAGE não seja uma constante vazia
 
 # Define COMMIT_MESSAGE se não for importado, para evitar NameError no else:
@@ -14,9 +14,7 @@ try:
 except ImportError:
     COMMIT_MESSAGE = "Nova Movimentação Registrada" # Valor padrão de segurança
 
-# ==============================================================================
-# 🚨 CORREÇÃO: Bloco de Importação das Funções Auxiliares do utils.py
-# ==============================================================================
+# Importa as funções auxiliares e constantes
 from utils import (
     inicializar_produtos, carregar_livro_caixa, ajustar_estoque, to_float, 
     salvar_dados_no_github, processar_dataframe, calcular_resumo, 
@@ -24,7 +22,6 @@ from utils import (
     callback_adicionar_manual, callback_adicionar_estoque, salvar_produtos_no_github,
     add_months, carregar_promocoes, norm_promocoes
 )
-
 from constants_and_css import (
     LOJAS_DISPONIVEIS, CATEGORIAS_SAIDA, FORMAS_PAGAMENTO, FATOR_CARTAO,
     COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
@@ -40,7 +37,6 @@ def livro_caixa():
     
     st.header("📘 Livro Caixa - Gerenciamento de Movimentações") 
 
-    # Funções importadas agora disponíveis
     produtos = inicializar_produtos() 
 
     if "df" not in st.session_state: st.session_state.df = carregar_livro_caixa()
@@ -65,12 +61,8 @@ def livro_caixa():
     if "aba_ativa_livro_caixa" not in st.session_state or str(st.session_state.aba_ativa_livro_caixa) not in abas_validas: 
         st.session_state.aba_ativa_livro_caixa = abas_validas[0]
 
-    # --- CORREÇÃO DO KEYERROR APLICADA AQUI ---
-    # Os dados em st.session_state.df já foram processados pela função carregar_livro_caixa().
-    # Não é necessário chamar processar_dataframe() novamente.
-    df_exibicao = st.session_state.df.copy() # Usamos o df direto da session_state
-    df_dividas = st.session_state.df # Usado para operações de salvamento
-    # --- FIM DA CORREÇÃO ---
+    df_dividas = st.session_state.df
+    df_exibicao = processar_dataframe(df_dividas)
 
     # CORREÇÃO: Garante que os produtos para venda incluem variações e itens simples (PaiID nulo ou vazio)
     produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()].copy()
@@ -1079,7 +1071,6 @@ def livro_caixa():
             st.caption("Acesse a aba **Relatórios e Filtros > Dívidas Pendentes** para concluir essas transações.")
             st.markdown("---")
         
-        # O Nome da variável 'first_day_of_month' está incorreta no seu código (usando a var. 'primeiro_dia_mes' em cima)
         st.subheader(f"🏠 Resumo Rápido por Loja (Mês de {primeiro_dia_mes.strftime('%m/%Y')} - Realizado)")
         
         # [Bloco de Resumo por Loja]
@@ -1319,12 +1310,12 @@ def livro_caixa():
                     # fig_comp e fig_cresc requerem 'import plotly.express as px' (presumido)
                     # O código original não importou 'plotly.express', o que causaria um erro. Mantendo o código sem a importação para evitar um erro diferente, mas observe que ele não rodará.
                     # fig_comp = px.bar(df_agrupado, x='MesAno', y=['Entradas', 'Saídas'], title="Comparativo de Entradas vs. Saídas por Mês",
-                    #      labels={'value': 'Valor (R$)', 'variable': 'Tipo', 'MesAno': 'Mês/Ano'}, barmode='group', color_discrete_map={'Entradas': 'green', 'Saídas': 'red'})
+                    #     labels={'value': 'Valor (R$)', 'variable': 'Tipo', 'MesAno': 'Mês/Ano'}, barmode='group', color_discrete_map={'Entradas': 'green', 'Saídas': 'red'})
                     # st.plotly_chart(fig_comp, use_container_width=True)
 
                     # fig_cresc = px.line(df_agrupado, x='MesAno', y=['Crescimento Entradas (%)', 'Crescimento Saídas (%)'],
-                    #      title="Crescimento Percentual Mensal (Entradas e Saídas)",
-                    #      labels={'value': '% de Crescimento', 'variable': 'Métrica', 'MesAno': 'Mês/Ano'}, markers=True)
+                    #     title="Crescimento Percentual Mensal (Entradas e Saídas)",
+                    #     labels={'value': '% de Crescimento', 'variable': 'Métrica', 'MesAno': 'Mês/Ano'}, markers=True)
                     # st.plotly_chart(fig_cresc, use_container_width=True)
 
                     if 'Entradas' in df_agrupado.columns and not df_agrupado[df_agrupado['Entradas'] > 0].empty:
@@ -1422,9 +1413,9 @@ def livro_caixa():
 
 
                 if divida_para_concluir is not None:
-                    # >> USO DA NOVA FUNÇÃO PARA GARANTIR VALOR CORRETO E ARREDONDADO <<<
+                    # >> USO DA NOVA FUNÇÃO PARA GARANTIR VALOR CORRETO E ARREDONDADO <<
                     valor_em_aberto = calcular_valor_em_aberto(divida_para_concluir)
-                    # << FIM DO USO DA NOVA FUNÇÃO >>>
+                    # << FIM DO USO DA NOVA FUNÇÃO >>
 
                     st.markdown(f"**Valor em Aberto:** R$ {valor_em_aberto:,.2f}")
                     
@@ -1513,7 +1504,6 @@ def livro_caixa():
                             st.cache_data.clear()
                             st.rerun()
                 else:
-                    # --- CORREÇÃO DE SINTAXE (INDENTAÇÃO) ---
                     st.info("Selecione uma dívida válida para prosseguir com o pagamento.")
 
 
@@ -1525,10 +1515,5 @@ def livro_caixa():
                 lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
             )
             df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
-            
-            # --- SINTAXE CORRIGIDA PARA VERSÕES ANTIGAS DO PANDAS ---
-            # A versão correta para o seu ambiente usa 'subset' e 'axis=1'.
-            df_styling_pendentes = df_styling_pendentes.hide(subset=['Dias Até/Atraso'], axis=1)
 
             st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
-
