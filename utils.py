@@ -22,8 +22,9 @@ from constants_and_css import (
     COLUNAS_PADRAO, 
     COLUNAS_PADRAO_COMPLETO,
     COLUNAS_COMPLETAS_PROCESSADAS,
-    COLUNAS_PRODUTOS,  # <<< Manter
-    # REMOVA a linha COLUNAS_PRODUTOS_COMPLETAS
+    COLUNAS_PRODUTOS,
+    # ADICIONE A VARIÁVEL AQUI PARA IMPORTÁ-LA:
+    COLUNAS_PRODUTOS_COMPLETAS, # <--- ESSA LINHA RESOLVE O PROBLEMA!
     FATOR_CARTAO, COMMIT_MESSAGE, COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
 )
 # =================================================================================
@@ -668,6 +669,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
