@@ -587,7 +587,7 @@ def ler_codigo_barras_api(image_bytes):
         return []
 
 # ==================== FUNÇÕES DE CALLBACK (PRODUTOS) ====================
-def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variacoes, cashback_percent=0.0):
+def callback_salvar_novo_produto(df_produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações, cashback_percent, descricao_longa):
     if not nome:
         st.error("O nome do produto é obrigatório.")
         return False
@@ -810,3 +810,4 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
