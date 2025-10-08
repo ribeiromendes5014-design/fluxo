@@ -3,14 +3,9 @@
 import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
-import plotly.express as px
-import json
-import ast
-
-# Importa as funções auxiliares e constantes
+# ... (outros imports)
 from utils import carregar_historico_compras, salvar_dados_no_github
 from constants_and_css import COLUNAS_COMPRAS # Constante de colunas para garantir o DataFrame
-
 
 
 def historico_compras():
@@ -19,7 +14,23 @@ def historico_compras():
     st.info("Utilize esta página para registrar produtos (insumos, materiais, estoque) comprados. Estes dados são **separados** do controle de estoque principal e do Livro Caixa.")
 
     if "df_compras" not in st.session_state:
-        st.session_state.df_compras = carregar_historico_compras()
+        df_loaded = carregar_historico_compras()
+        
+        # --- CORREÇÃO DO ERRO KeyError: 'Data' ---
+        # 1. Se o DF estiver vazio, cria um novo DF com as colunas definidas em COLUNAS_COMPRAS
+        if df_loaded.empty:
+            df_loaded = pd.DataFrame(columns=COLUNAS_COMPRAS)
+        # 2. Garante que o DF carregado tenha apenas as colunas esperadas e na ordem correta
+        else:
+             # Adiciona colunas que possam estar faltando (embora 'Data' deva existir)
+            for col in COLUNAS_COMPRAS:
+                if col not in df_loaded.columns:
+                    df_loaded[col] = None 
+            df_loaded = df_loaded[COLUNAS_COMPRAS] # Reordena e filtra colunas
+        # --- FIM DA CORREÇÃO ---
+        
+        st.session_state.df_compras = df_loaded
+
 
     df_compras = st.session_state.df_compras.copy()
 
@@ -314,6 +325,7 @@ def historico_compras():
                         st.rerun()
             else:
                 st.info("Selecione um item no menu acima para editar ou excluir.")
+
 
 
 
