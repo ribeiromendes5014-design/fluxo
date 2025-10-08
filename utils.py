@@ -13,6 +13,7 @@ import ast
 import calendar
 import os
 
+
 # =================================================================================
 # Importa as constantes de negócio e de arquivo
 from constants_and_css import (
@@ -817,6 +818,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
