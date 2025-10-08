@@ -440,23 +440,18 @@ def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str):
         g = Github(token)
         repo = g.get_repo(f"{repo_owner}/{repo_name}")
 
-        # CRIA O MAPA COM TODAS AS COLUNAS ESPERADAS (Assumindo que Cash/Detalhe foram adicionados)
+        # CRIA O MAPA COM TODAS AS COLUNAS ESPERADAS
         COLUNAS_PRODUTOS_COMPLETAS = COLUNAS_PRODUTOS + ["CashbackPercent", "DetalhesGrade"]
-        camel_case_map = {c.upper(): c for c in COLUNAS_PRODUTOS_COMPLETAS}
-
+        
         df_to_save = df.copy()
         
-        # Garante que as colunas existam no DF a ser salvo antes de renomear e converter
-        for col_camel, col_upper in camel_case_map.items():
-            if col_camel not in df_to_save.columns:
-                # Se a coluna CamelCase não existe (e deveria), cria com valor padrão
-                df_to_save[col_camel] = ''
+        # Garante que as colunas existam no DF a ser salvo
+        for col_camel in COLUNAS_PRODUTOS_COMPLETAS:
+             if col_camel not in df_to_save.columns:
+                 df_to_save[col_camel] = ''
 
-        # Renomeia do formato MAIÚSCULO/UNDERSCORE (se vier assim) para CamelCase
-        df_to_save.rename(columns=camel_case_map, inplace=True, errors='ignore')
-        
         # Reordena para garantir que o CSV tenha a ordem correta
-        df_to_save = df_to_save[[c for c in COLUNAS_PRODUTOS_COMPLETAS if c in df_to_save.columns]]
+        df_to_save = df_to_save[COLUNAS_PRODUTOS_COMPLETAS]
 
         # Converte o DataFrame para CSV
         csv_content = df_to_save.to_csv(index=False, encoding="utf-8-sig")
@@ -471,20 +466,13 @@ def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str):
             repo.create_file(csv_remote_path, commit_message, csv_content, branch=branch)
             st.success("📁 Arquivo de produtos criado no GitHub!")
         
-        # Limpa o cache para forçar a releitura dos dados na próxima vez
-        inicializar_produtos.clear()
+        # Limpa o cache da função correta para forçar a releitura dos dados
+        carregar_produtos.clear()
         return True
 
     except Exception as e:
         st.warning(f"Falha ao enviar produtos para o GitHub — backup local mantido. Erro: ({e})")
         return False
-
-
-def save_data_github_produtos(df, path, commit_message):
-    """
-    Função de compatibilidade que agora chama a função de salvar correta.
-    """
-    return salvar_produtos_no_github(df, commit_message)
 
 
 # =================================================================================
@@ -904,4 +892,5 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
