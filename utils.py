@@ -319,6 +319,57 @@ def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza
         st.warning(f"Falha ao enviar promoções para o GitHub — backup local mantido. ({e})")
         return False
 
+def salvar_historico_compras_no_github(df: pd.DataFrame, commit_message: str):
+    """Salva o DataFrame de histórico de compras localmente como backup e o envia para o GitHub."""
+    if df is None or df.empty:
+        st.warning("⚠️ Nenhum dado de compra para salvar — operação ignorada para evitar sobrescrever o CSV no GitHub.")
+        return False
+    try:
+        from constants_and_css import ARQ_COMPRAS, OWNER as CONST_OWNER, REPO_NAME as CONST_REPO, BRANCH as CONST_BRANCH, GITHUB_TOKEN # Re-importa constantes
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar constantes do projeto: {e}")
+        return False
+
+    # 1. Backup Local
+    try:
+        df.to_csv(ARQ_COMPRAS, index=False, encoding="utf-8-sig")
+        st.toast("💾 Histórico de Compras salvo localmente!")
+    except Exception as e:
+        st.error(f"Erro ao salvar histórico de compras localmente: {e}")
+        return False
+
+    # 2. Envio para o GitHub
+    token = (st.secrets.get("GITHUB_TOKEN") or st.secrets.get("github_token") or GITHUB_TOKEN)
+    repo_owner = st.secrets.get("REPO_OWNER") or st.secrets.get("owner") or CONST_OWNER
+    repo_name = st.secrets.get("REPO_NAME") or st.secrets.get("repo") or CONST_REPO
+    branch = st.secrets.get("BRANCH") or CONST_BRANCH
+    csv_remote_path = ARQ_COMPRAS
+
+    if not token:
+        st.warning("⚠️ Nenhum token do GitHub encontrado — apenas backup local foi salvo.")
+        return False
+    try:
+        from github import Github
+        g = Github(token)
+        repo = g.get_repo(f"{repo_owner}/{repo_name}")
+        csv_content = df.to_csv(index=False, encoding="utf-8-sig")
+
+        try:
+            contents = repo.get_contents(csv_remote_path, ref=branch)
+            repo.update_file(contents.path, commit_message, csv_content, contents.sha, branch=branch)
+            st.success("📁 Histórico de Compras atualizado no GitHub!")
+        except Exception:
+            repo.create_file(csv_remote_path, commit_message, csv_content, branch=branch)
+            st.success("📁 Arquivo de Histórico de Compras criado no GitHub!")
+
+        # Limpa o cache para forçar o reload na próxima vez
+        carregar_historico_compras.clear()
+
+        return True
+    except Exception as e:
+        st.warning(f"Falha ao enviar Histórico de Compras para o GitHub — backup local mantido. Erro: ({e})")
+        return False
+
 def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str):
     """Salva o DataFrame de produtos localmente como backup e o envia para o GitHub."""
     if df is None or df.empty:
@@ -540,6 +591,8 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
     if not nome:
         st.error("O nome do produto é obrigatório.")
         return False
+    
+    # Função auxiliar para adicionar linha no DF de produtos
     def add_product_row(df, p_id, p_nome, p_marca, p_categoria, p_qtd, p_custo, p_vista, p_cartao, p_validade, p_foto, p_cb, p_pai_id=None, p_cashback=0.0, p_detalhes="{}"):
         novo_id = prox_id(df, "ID")
         novo = {
@@ -550,13 +603,43 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             "CashbackPercent": to_float(p_cashback), "DetalhesGrade": p_detalhes
         }
         return pd.concat([df, pd.DataFrame([novo])], ignore_index=True), novo_id
+    
     if tipo_produto == "Produto simples":
+        # 1. Adiciona o Produto Simples no DF de Produtos
         produtos, new_id = add_product_row(
             produtos, None, nome, marca, categoria, qtd, preco_custo, preco_vista,
             round(to_float(preco_vista) / FATOR_CARTAO, 2) if to_float(preco_vista) > 0 else 0.0,
             validade, foto_url, codigo_barras, p_cashback=cashback_percent
         )
+        
+        # 2. Salva o DF de Produtos no GitHub
         if salvar_produtos_no_github(produtos, f"Novo produto simples: {nome} (ID {new_id})"):
+            
+            # 3. REGISTRO NO HISTÓRICO DE COMPRAS
+            valor_custo_float = to_float(preco_custo)
+            quantidade_int = int(qtd)
+            
+            if valor_custo_float > 0 and quantidade_int > 0:
+                df_compras = carregar_historico_compras()
+                valor_total_compra = valor_custo_float * quantidade_int
+
+                nova_compra = {
+                    "Data": date.today().strftime('%Y-%m-%d'),
+                    "Produto": f"{nome} | ID: {new_id}",
+                    "Quantidade": quantidade_int,
+                    "Valor Total": valor_total_compra,
+                    "Cor": "#007bff", 
+                    "FotoURL": foto_url.strip(),
+                }
+                
+                # Garante que as colunas do DF de compra correspondem ao COLUNAS_COMPRAS
+                df_nova_compra = pd.DataFrame([nova_compra])[COLUNAS_COMPRAS] 
+                df_compras = pd.concat([df_compras, df_nova_compra], ignore_index=True)
+                
+                # Salva o Histórico de Compras no GitHub
+                salvar_historico_compras_no_github(df_compras, f"Registro de compra do novo produto simples: {nome}")
+            # FIM DO NOVO BLOCO
+            
             st.session_state.produtos = produtos
             carregar_produtos.clear()
             st.success(f"Produto '{nome}' cadastrado com sucesso!")
@@ -572,24 +655,58 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
                 del st.session_state["codigo_barras"]
             return True
         return False
+    
     elif tipo_produto == "Produto com variações (grade)":
+        # 1. Adiciona o Produto PAI (com estoque 0)
         produtos, pai_id = add_product_row(
             produtos, None, nome, marca, categoria, 0, 0.0, 0.0, 0.0,
             validade, foto_url, codigo_barras, p_pai_id=None, p_cashback=cashback_percent
         )
         cont_variacoes = 0
+        compras_para_historico = [] # Lista para acumular as compras das variações
+        
         for var in variacoes:
             detalhes_grade_str = str(var.get("DetalhesGrade", "{}"))
-            if var.get("Nome") and var.get("Quantidade", 0) > 0:
-                produtos, _ = add_product_row(
+            var_qtd = int(var.get("Quantidade", 0))
+            
+            if var.get("Nome") and var_qtd > 0:
+                # Adiciona a variação (filho) ao DataFrame de produtos
+                produtos, var_id = add_product_row(
                     produtos, None, f"{nome} ({var['Nome']})", marca, categoria,
-                    var["Quantidade"], var["PrecoCusto"], var["PrecoVista"], var["PrecoCartao"],
+                    var_qtd, var["PrecoCusto"], var["PrecoVista"], var["PrecoCartao"],
                     validade, var.get("FotoURL", foto_url), var.get("CodigoBarras", ""),
                     p_pai_id=pai_id, p_cashback=var.get("CashbackPercent", 0.0), p_detalhes=detalhes_grade_str
                 )
                 cont_variacoes += 1
+                
+                # PREPARA REGISTRO DE COMPRA DE VARIAÇÃO
+                var_custo = to_float(var["PrecoCusto"])
+                if var_custo > 0:
+                     compras_para_historico.append({
+                        "Data": date.today().strftime('%Y-%m-%d'),
+                        "Produto": f"{nome} ({var['Nome']}) | ID: {var_id}",
+                        "Quantidade": var_qtd,
+                        "Valor Total": var_custo * var_qtd,
+                        "Cor": "#007bff",
+                        "FotoURL": var.get("FotoURL", foto_url).strip(),
+                    })
+        
         if cont_variacoes > 0:
+            # 2. Salva o DF de Produtos (Pai + Filhos)
             if salvar_produtos_no_github(produtos, f"Novo produto com grade: {nome} ({cont_variacoes} variações)"):
+                
+                # 3. SALVAR HISTÓRICO DE COMPRAS DA GRADE
+                if compras_para_historico:
+                    df_compras = carregar_historico_compras()
+                    
+                    # Garante que as colunas do DF de compra correspondem ao COLUNAS_COMPRAS
+                    df_novas_compras = pd.DataFrame(compras_para_historico)[COLUNAS_COMPRAS] 
+                    df_compras = pd.concat([df_compras, df_novas_compras], ignore_index=True)
+                    
+                    # Salva o Histórico de Compras no GitHub
+                    salvar_historico_compras_no_github(df_compras, f"Registro de compra do novo produto com grade: {nome}")
+                # FIM DO NOVO BLOCO
+                
                 st.session_state.produtos = produtos
                 inicializar_produtos.clear()
                 st.success(f"Produto '{nome}' com {cont_variacoes} variações cadastrado com sucesso!")
@@ -604,10 +721,12 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
                 return True
             return False
         else:
+            # Remove o produto pai se nenhuma variação foi salva
             produtos = produtos[produtos["ID"] != pai_id]
             st.session_state.produtos = produtos
             st.error("Nenhuma variação válida foi fornecida. O produto principal não foi salvo.")
             return False
+            
     return False
 
 def callback_adicionar_manual(nome, qtd, preco, custo):
@@ -691,11 +810,3 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
-
-
-
-
-
-
-
-
