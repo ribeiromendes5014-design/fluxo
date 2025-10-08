@@ -15,7 +15,7 @@ import calendar
 
 # Importando o arquivo de constantes e o utilitário de renderização
 from constants_and_css import * # 2. Importa as funções específicas de renderização
-from render_utils import render_global_config, render_custom_header  
+from constants_and_css import * from render_utils import render_global_config, render_custom_header
 
 # ==============================================================================
 # CONFIGURAÇÃO GERAL E INÍCIO DO APP (Usando render_global_config)
@@ -3352,4 +3352,5 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
