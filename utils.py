@@ -358,7 +358,7 @@ def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str = "Atualiza 
     repo_owner = st.secrets.get("REPO_OWNER") or st.secrets.get("owner") or CONST_OWNER
     repo_name = st.secrets.get("REPO_NAME") or st.secrets.get("repo") or CONST_REPO
     branch = st.secrets.get("BRANCH") or CONST_BRANCH
-    csv_remote_path = os.path.basename(ARQ_PRODUTOS) or "produtos.csv"
+    csv_remote_path = os.path.basename(ARQ_PRODUTOS) or "produtos_estoque.csv"
 
     if not token:
         st.warning("⚠️ Nenhum token do GitHub encontrado — apenas backup local salvo.")
@@ -708,4 +708,5 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
