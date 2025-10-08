@@ -43,6 +43,16 @@ except KeyError:
     GITHUB_TOKEN = TOKEN
     GITHUB_REPO = f"{OWNER}/{REPO_NAME}"
     GITHUB_BRANCH = BRANCH
+except Exception:
+    # Fallback genérico
+    TOKEN = "TOKEN_FICTICIO"
+    OWNER = "user"
+    REPO_NAME = "repo_default"
+    CSV_PATH = "contas_a_pagar_receber.csv"
+    BRANCH = "main"
+    GITHUB_TOKEN = TOKEN
+    GITHUB_REPO = f"{OWNER}/{REPO_NAME}"
+    GITHUB_BRANCH = BRANCH
 
 # Caminhos dos arquivos no repositório
 URL_BASE_REPOS = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/"
