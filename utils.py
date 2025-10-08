@@ -533,13 +533,21 @@ def inicializar_produtos():
         df_base["PRECOCARTAO"] = pd.to_numeric(df_base["PRECOCARTAO"], errors='coerce').fillna(0.0)
         df_base["VALIDADE"] = pd.to_datetime(df_base["VALIDADE"], errors='coerce').dt.date
         
-        # Filtra apenas as colunas necessárias
+        # 🚨 CORREÇÃO CRÍTICA: Conversão de tipos para as novas colunas
+        df_base["CASHBACKPERCENT"] = pd.to_numeric(df_base["CASHBACKPERCENT"], errors='coerce').fillna(0.0)
+        df_base["DETALHESGRADE"] = df_base["DETALHESGRADE"].astype(str).replace('nan', '{}').replace('', '{}')
+        
+        # Filtra apenas as colunas necessárias (agora a lista contém todas as 14)
         df_base = df_base[[col for col in COLUNAS_PRODUTOS_UPPER if col in df_base.columns]]
         
         # --- BLOCO CRÍTICO: Renomear de volta para o formato CamelCase esperado pelas páginas ---
-        camel_case_map = {c.upper(): c for c in COLUNAS_PRODUTOS}
+        # Usa todas as colunas para o mapeamento
+        camel_case_map = {c.upper(): c for c in COLUNAS_PRODUTOS_COMPLETAS}
         df_base.rename(columns=camel_case_map, inplace=True, errors='ignore')
         # --- FIM DO BLOCO CRÍTICO ---
+        
+        st.session_state.produtos = df_base
+    return st.session_state.produtos
         
         st.session_state.produtos = df_base
     return st.session_state.produtos
@@ -806,6 +814,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
