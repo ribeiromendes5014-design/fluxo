@@ -404,7 +404,14 @@ def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza
 def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str):
     """
     Salva o DataFrame de produtos localmente como backup e o envia para o GitHub.
+    Evita sobrescrever o CSV remoto quando o DataFrame está vazio.
     """
+
+    # 🚨 Proteção contra sobrescrita acidental
+    if df is None or df.empty:
+        st.warning("⚠️ Nenhum produto para salvar — operação ignorada para evitar sobrescrever o CSV no GitHub.")
+        return False
+
     # --- 1) Salvar localmente (backup) ---
     try:
         df.to_csv(ARQ_PRODUTOS, index=False, encoding="utf-8-sig")
@@ -412,6 +419,7 @@ def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str):
     except Exception as e:
         st.error(f"Erro ao salvar produtos localmente: {e}")
         return False
+
 
     # --- 2) Tentar salvar no GitHub ---
     token = (
@@ -869,4 +877,5 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
