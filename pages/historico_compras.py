@@ -3,32 +3,52 @@
 import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
-# ... (outros imports)
-from utils import carregar_historico_compras, salvar_dados_no_github
+import plotly.express as px
+import ast
+
+# ==============================================================================
+# 🚨 Bloco de Importação das Funções Auxiliares do utils.py
+# ==============================================================================
+# Corrigido o nome da função de salvamento:
+from utils import (
+    carregar_historico_compras,
+    salvar_historico_compras_no_github, # Usar a função correta
+    to_float, # Importar se for usada internamente (embora não esteja no seu exemplo original, é boa prática)
+)
+
 from constants_and_css import COLUNAS_COMPRAS # Constante de colunas para garantir o DataFrame
 
 
 def historico_compras():
-    import plotly.express as px
 
     st.header("🛒 Histórico de Compras de Insumos")
-    st.info("Utilize esta página para registrar produtos (insumos, materiais, estoque) comprados. Estes dados são **separados** do controle de estoque principal e do Livro Caixa.")
+    st.info("Utilize esta página para registrar produtos (insumos, materiais, estoque) comprados. Estes dados são **separados** do controle de estoque principal e do Livro Caixa. **Compras de estoque pela Gestão de Produtos são adicionadas aqui automaticamente.**")
+
+    # ----------------------------------------------------
+    # NOVO BLOCO: Botão para forçar o recarregamento do cache
+    # ----------------------------------------------------
+    col_recarregar, col_info = st.columns([1, 4])
+    with col_recarregar:
+        if st.button("🔄 Recarregar Dados", help="Força a leitura mais recente do arquivo de compras no GitHub."):
+            # Limpa o cache para que a próxima chamada de carregar_historico_compras() leia do GitHub
+            carregar_historico_compras.clear()
+            st.rerun() # Reinicia a execução para mostrar os novos dados
+    
+    with col_info:
+         st.info("🚨 Se uma nova compra não aparecer, use o botão 'Recarregar Dados' acima, ou espere que o cache do Streamlit seja limpo.")
+    # ----------------------------------------------------
 
     if "df_compras" not in st.session_state:
         df_loaded = carregar_historico_compras()
         
-        # --- CORREÇÃO DO ERRO KeyError: 'Data' ---
-        # 1. Se o DF estiver vazio, cria um novo DF com as colunas definidas em COLUNAS_COMPRAS
+        # --- CORREÇÃO DO ERRO KeyError: 'Data' (mantida a sua lógica de segurança) ---
         if df_loaded.empty:
             df_loaded = pd.DataFrame(columns=COLUNAS_COMPRAS)
-        # 2. Garante que o DF carregado tenha apenas as colunas esperadas e na ordem correta
         else:
-             # Adiciona colunas que possam estar faltando (embora 'Data' deva existir)
             for col in COLUNAS_COMPRAS:
                 if col not in df_loaded.columns:
                     df_loaded[col] = None 
-            df_loaded = df_loaded[COLUNAS_COMPRAS] # Reordena e filtra colunas
-        # --- FIM DA CORREÇÃO ---
+            df_loaded = df_loaded[COLUNAS_COMPRAS] 
         
         st.session_state.df_compras = df_loaded
 
@@ -36,22 +56,26 @@ def historico_compras():
     df_compras = st.session_state.df_compras.copy()
 
     if not df_compras.empty:
+        # Garante a tipagem e tratamento de NotNaT
         df_compras['Data'] = pd.to_datetime(df_compras['Data'], errors='coerce').dt.date
         df_compras['Quantidade'] = pd.to_numeric(df_compras['Quantidade'], errors='coerce').fillna(0).astype(int)
         df_compras['Valor Total'] = pd.to_numeric(df_compras['Valor Total'], errors='coerce').fillna(0.0)
 
+    # DataFrame para exibição (com índices e ID visível)
     df_exibicao = df_compras.sort_values(by='Data', ascending=False).reset_index(drop=False)
     df_exibicao.rename(columns={'index': 'original_index'}, inplace=True)
     df_exibicao.insert(0, 'ID', df_exibicao.index + 1)
 
+    # --- Cálculo do Resumo do Mês Atual ---
     hoje = date.today()
     primeiro_dia_mes = hoje.replace(day=1)
-    if hoje.month == 12:
-        proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
-    else:
-        proximo_mes = hoje.replace(month=hoje.month + 1, day=1)
-    ultimo_dia_mes = proximo_mes - timedelta(days=1)
-
+    
+    # Calcular o último dia do mês corretamente
+    import calendar
+    _, dias_no_mes = calendar.monthrange(hoje.year, hoje.month)
+    ultimo_dia_mes = hoje.replace(day=dias_no_mes)
+    
+    # Filtro usando .dt.date para compatibilidade
     df_mes_atual = df_exibicao[
         (df_exibicao["Data"].apply(lambda x: pd.notna(x) and x >= primeiro_dia_mes and x <= ultimo_dia_mes)) &
         (df_exibicao["Valor Total"] > 0)
@@ -81,7 +105,7 @@ def historico_compras():
             st.markdown("### 🥇 Top Produtos Mais Gastos (Valor Total)")
 
             if not df_gasto_por_produto.empty:
-                top_n = st.slider("Mostrar Top N Produtos", min_value=5, max_value=20, value=10)
+                top_n = st.slider("Mostrar Top N Produtos", min_value=5, max_value=20, value=10, key="top_n_slider")
                 top_produtos = df_gasto_por_produto.head(top_n)
 
                 fig_top_produtos = px.bar(
@@ -137,6 +161,8 @@ def historico_compras():
                 default_qtd = int(compra_data['Quantidade'])
                 valor_total_compra = float(compra_data['Valor Total'])
                 default_qtd_float = float(default_qtd)
+                
+                # Cálculo do valor unitário para preencher o formulário de edição
                 valor_unitario_existente = valor_total_compra / default_qtd_float if default_qtd_float > 0 else valor_total_compra
                 default_valor = float(valor_unitario_existente)
 
@@ -205,13 +231,16 @@ def historico_compras():
                         st.session_state.df_compras.loc[original_idx_to_edit] = pd.Series(nova_linha)
                         commit_msg = f"Edição da compra {nome_produto}"
                     else:
-                        df_original = st.session_state.df_compras.iloc[:, :len(COLUNAS_COMPRAS)]
-                        st.session_state.df_compras = pd.concat([df_original, pd.DataFrame([nova_linha])], ignore_index=True)
+                        # Pega apenas as colunas necessárias para o concat
+                        df_original_cols = st.session_state.df_compras.iloc[:, :len(COLUNAS_COMPRAS)]
+                        st.session_state.df_compras = pd.concat([df_original_cols, pd.DataFrame([nova_linha])], ignore_index=True)
                         commit_msg = f"Nova compra registrada: {nome_produto}"
 
-                    if salvar_historico_no_github(st.session_state.df_compras, commit_msg):
+                    # 1. CORREÇÃO: Usar a função correta de salvamento
+                    # 2. CORREÇÃO: Usar o .clear() da função específica
+                    if salvar_historico_compras_no_github(st.session_state.df_compras, commit_msg):
                         st.session_state.edit_compra_idx = None
-                        st.cache_data.clear()
+                        carregar_historico_compras.clear() # Limpa o cache APENAS da função de compras
                         st.rerun()
 
             if cancelar_edicao:
@@ -220,6 +249,10 @@ def historico_compras():
 
         st.markdown("---")
         st.subheader("Lista e Operações de Histórico")
+
+        # ... (restante do código de filtro e exibição da lista) ...
+        # Se você quiser garantir que a lista sempre reflita a última alteração (sem precisar do botão),
+        # você deve usar o df_exibicao (baseado em st.session_state.df_compras)
 
         with st.expander("🔍 Filtros da Lista", expanded=False):
             col_f1, col_f2 = st.columns([1, 2])
@@ -321,18 +354,9 @@ def historico_compras():
                 if col_delete.button(f"🗑️ Excluir: {item_selecionado_str}", type="primary", use_container_width=True):
                     st.session_state.df_compras = st.session_state.df_compras.drop(original_idx_selecionado, errors='ignore')
 
-                    if salvar_historico_no_github(st.session_state.df_compras, f"Exclusão da compra {item_selecionado_str}"):
-                        st.cache_data.clear()
+                    # CORREÇÃO: Usar a função e o clear corretos
+                    if salvar_historico_compras_no_github(st.session_state.df_compras, f"Exclusão da compra {item_selecionado_str}"):
+                        carregar_historico_compras.clear()
                         st.rerun()
             else:
                 st.info("Selecione um item no menu acima para editar ou excluir.")
-
-
-
-
-
-
-
-
-
-
