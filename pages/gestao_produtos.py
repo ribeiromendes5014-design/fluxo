@@ -304,6 +304,16 @@ def gestao_produtos():
 
     with tab_lista:
         st.subheader("📑 Lista & Busca de Produtos")
+
+        # NOVO BOTÃO PARA RECARREGAR OS DADOS
+        if st.button("🔄 Recarregar Dados do CSV", help="Força a releitura do arquivo de produtos do GitHub."):
+            try:
+                inicializar_produtos.clear()
+                st.success("Cache de produtos limpo! Recarregando os dados mais recentes...")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Ocorreu um erro ao tentar limpar o cache: {e}")
+
         with st.expander("🔍 Pesquisar produto", expanded=True):
             criterio = st.selectbox("Pesquisar por:", ["Nome", "Marca", "Código de Barras", "Valor", "Detalhe de Grade (Cor, Tamanho, etc.)"])
             termo = st.text_input("Digite para buscar:")
