@@ -41,7 +41,7 @@ except Exception as e:
     TOKEN = "TOKEN_FICTICIO"
     OWNER = "user"
     REPO_NAME = "repo_default"
-    CSV_PATH = "contas_a_pagar_receber.csv"  # <-- Certifique-se de que este é o fallback correto
+    CSV_PATH = "contas_a_pagar_receber.csv"
     BRANCH = "main"
     GITHUB_TOKEN = TOKEN
     GITHUB_REPO = f"{OWNER}/{REPO_NAME}"
@@ -65,4 +65,5 @@ LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
 URL_MAIS_VENDIDOS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-queridinhos1.png"
 URL_OFERTAS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-oferta.png"   
 URL_NOVIDADES = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-novidades.png"
+
 
