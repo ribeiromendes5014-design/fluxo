@@ -501,6 +501,9 @@ def carregar_livro_caixa():
     return processar_dataframe(df)
 
 
+# =================================================================================
+# 🔄 Funções de carregamento com cache
+# =================================================================================
 @st.cache_data(show_spinner="Carregando produtos do estoque...")
 def inicializar_produtos():
     if "produtos" not in st.session_state:
@@ -520,8 +523,11 @@ def inicializar_produtos():
         else:
             df_base = df_carregado
 
-        # Processamento dos dados (em MAIÚSCULAS)
-        COLUNAS_PRODUTOS_UPPER = [c.upper() for c in COLUNAS_PRODUTOS]
+        # CORREÇÃO 1: Adicionar colunas ausentes e padronizá-las para CamelCase
+        # Assumindo a lista completa de colunas, mesmo que COLUNAS_PRODUTOS esteja incompleta
+        COLUNAS_PRODUTOS_COMPLETAS = COLUNAS_PRODUTOS + ["CashbackPercent", "DetalhesGrade"]
+        COLUNAS_PRODUTOS_UPPER = [c.upper() for c in COLUNAS_PRODUTOS_COMPLETAS]
+
         for col in COLUNAS_PRODUTOS_UPPER:
             if col not in df_base.columns:
                 df_base[col] = ''
@@ -545,9 +551,6 @@ def inicializar_produtos():
         camel_case_map = {c.upper(): c for c in COLUNAS_PRODUTOS_COMPLETAS}
         df_base.rename(columns=camel_case_map, inplace=True, errors='ignore')
         # --- FIM DO BLOCO CRÍTICO ---
-        
-        st.session_state.produtos = df_base
-    return st.session_state.produtos
         
         st.session_state.produtos = df_base
     return st.session_state.produtos
@@ -814,6 +817,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
