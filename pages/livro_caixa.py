@@ -2342,15 +2342,15 @@ with col_principal_2:
     cliente_input_key = "input_cliente_form" 
     if edit_mode: cliente_input_key = "input_cliente_form_edit"
     
-    # Função de callback para resetar o estado de cashback e dívida (Centralizada)
-    # ATENÇÃO: Esta função precisa estar definida no escopo de livro_caixa()
+    # ATENÇÃO: A função reset_all_states_on_client_change deve ser definida no escopo de livro_caixa()
+    # (Foi incluída na resposta anterior)
     def reset_all_states_on_client_change():
         st.session_state.cliente_selecionado_divida = None
         st.session_state.edit_id = None
         st.session_state.divida_a_quitar = None
         st.session_state.cashback_cliente_id = None
         st.session_state.cashback_cliente_nome = None
-
+        
     cliente = st.text_input("Nome do Cliente (ou Descrição)", 
                             value=default_cliente, 
                             key=cliente_input_key,
@@ -2358,7 +2358,7 @@ with col_principal_2:
                             on_change=reset_all_states_on_client_change, 
                             disabled=edit_mode)
     
-    # --- LÓGICA DE BUSCA/CRIAÇÃO DE CASHBACK ---
+    # --- LÓGICA DE BUSCA/CRIAÇÃO DE CASHBACK (INTEGRAÇÃO) ---
     if cliente.strip() and not edit_mode:
         
         # 1. Busca por clientes existentes
@@ -2421,7 +2421,7 @@ with col_principal_2:
                     st.session_state.cashback_cliente_nome = None
                     st.rerun()
                     
-    # --- LÓGICA DE ALERTA INTELIGENTE DE DÍVIDA ---
+    # --- LÓGICA DE ALERTA INTELIGENTE DE DÍVIDA (BLOCO ORIGINAL) ---
     if cliente.strip() and not edit_mode:
         
         df_dividas_cliente = df_exibicao[
@@ -3465,6 +3465,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
