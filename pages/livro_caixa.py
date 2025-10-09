@@ -2430,26 +2430,69 @@ def livro_caixa():
         # --- Seção de Entrada (Venda/Produtos) ---
         if tipo == "Entrada":
             
-            # Campo de Cliente (precisa ser definido antes para a lógica de dívida)
-            with col_principal_2:
-                cliente = st.text_input("Nome do Cliente (ou Descrição)", 
-                                        value=default_cliente, 
-                                        key="input_cliente_form",
-                                        on_change=lambda: st.session_state.update(cliente_selecionado_divida="CHECKED", edit_id=None, divida_a_quitar=None), # Gatilho de busca
-                                        disabled=edit_mode)
-                
-                # NOVO: Lógica de Alerta Inteligente de Dívida
-                # NOVO: Lógica de Cashback e Nível
-                cliente_df = df_clientes[df_clientes["Nome"].astype(str).str.contains(cliente.strip(), case=False, na=False)]
-                cliente_encontrado = not cliente_df.empty
-                
-                if cliente.strip() and not edit_mode: # Apenas para novas vendas, verifica se existe
-                    if cliente_encontrado:
-                        c_cashback = cliente_df.iloc[0]["Cashback"]
-                        c_nivel = cliente_df.iloc[0]["Nivel"]
-                        st.info(f"🎉 **Cliente Fidelidade:** Saldo Cashback: **R$ {c_cashback:,.2f}** | Nível: **{c_nivel}**")
-                    else:
-                        st.info("✨ Cliente novo ou não encontrado na fidelidade. Será cadastrado após a venda!")
+            # Bloco novo e aprimorado
+with col_principal_2:
+    # Opção para escolher o tipo de busca
+    tipo_busca = st.radio("Buscar cliente por:", ["Nome", "Telefone"], horizontal=True, key="tipo_busca_cliente")
+
+    # Campo de texto para a busca
+    termo_busca = st.text_input("Buscar Cliente", 
+                                value="", 
+                                key="input_busca_cliente",
+                                disabled=edit_mode)
+
+    cliente_encontrado_df = pd.DataFrame()
+
+    # Lógica de busca baseada na escolha do usuário
+    if termo_busca.strip() and not edit_mode:
+        if tipo_busca == "Nome":
+            # --- Lógica de busca por NOME (começa com) ---
+            # Filtra clientes cujo nome começa com o termo digitado
+            cliente_encontrado_df = df_clientes[df_clientes["Nome"].astype(str).str.startswith(termo_busca.strip(), na=False)].copy()
+
+        elif tipo_busca == "Telefone":
+            # --- Lógica de busca por TELEFONE (contém) ---
+            # Limpa o input do usuário para conter apenas números
+            termo_telefone = "".join(filter(str.isdigit, termo_busca))
+            if termo_telefone:
+                # Filtra clientes cujo telefone contém os números digitados
+                cliente_encontrado_df = df_clientes[df_clientes["Telefone"].astype(str).str.contains(termo_telefone, na=False)].copy()
+
+    # Exibe as opções encontradas em um selectbox
+    if not cliente_encontrado_df.empty:
+        opcoes_encontradas = cliente_encontrado_df["Nome"].tolist()
+        opcoes_encontradas.insert(0, "Selecione um dos clientes encontrados...")
+
+        cliente_selecionado = st.selectbox("Clientes encontrados:", opcoes_encontradas, index=0)
+
+        # Se um cliente foi selecionado, preenche o campo de cliente final
+        if cliente_selecionado != "Selecione um dos clientes encontrados...":
+            cliente = cliente_selecionado
+
+            # Pega os dados do cliente selecionado para mostrar o cashback
+            dados_cliente = cliente_encontrado_df[cliente_encontrado_df["Nome"] == cliente].iloc[0]
+            c_cashback = dados_cliente["Cashback"]
+            c_nivel = dados_cliente["Nivel"]
+            st.info(f"🎉 **Cliente Fidelidade:** Saldo Cashback: **R$ {c_cashback:,.2f}** | Nível: **{c_nivel}**")
+
+        else:
+            cliente = termo_busca # Se nada for selecionado, assume o que foi digitado
+    else:
+        # Se nenhuma correspondência foi encontrada, usa o termo digitado
+        cliente = termo_busca
+        if cliente.strip() and not edit_mode:
+            st.info("✨ Cliente novo ou não encontrado na fidelidade. Será cadastrado após a venda!")
+
+    # O restante da lógica de dívida usa a variável 'cliente' que foi definida acima
+    # (Esta parte do código permanece a mesma que já existia)
+    if cliente.strip() and not edit_mode:
+        df_dividas_cliente = df_exibicao[
+            (df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente.strip().lower())) &
+            (df_exibicao["Status"] == "Pendente") &
+            (df_exibicao["Tipo"] == "Entrada")
+        ].sort_values(by="Data Pagamento", ascending=True).copy()
+
+        if not df_dividas_cliente.empty:
                 
                 # FIM NOVO: Lógica de Cashback
 
@@ -3503,6 +3546,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
