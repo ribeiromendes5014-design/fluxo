@@ -2486,6 +2486,7 @@ with col_principal_2:
     # O restante da lógica de dívida usa a variável 'cliente' que foi definida acima
 # (Esta parte do código permanece a mesma que já existia)
 if cliente.strip() and not edit_mode:
+    # ----> INÍCIO DA INDENTAÇÃO CORRIGIDA <----
     # 1. Filtra as dívidas pendentes para o cliente selecionado APENAS UMA VEZ
     df_dividas_cliente = df_exibicao[
         (df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente.strip().lower())) &
@@ -2541,9 +2542,10 @@ if cliente.strip() and not edit_mode:
                 st.cache_data.clear()
                 st.success(f"{num_dividas} dívida(s) de {cliente.strip()} cancelada(s) com sucesso!")
                 st.rerun()
-    else:
-        # Se nenhuma dívida for encontrada, limpa a chave de controle
-        st.session_state.cliente_selecionado_divida = None
+    # ----> FIM DA INDENTAÇÃO CORRIGIDA <----
+else:
+    # Se nenhuma dívida for encontrada, limpa a chave de controle
+    st.session_state.cliente_selecionado_divida = None
 
                 st.markdown("#### 🛍️ Detalhes dos Produtos")
                 
@@ -3534,6 +3536,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
