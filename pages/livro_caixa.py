@@ -458,6 +458,8 @@ def carregar_clientes_cash():
     # CORREÇÃO PRINCIPAL: Renomeia as colunas do CSV para o padrão do app
     # ===================================================================
     mapa_colunas = {
+        # NOVO: Padroniza a coluna de nome do seu CSV para o padrão do app
+        "NOME": "Nome", 
         "CASHBACK_DISPONIVEL": "Cashback",
         "GASTO_ACUMULADO": "TotalGasto",
         "NIVEL_ATUAL": "Nivel"
@@ -3623,6 +3625,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
