@@ -2471,53 +2471,48 @@ def livro_caixa():
                 cliente = st.text_input("Nome do Cliente (ou Descrição)", 
                                         value=default_cliente, 
                                         key="input_cliente_form",
-                                        # Alteração: Adiciona st.session_state.search_trigger para forçar re-run na mudança de foco/Enter
                                         on_change=lambda: st.session_state.update(cliente_selecionado_divida="CHECKED", edit_id=None, divida_a_quitar=None, search_trigger=datetime.now().isoformat()),
                                         disabled=edit_mode)
                 
                 # ADIÇÃO: Instrução para o usuário
                 st.caption("Aperte ENTER ou clique fora do campo para buscar o cliente.")
                 
-                # NOVO: Lógica de Alerta Inteligente de Dívida
+                # --- EXIBIÇÃO DA TABELA DE CLIENTES (RESTAURADA) ---
+                st.markdown("##### 🔍 Clientes Carregados (Cashback)")
+                # A tabela de clientes carregados
+                st.dataframe(st.session_state.df_clientes.head(10), use_container_width=True, hide_index=True)
+                # ----------------------------------------------------
+                
                 # NOVO: Lógica de Cashback e Nível
                 
                 cliente_normalizado = cliente.strip().lower()
 
-                df_clientes_normalizado = st.session_state.df_clientes.copy()
-                df_clientes_normalizado["Nome_Norm"] = (
-                    df_clientes_normalizado["Nome"].astype(str).str.strip().str.lower()
-                )
+                # 1. Cria um DF temporário para a busca normalizada
+                df_clientes_to_search = st.session_state.df_clientes.copy()
+                
+                # 2. Garante que a coluna de busca existe e está normalizada (Nome_Norm)
+                if "Nome_Norm" not in df_clientes_to_search.columns:
+                    df_clientes_to_search["Nome_Norm"] = (
+                        df_clientes_to_search["Nome"].astype(str).str.strip().str.lower()
+                    )
 
-                # Verifica se existe
-                cliente_df = df_clientes_normalizado[
-                   df_clientes_normalizado["Nome_Norm"] == cliente_normalizado
+                # 3. Verifica se o cliente digitado existe no DF normalizado
+                cliente_df = df_clientes_to_search[
+                   df_clientes_to_search["Nome_Norm"] == cliente_normalizado
                 ]
                 cliente_encontrado = not cliente_df.empty
-
-                # 🔍 DEBUG TEMPORÁRIO — verificar correspondência de cliente
-                st.write("🔍 Verificando clientes carregados:")
-                st.dataframe(st.session_state.df_clientes)
-
-                st.write("🔎 Cliente digitado:", cliente)
-                st.write("🔎 Normalizado:", cliente.strip().lower())
-
-                df_clientes_normalizado = st.session_state.df_clientes.copy()
-                df_clientes_normalizado["Nome_Norm"] = df_clientes_normalizado["Nome"].astype(str).str.strip().str.lower()
-                st.write("🧾 Nomes normalizados existentes:", df_clientes_normalizado["Nome_Norm"].tolist())
-
-                if cliente.strip().lower() in df_clientes_normalizado["Nome_Norm"].values:
-                    st.success("✅ Encontrou o cliente!")
-                else:
-                    st.error("❌ Ainda não encontrou. Veja acima o nome normalizado para comparar.")
                 
                 
                 if cliente.strip() and not edit_mode:
                     if cliente_encontrado:
+                        # Se encontrou, exibe as informações de fidelidade
                         c_cashback = cliente_df.iloc[0]["Cashback"]
                         c_nivel = cliente_df.iloc[0]["Nivel"]
                         st.info(f"🎉 **Cliente Fidelidade:** Saldo Cashback: **R$ {c_cashback:,.2f}** | Nível: **{c_nivel}**")
                     else:
                         st.info("✨ Cliente novo ou não encontrado na fidelidade. Será cadastrado após a venda!")
+
+                st.markdown("#### 🛍️ Detalhes dos Produtos")
                 
                 # FIM NOVO: Lógica de Cashback
 
@@ -3623,6 +3618,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
