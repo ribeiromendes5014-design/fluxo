@@ -443,12 +443,12 @@ def carregar_clientes_cash():
     df = load_csv_github(url_raw)
 
     # 2. Se falhar, tenta um fallback local
-    if df is None or df.empty:
-        try:
-            if os.path.exists(ARQ_CLIENTES_CASH):
-                df = pd.read_csv(ARQ_CLIENTES_CASH, dtype=str)
-        except Exception:
-            pass 
+    #if df is None or df.empty:
+     #   try:
+      #      if os.path.exists(ARQ_CLIENTES_CASH):
+       #         df = pd.read_csv(ARQ_CLIENTES_CASH, dtype=str)
+       # except Exception:
+        #    pass 
 
     # 3. Se ainda assim não carregou, cria um DataFrame vazio
     if df is None or df.empty:
@@ -3644,6 +3644,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
