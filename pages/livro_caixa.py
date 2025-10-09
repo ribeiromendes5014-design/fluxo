@@ -480,7 +480,7 @@ def carregar_clientes_cash():
 
 
 def salvar_clientes_cash_github(df: pd.DataFrame, commit_message: str):
-    """Salva o DataFrame de Clientes no GitHub, renomeando as colunas para o formato original do CSV."""
+    """Salva o DataFrame de Clientes no GitHub, preservando todas as colunas originais do CSV."""
     try:
         from github import Github
     except ImportError:
@@ -492,6 +492,7 @@ def salvar_clientes_cash_github(df: pd.DataFrame, commit_message: str):
     # CORREÇÃO PRINCIPAL: Renomeia as colunas do app para o padrão do CSV antes de salvar
     # ===================================================================
     mapa_colunas_reverso = {
+        "Nome": "NOME",
         "Cashback": "CASHBACK_DISPONIVEL",
         "TotalGasto": "GASTO_ACUMULADO",
         "Nivel": "NIVEL_ATUAL"
@@ -499,13 +500,23 @@ def salvar_clientes_cash_github(df: pd.DataFrame, commit_message: str):
     df_temp.rename(columns=mapa_colunas_reverso, inplace=True)
     # ===================================================================
     
-    # Garante que as outras colunas do seu CSV original sejam mantidas se existirem
-    colunas_finais = ["Nome", "Apelido/Descrição", "Contato", "CASHBACK_DISPONIVEL", "GASTO_ACUMULADO", "NIVEL_ATUAL", "Indicado_Por"]
-    for col in colunas_finais:
+    # Garante que TODAS as colunas do seu CSV original existam no DataFrame a ser salvo.
+    # Preenche com valores vazios se alguma coluna estiver faltando (ex: em um cliente novo).
+    colunas_finais_csv = [
+        "NOME", "APELIDO/DESCRIÇÃO", "CONTATO", "CASHBACK_DISPONIVEL", 
+        "GASTO_ACUMULADO", "NIVEL_ATUAL", "INDICADO_POR", 
+        "PRIMEIRA_COMPRA_FEITA", "CONTATO_LIMPO"
+    ]
+    for col in colunas_finais_csv:
         if col not in df_temp.columns:
-            df_temp[col] = "" # Adiciona colunas faltantes para não dar erro
+            # Define um valor padrão apropriado para colunas que podem ser numéricas
+            if col in ["CASHBACK_DISPONIVEL", "GASTO_ACUMULADO"]:
+                df_temp[col] = 0.0
+            else:
+                df_temp[col] = ""
 
-    df_temp = df_temp[colunas_finais] # Reordena para manter o padrão do arquivo
+    # Reordena o DataFrame para manter o padrão exato do seu arquivo
+    df_temp = df_temp[colunas_finais_csv]
 
     try:
         g = Github(TOKEN)
@@ -3625,6 +3636,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
