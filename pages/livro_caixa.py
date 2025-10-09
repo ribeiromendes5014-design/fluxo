@@ -424,20 +424,29 @@ def calcular_nivel(total_gasto: float) -> str:
 
 @st.cache_data(show_spinner="Carregando clientes e cashback...")
 def carregar_clientes_cash():
-    """Carrega o histórico de clientes e cashback do GitHub."""
-    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CLIENTES_CASH}"
-    df = load_csv_github(url_raw)
-    if df is None or df.empty:
-        df = pd.DataFrame(columns=COLUNAS_CLIENTES_CASH)
-    for col in COLUNAS_CLIENTES_CASH:
+    """Carrega o histórico de clientes e cashback (local ou GitHub)."""
+    try:
+        # 1️⃣ Tenta ler localmente primeiro
+        if os.path.exists("data/clientes_cash.csv"):
+            df = pd.read_csv("data/clientes_cash.csv", dtype=str)
+        else:
+            # 2️⃣ Fallback: tenta via GitHub
+            url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CLIENTES_CASH}"
+            df = load_csv_github(url_raw)
+    except Exception as e:
+        st.warning(f"⚠️ Falha ao carregar clientes: {e}")
+        df = pd.DataFrame(columns=["Nome", "Cashback", "TotalGasto", "Nivel"])
+
+    # Normaliza colunas e tipos
+    for col in ["Nome", "Cashback", "TotalGasto", "Nivel"]:
         if col not in df.columns:
             df[col] = ""
-    
-    # Normalização de tipos
+
     df["Cashback"] = pd.to_numeric(df["Cashback"], errors='coerce').fillna(0.0)
     df["TotalGasto"] = pd.to_numeric(df["TotalGasto"], errors='coerce').fillna(0.0)
-    
-    return df[[col for col in COLUNAS_CLIENTES_CASH if col in df.columns]]
+
+    return df
+
 
 def salvar_clientes_cash_github(df: pd.DataFrame, commit_message: str):
     """Salva o DataFrame CSV de Clientes no GitHub (ARQ_CLIENTES_CASH)."""
@@ -3573,6 +3582,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
