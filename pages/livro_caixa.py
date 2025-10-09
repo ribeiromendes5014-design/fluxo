@@ -2305,58 +2305,68 @@ def livro_caixa():
                         
                     
                     if salvar_dados_no_github(st.session_state.df, commit_msg):
-                        st.session_state.divida_a_quitar = None
-                        st.session_state.cliente_selecionado_divida = None # Garante que o alerta do cliente suma
-                        st.cache_data.clear()
-                        st.rerun()
+    st.session_state.divida_a_quitar = None
+    st.session_state.cliente_selecionado_divida = None # Garante que o alerta do cliente suma
+    st.cache_data.clear()
+    st.rerun()
 
-            # Não exibe o restante do formulário "Nova Movimentação" se estiver no modo quitação
-            st.stop()
-        
-        # O layout principal do formulário agora vai aqui, sem o `st.sidebar`
-        
-        # Categoria Principal
-        col_principal_1, col_principal_2 = st.columns([1, 1])
-        with col_principal_1:
-            tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1, key="input_tipo", disabled=edit_mode)
-        
-        # Variáveis de estado
-        is_recorrente = False
-        status_selecionado = default_status
-        data_primeira_parcela = date.today().replace(day=1) + timedelta(days=32)
-        valor_parcela = default_valor
-        nome_despesa_recorrente = default_cliente
-        num_parcelas = 1
-        valor_calculado = 0.0
-        produtos_vendidos_json = ""
-        categoria_selecionada = ""
+# --- FIM DA QUITAÇÃO DE DÍVIDAS ---
+# Não exibe o restante do formulário "Nova Movimentação" se estiver no modo quitação
+if 'divida_a_quitar' in st.session_state and st.session_state.divida_a_quitar is not None:
+    st.stop() 
 
-        # --- Seção de Entrada (Venda/Produtos) ---
-        if tipo == "Entrada":
-            
-# A linha 'with col_principal_2:' deve começar na mesma coluna de 'with col_principal_1:'
-with col_principal_2:
+# O layout principal do formulário agora vai aqui, sem o `st.sidebar`
+
+# Categoria Principal
+col_principal_1, col_principal_2 = st.columns([1, 1])
+with col_principal_1:
+    tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1, key="input_tipo", disabled=edit_mode)
+
+# Variáveis de estado
+is_recorrente = False
+status_selecionado = default_status
+data_primeira_parcela = date.today().replace(day=1) + timedelta(days=32)
+valor_parcela = default_valor
+nome_despesa_recorrente = default_cliente
+num_parcelas = 1
+valor_calculado = 0.0
+produtos_vendidos_json = ""
+categoria_selecionada = ""
+
+# --- Seção de Entrada (Venda/Produtos) ---
+if tipo == "Entrada":
     
-    st.markdown("##### 👤 Cliente & Cashback")
-    
-    cliente_input_key = "input_cliente_form" 
-    if edit_mode: cliente_input_key = "input_cliente_form_edit"
-    
-    # ATENÇÃO: A função reset_all_states_on_client_change deve ser definida no escopo de livro_caixa()
-    # (Foi incluída na resposta anterior)
-    def reset_all_states_on_client_change():
-        st.session_state.cliente_selecionado_divida = None
-        st.session_state.edit_id = None
-        st.session_state.divida_a_quitar = None
-        st.session_state.cashback_cliente_id = None
-        st.session_state.cashback_cliente_nome = None
+    # [O bloco with col_principal_1: DA ENTRADA deve estar aqui, se você tiver campos específicos de entrada na coluna 1]
+    # Se não tiver campos específicos, o bloco pode estar vazio ou usar o pass.
+    with col_principal_1:
+        # Exemplo de campos que iriam aqui: Loja e Data
+        loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_form_entrada")
+        data_input = st.date_input("Data da Transação (Lançamento)", value=default_data, key="input_data_form_entrada")
+
+
+    # A linha 'with col_principal_2:' está agora alinhada corretamente (continuação da lógica de Entrada)
+    with col_principal_2:
         
-    cliente = st.text_input("Nome do Cliente (ou Descrição)", 
-                            value=default_cliente, 
-                            key=cliente_input_key,
-                            # Gatilho de busca/reset: Chama a função que reseta TUDO
-                            on_change=reset_all_states_on_client_change, 
-                            disabled=edit_mode)
+        st.markdown("##### 👤 Cliente & Cashback")
+        
+        cliente_input_key = "input_cliente_form" 
+        if edit_mode: cliente_input_key = "input_cliente_form_edit"
+        
+        # Função de callback para resetar o estado de cashback e dívida (Centralizada)
+        # ATENÇÃO: Esta função precisa estar definida no escopo de livro_caixa()
+        def reset_all_states_on_client_change():
+            st.session_state.cliente_selecionado_divida = None
+            st.session_state.edit_id = None
+            st.session_state.divida_a_quitar = None
+            st.session_state.cashback_cliente_id = None
+            st.session_state.cashback_cliente_nome = None
+
+        cliente = st.text_input("Nome do Cliente (ou Descrição)", 
+                                value=default_cliente, 
+                                key=cliente_input_key,
+                                # Gatilho de busca/reset: Chama a função que reseta TUDO
+                                on_change=reset_all_states_on_client_change, 
+                                disabled=edit_mode)
     
     # --- LÓGICA DE BUSCA/CRIAÇÃO DE CASHBACK (INTEGRAÇÃO) ---
     if cliente.strip() and not edit_mode:
@@ -3465,6 +3475,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
