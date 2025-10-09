@@ -2178,6 +2178,14 @@ def historico_compras():
 def livro_caixa():
     
     st.header("📘 Livro Caixa - Gerenciamento de Movimentações") 
+    # --- NOVO BOTÃO DE ATUALIZAÇÃO MANUAL DE DADOS ---
+    if st.button("🔄 Atualizar Dados do GitHub"):
+        # Limpa o cache das principais funções que carregam dados do GitHub
+        carregar_livro_caixa.clear()
+        carregar_clientes_cash.clear()
+        carregar_historico_compras.clear()
+        carregar_promocoes.clear()
+        inicializar_produtos.clear() # Limpa o cache de produtos também
 
     produtos = inicializar_produtos() 
 
@@ -3636,6 +3644,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
