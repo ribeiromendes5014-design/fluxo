@@ -38,7 +38,7 @@ ARQ_LOCAL = "livro_caixa.csv"                 # ok (backup local)
 PATH_DIVIDAS = "data/livro_caixa.csv"         # depende do seu repo
 ARQ_PROMOCOES = "data/promocoes.csv"
 ARQ_COMPRAS = "data/historico_compras.csv"
-ARQ_PRODUTOS = "data/produtos_estoque.csv"
+ARQ_PRODUTOS = "data/produtos.csv"
 
 # NOVO: Constante para o arquivo de clientes
 ARQ_CLIENTES_CASH = "data/clientes_cash.csv"
@@ -3598,6 +3598,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
