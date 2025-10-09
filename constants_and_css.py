@@ -67,7 +67,7 @@ LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
 URL_MAIS_VENDIDOS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-queridinhos1.png"
 URL_OFERTAS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-oferta.png"   
 URL_NOVIDADES = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-novidades.png"
-URL_PROMOCOES_CSV = "https://raw.githubusercontent.com/<usuario>/<repositorio>/main/data/promocoes.csv"
+URL_PROMOCOES_CSV = "https://raw.githubusercontent.com/ribeiromendes5014-design/fluxo/main/promocoes.csv"
 
 # --- NOVAS CONSTANTES PARA CASHBACK ---
 ARQ_CASHBACK = "clientes_cash.csv"
@@ -81,6 +81,7 @@ NIVEIS_CASHBACK = {
     "Ouro": {"min_gasto": 2000, "percentual": 0.03},   # 3%
     "Diamante": {"min_gasto": 5000, "percentual": 0.05} # 5%
 }
+
 
 
 
