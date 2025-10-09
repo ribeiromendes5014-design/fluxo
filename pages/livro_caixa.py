@@ -2430,15 +2430,17 @@ def livro_caixa():
                 # NOVO: Lógica de Cashback e Nível
                 cliente_normalizado = cliente.strip().lower()
                 
-                # Filtro usando a normalização. Cria uma coluna temporária no df_clientes para busca
+                cliente_normalizado = nome_cliente.strip().lower()
+
                 df_clientes_normalizado = st.session_state.df_clientes.copy()
-                cliente_existente = df_clientes[df_clientes["Nome"].str.strip().str.lower() == nome_cliente.strip().lower()]
-                
+                df_clientes_normalizado["Nome_Norm"] = df_clientes_normalizado["Nome"].astype(str).str.strip().str.lower()
+
+                # Verifica se existe
                 cliente_df = df_clientes_normalizado[df_clientes_normalizado["Nome_Norm"] == cliente_normalizado]
                 cliente_encontrado = not cliente_df.empty
-                
-                if cliente.strip() and not edit_mode: # Apenas para novas vendas, verifica se existe
-                    
+
+                # Exibe informações
+                if nome_cliente.strip() and not edit_mode:  # Apenas para novas vendas
                     if cliente_encontrado:
                         c_cashback = cliente_df.iloc[0]["Cashback"]
                         c_nivel = cliente_df.iloc[0]["Nivel"]
@@ -3550,6 +3552,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
