@@ -147,7 +147,8 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
         except Exception:
             pass
         df = pd.read_csv(StringIO(response.text), dtype=str, sep=delimiter, encoding="utf-8-sig")
-        df.columns = [col.upper().replace(' ', '_') for col in df.columns]
+        # Converte para MAIÚSCULAS/UNDERSCORE, que é o padrão do DF de entrada
+        df.columns = [col.upper().replace(' ', '_') for col in df.columns] 
         if df.empty:
             st.warning("⚠️ O arquivo CSV está vazio ou sem dados válidos.")
         return df
@@ -243,21 +244,34 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
 
     # 2. CONVERSÃO DE TIPOS E CRIAÇÃO DE COLUNAS AUXILIARES
     
-    # CORREÇÃO CRÍTICA: Se 'VALOR' não for encontrado (KeyError), tenta usar a coluna 'VALOR_TOTAL', 
-    # ou garante que a coluna exista antes de usá-la.
+    # --- Mapeamento de Colunas Críticas (para tratar a capitalização/underscores) ---
+    # Busca a coluna de valor. Tenta 'VALOR' e depois 'VALOR_TOTAL'
+    valor_col_name = 'VALOR'
     if 'VALOR' not in df_proc.columns and 'VALOR_TOTAL' in df_proc.columns:
-        df_proc['VALOR'] = df_proc['VALOR_TOTAL']
+        valor_col_name = 'VALOR_TOTAL'
     elif 'VALOR' not in df_proc.columns:
-        # Se nenhuma coluna de valor principal for encontrada, crie 'VALOR' como 0.0 para evitar a KeyError
-        df_proc['VALOR'] = 0.0
+        df_proc['VALOR'] = 0.0 # Cria coluna default se não encontrou o valor principal
+        valor_col_name = 'VALOR' # Usa o nome default
+    
+    # Busca a coluna de data principal. Tenta 'DATA'
+    data_col_name = 'DATA'
+    if 'DATA' not in df_proc.columns and 'DATA_DE_LANCAMENTO' in df_proc.columns:
+        data_col_name = 'DATA_DE_LANCAMENTO'
+    elif 'DATA' not in df_proc.columns:
+        # Se 'DATA' não existir, cria com valor nulo para ser tratado
+        df_proc['DATA'] = ''
+        data_col_name = 'DATA'
         
-    df_proc["VALOR"] = pd.to_numeric(df_proc["VALOR"], errors='coerce').fillna(0.0) 
-    df_proc["DATA"] = pd.to_datetime(df_proc["DATA"], errors='coerce').dt.date 
+    # Aplica conversão nos nomes mapeados:
+    df_proc["VALOR"] = pd.to_numeric(df_proc[valor_col_name], errors='coerce').fillna(0.0) 
+    df_proc["DATA"] = pd.to_datetime(df_proc[data_col_name], errors='coerce').dt.date 
+    
+    # DATA_PAGAMENTO é menos crítica, tenta converter o que tiver
     df_proc["DATA_PAGAMENTO"] = pd.to_datetime(df_proc["DATA_PAGAMENTO"], errors='coerce').dt.date 
     
-    # Cria a coluna 'DATA_dt' para ordenação (CORREÇÃO DA KEYERROR)
-    df_proc["DATA_dt"] = pd.to_datetime(df_proc["DATA"], errors='coerce')
-    df_proc["DATA_dt"] = df_proc["DATA_dt"].fillna(datetime(1900, 1, 1))
+    # Cria a coluna 'DATA_dt' para ordenação
+    df_proc["Data_dt"] = pd.to_datetime(df_proc["DATA"], errors='coerce')
+    df_proc["Data_dt"] = df_proc["Data_dt"].fillna(datetime(1900, 1, 1))
     
     df_proc['Cor_Valor'] = df_proc['VALOR'].apply(lambda x: 'green' if x >= 0 else 'red') 
 
@@ -269,7 +283,7 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     
     # Ordena e calcula o saldo usando 'DATA_dt' e 'original_index'
     if 'original_index' in df_realizadas.columns:
-        df_realizadas = df_realizadas.sort_values(by=['DATA_dt', 'original_index'], ascending=[True, True]) 
+        df_realizadas = df_realizadas.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]) 
         df_realizadas['Saldo Acumulado'] = df_realizadas['VALOR'].cumsum() 
         df_proc = df_proc.merge(df_realizadas[['original_index', 'Saldo Acumulado']], on='original_index', how='left')
     else:
@@ -955,4 +969,5 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
