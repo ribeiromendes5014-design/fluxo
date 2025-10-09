@@ -360,3 +360,4 @@ def historico_compras():
                         st.rerun()
             else:
                 st.info("Selecione um item no menu acima para editar ou excluir.")
+
