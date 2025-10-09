@@ -12,6 +12,8 @@ import hashlib
 import ast
 import calendar
 import os
+from github import Github # Adicionei aqui para garantir o uso em todas as funções de salvar
+
 
 # =================================================================================
 # No arquivo utils.py, corrija o bloco para:
@@ -23,9 +25,10 @@ from constants_and_css import (
     COLUNAS_PADRAO_COMPLETO,
     COLUNAS_COMPLETAS_PROCESSADAS,
     COLUNAS_PRODUTOS,
-    # ADICIONE A VARIÁVEL AQUI PARA IMPORTÁ-LA:
-    COLUNAS_PRODUTOS_COMPLETAS, # <--- ESSA LINHA RESOLVE O PROBLEMA!
-    FATOR_CARTAO, COMMIT_MESSAGE, COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE
+    COLUNAS_PRODUTOS_COMPLETAS, # <--- CORREÇÃO!
+    FATOR_CARTAO, COMMIT_MESSAGE, COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE,
+    # === NOVAS CONSTANTES DE CASHBACK ===
+    ARQ_CASHBACK, COLUNAS_CASHBACK, NIVEIS_CASHBACK
 )
 # =================================================================================
 
@@ -211,7 +214,6 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
         
     # --- 3. Envio para o GitHub ---
     try:
-        from github import Github
         g = Github(token)
         repo = g.get_repo(f"{repo_owner}/{repo_name}")
         csv_content = df.to_csv(index=False, encoding="utf-8-sig")
@@ -247,17 +249,24 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     df["VALOR"] = pd.to_numeric(df["VALOR"], errors='coerce').fillna(0.0) 
     df["DATA"] = pd.to_datetime(df["DATA"], errors='coerce').dt.date 
     df["DATA_PAGAMENTO"] = pd.to_datetime(df["DATA_PAGAMENTO"], errors='coerce').dt.date 
-    df["Data_dt"] = pd.to_datetime(df["DATA"]) 
+    
+    # CORREÇÃO PARA GARANTIR QUE REGISTROS PENDENTES COM DATA INVÁLIDA NÃO SEJAM DESCARTADOS
+    df["Data_dt"] = pd.to_datetime(df["DATA"], errors='coerce')
+    df["Data_dt"] = df["Data_dt"].fillna(datetime(1900, 1, 1)) # Preenche NaT com data mínima para ordenação
+    # df.dropna(subset=['Data_dt'], inplace=True) <--- REMOVIDO PARA EVITAR DESCARTE DE PENDENTES
+    
     df['Cor_Valor'] = df['VALOR'].apply(lambda x: 'green' if x >= 0 else 'red') 
     if 'ID_VISÍVEL' not in df.columns or df['ID_VISÍVEL'].isnull().all():
         df['ID_VISÍVEL'] = range(1, len(df) + 1)
+        
     df_realizadas = df[df['STATUS'] == 'REALIZADA'].copy()
     if 'original_index' in df_realizadas.columns:
-        df_realizadas = df_realizadas.sort_values(by=['DATA', 'original_index']) 
+        df_realizadas = df_realizadas.sort_values(by=['DATA_dt', 'original_index']) 
         df_realizadas['Saldo Acumulado'] = df_realizadas['VALOR'].cumsum() 
         df = df.merge(df_realizadas[['original_index', 'Saldo Acumulado']], on='original_index', how='left')
     else:
         df['Saldo Acumulado'] = pd.NA
+        
     livro_caixa_map = {
         'DATA': 'Data', 'LOJA': 'Loja', 'CLIENTE': 'Cliente', 'VALOR': 'Valor',
         'FORMA_DE_PAGAMENTO': 'Forma de Pagamento', 'TIPO': 'Tipo', 'PRODUTOS_VENDIDOS': 'Produtos Vendidos',
@@ -303,7 +312,6 @@ def salvar_promocoes_no_github(df: pd.DataFrame, commit_message: str = "Atualiza
         st.warning("⚠️ Nenhum token do GitHub encontrado — apenas backup local salvo.")
         return False
     try:
-        from github import Github
         g = Github(token)
         repo = g.get_repo(f"{repo_owner}/{repo_name}")
         csv_content = df.to_csv(index=False, encoding="utf-8-sig")
@@ -349,7 +357,6 @@ def salvar_historico_compras_no_github(df: pd.DataFrame, commit_message: str):
         st.warning("⚠️ Nenhum token do GitHub encontrado — apenas backup local foi salvo.")
         return False
     try:
-        from github import Github
         g = Github(token)
         repo = g.get_repo(f"{repo_owner}/{repo_name}")
         csv_content = df.to_csv(index=False, encoding="utf-8-sig")
@@ -390,13 +397,12 @@ def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str):
         st.warning("⚠️ Nenhum token do GitHub encontrado — apenas backup local foi salvo.")
         return False
     try:
-        from github import Github
         g = Github(token)
         repo = g.get_repo(f"{repo_owner}/{repo_name}")
         df_to_save = df.copy()
         for col_camel in COLUNAS_PRODUTOS_COMPLETAS:
-             if col_camel not in df_to_save.columns:
-                 df_to_save[col_camel] = ''
+            if col_camel not in df_to_save.columns:
+                df_to_save[col_camel] = ''
         df_to_save = df_to_save[COLUNAS_PRODUTOS_COMPLETAS]
         csv_content = df_to_save.to_csv(index=False, encoding="utf-8-sig")
         try:
@@ -415,6 +421,136 @@ def salvar_produtos_no_github(df: pd.DataFrame, commit_message: str):
 def save_data_github_produtos(df, path, commit_message):
     """Função de compatibilidade que agora chama a função de salvar correta."""
     return salvar_produtos_no_github(df, commit_message)
+
+# =================================================================================
+# 🆕 FUNÇÕES DE PERSISTÊNCIA E LÓGICA DO CASHBACK
+# =================================================================================
+
+@st.cache_data(show_spinner="Carregando dados de Cashback...")
+def carregar_cashback():
+    """Carrega o DataFrame de Cashback, com fallback."""
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CASHBACK}"
+    df = load_csv_github(url_raw)
+    
+    if df is None or df.empty:
+        try:
+            # Tenta ler o arquivo localmente como backup
+            df = pd.read_csv(ARQ_CASHBACK, dtype=str)
+        except Exception:
+            # Cria DataFrame vazio com as colunas esperadas
+            df = pd.DataFrame(columns=COLUNAS_CASHBACK)
+    
+    # Garante que todas as colunas existam
+    for col in COLUNAS_CASHBACK:
+        if col not in df.columns:
+            df[col] = ''
+    
+    # Normaliza tipos
+    df["ID"] = df["ID"].astype(str)
+    df["Saldo_Cashback"] = pd.to_numeric(df["Saldo_Cashback"], errors='coerce').fillna(0.0)
+    df["Total_Gasto"] = pd.to_numeric(df["Total_Gasto"], errors='coerce').fillna(0.0)
+    
+    return df[COLUNAS_CASHBACK]
+
+def salvar_cashback_no_github(df: pd.DataFrame, commit_message: str):
+    """Salva o DataFrame de Cashback localmente e no GitHub."""
+    if df is None or df.empty:
+        st.warning("⚠️ Nenhum dado de cashback para salvar — operação ignorada.")
+        return False
+        
+    # 1. Backup Local
+    try:
+        df.to_csv(ARQ_CASHBACK, index=False, encoding="utf-8-sig")
+        st.toast("💾 Cashback salvo localmente!")
+    except Exception as e:
+        st.error(f"Erro ao salvar cashback localmente: {e}")
+        return False
+    
+    # 2. Envio para o GitHub
+    token = (st.secrets.get("GITHUB_TOKEN") or st.secrets.get("github_token") or GITHUB_TOKEN)
+    repo_owner = st.secrets.get("REPO_OWNER") or st.secrets.get("owner") or OWNER
+    repo_name = st.secrets.get("REPO_NAME") or st.secrets.get("repo") or REPO_NAME
+    branch = st.secrets.get("BRANCH") or BRANCH
+    csv_remote_path = ARQ_CASHBACK 
+    
+    if not token:
+        st.warning("⚠️ Nenhum token do GitHub encontrado — apenas backup local foi salvo.")
+        return False
+        
+    try:
+        g = Github(token)
+        repo = g.get_repo(f"{repo_owner}/{repo_name}")
+        csv_content = df.to_csv(index=False, encoding="utf-8-sig")
+        
+        try:
+            contents = repo.get_contents(csv_remote_path, ref=branch)
+            repo.update_file(contents.path, commit_message, csv_content, contents.sha, branch=branch)
+            st.toast("📁 Cashback atualizado no GitHub!")
+        except Exception:
+            repo.create_file(csv_remote_path, commit_message, csv_content, branch=branch)
+            st.toast("📁 Arquivo de Cashback criado no GitHub!")
+            
+        carregar_cashback.clear()
+        
+        return True
+    except Exception as e:
+        st.warning(f"Falha ao enviar Cashback para o GitHub — backup local mantido. Erro: ({e})")
+        return False
+
+
+def obter_nivel_cashback(total_gasto: float) -> str:
+    """Define o nível de cashback com base no total gasto pelo cliente (usando NIVEIS_CASHBACK)."""
+    nivel_atual = "Bronze"
+    max_gasto = -1
+    
+    for nivel, dados in NIVEIS_CASHBACK.items():
+        if total_gasto >= dados["min_gasto"] and dados["min_gasto"] > max_gasto:
+            max_gasto = dados["min_gasto"]
+            nivel_atual = nivel
+            
+    return nivel_atual
+
+def calcular_cashback_venda(valor_venda: float, cliente_id: str, df_cashback: pd.DataFrame) -> tuple[float, float, str]:
+    """Calcula o valor do cashback para uma única venda."""
+    
+    if df_cashback is None or df_cashback.empty or not cliente_id:
+        return 0.0, 0.0, "Bronze"
+    
+    cliente_row = df_cashback[df_cashback["ID"] == cliente_id]
+    total_gasto_atual = 0.0
+    
+    if not cliente_row.empty:
+        total_gasto_atual = cliente_row["Total_Gasto"].iloc[0]
+        
+    nivel = obter_nivel_cashback(total_gasto_atual)
+    
+    # Obtém o percentual do nível
+    percentual_cashback = NIVEIS_CASHBACK.get(nivel, {"percentual": 0.00})["percentual"]
+    
+    valor_cashback = round(valor_venda * percentual_cashback, 2)
+    
+    return valor_cashback, percentual_cashback * 100, nivel
+
+def creditar_cashback_e_atualizar_gasto(cliente_id: str, valor_venda: float, valor_cashback: float, df_cashback: pd.DataFrame):
+    """Atualiza o saldo de cashback e o total gasto do cliente no DataFrame."""
+    
+    if df_cashback.empty: return df_cashback
+
+    idx_cliente = df_cashback[df_cashback["ID"] == cliente_id].index
+    
+    if not idx_cliente.empty:
+        idx = idx_cliente[0]
+        
+        # 1. Crédito do Cashback e Acumulação do Gasto
+        df_cashback.loc[idx, "Saldo_Cashback"] += valor_cashback
+        df_cashback.loc[idx, "Total_Gasto"] += valor_venda
+        
+        # 2. Atualiza o Nível com base no novo Total Gasto
+        novo_total_gasto = df_cashback.loc[idx, "Total_Gasto"]
+        novo_nivel = obter_nivel_cashback(novo_total_gasto)
+        df_cashback.loc[idx, "Nivel"] = novo_nivel
+        
+    return df_cashback
 
 # =================================================================================
 # 🔄 Funções de carregamento com cache
@@ -607,7 +743,7 @@ def callback_salvar_novo_produto(df_produtos, tipo_produto, nome, marca, categor
     if tipo_produto == "Produto simples":
         # 1. Adiciona o Produto Simples no DF de Produtos
         produtos, new_id = add_product_row(
-            produtos, None, nome, marca, categoria, qtd, preco_custo, preco_vista,
+            df_produtos, None, nome, marca, categoria, qtd, preco_custo, preco_vista,
             round(to_float(preco_vista) / FATOR_CARTAO, 2) if to_float(preco_vista) > 0 else 0.0,
             validade, foto_url, codigo_barras, p_cashback=cashback_percent
         )
@@ -659,7 +795,7 @@ def callback_salvar_novo_produto(df_produtos, tipo_produto, nome, marca, categor
     elif tipo_produto == "Produto com variações (grade)":
         # 1. Adiciona o Produto PAI (com estoque 0)
         produtos, pai_id = add_product_row(
-            produtos, None, nome, marca, categoria, 0, 0.0, 0.0, 0.0,
+            df_produtos, None, nome, marca, categoria, 0, 0.0, 0.0, 0.0,
             validade, foto_url, codigo_barras, p_pai_id=None, p_cashback=cashback_percent
         )
         cont_variacoes = 0
@@ -682,7 +818,7 @@ def callback_salvar_novo_produto(df_produtos, tipo_produto, nome, marca, categor
                 # PREPARA REGISTRO DE COMPRA DE VARIAÇÃO
                 var_custo = to_float(var["PrecoCusto"])
                 if var_custo > 0:
-                     compras_para_historico.append({
+                    compras_para_historico.append({
                         "Data": date.today().strftime('%Y-%m-%d'),
                         "Produto": f"{nome} ({var['Nome']}) | ID: {var_id}",
                         "Quantidade": var_qtd,
@@ -810,4 +946,3 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
-
