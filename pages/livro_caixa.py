@@ -20,9 +20,7 @@ from utils import (
     to_float, prox_id, hash_df, parse_date_yyyy_mm_dd, add_months,
     calcular_valor_em_aberto, format_produtos_resumo,
     carregar_livro_caixa, salvar_dados_no_github,
-    # REMOVIDO: salvar_historico_no_github (nome problemático)
-    carregar_historico_compras, # Mantenha esta
-    salvar_historico_compras_no_github, # Mantenha esta (se for o nome correto no utils.py)
+    carregar_historico_compras, salvar_historico_compras_no_github, # Nome corrigido para salvar compras
     carregar_produtos, salvar_produtos_no_github, inicializar_produtos,
     ajustar_estoque, ler_codigo_barras_api,
     callback_salvar_novo_produto, callback_adicionar_manual, callback_adicionar_estoque,
@@ -56,31 +54,6 @@ except ImportError:
         def get_repo(self, repo_name): return self
         def update_file(self, path, msg, content, sha, branch): pass
         def create_file(self, path, msg, content, branch): pass
-
-def ler_codigo_barras_api(image_bytes):
-    """Decodifica códigos de barras usando a API pública ZXing."""
-    URL_DECODER_ZXING = "https://zxing.org/w/decode"
-    
-    try:
-        files = {"f": ("barcode.png", image_bytes, "image/png")}
-        response = requests.post(URL_DECODER_ZXING, files=files, timeout=30)
-        if response.status_code != 200:
-            if 'streamlit' in globals(): st.error(f"❌ Erro na API ZXing. Status HTTP: {response.status_code}")
-            return []
-        text = response.text
-        codigos = []
-        if "<pre>" in text:
-            partes = text.split("<pre>")
-            for p in partes[1:]:
-                codigo = p.split("</pre>")[0].strip()
-                if codigo and not codigo.startswith("Erro na decodificação"):
-                    codigos.append(codigo)
-        if not codigos and 'streamlit' in globals():
-            st.toast("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
-        return codigos
-    except Exception as e:
-        if 'streamlit' in globals(): st.error(f"❌ Erro inesperado: {e}")
-        return []
 
 def add_months(d: date, months: int) -> date:
     """Adiciona um número específico de meses a uma data."""
@@ -127,347 +100,15 @@ def parse_date_yyyy_mm_dd(date_str):
     except:
         return None
 
-@st.cache_data(show_spinner="Carregando promoções...")
-def carregar_promocoes():
-    COLUNAS_PROMO = ["ID", "IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"]
-    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PROMOCOES}"
-    df = load_csv_github(url_raw)
-    if df is None or df.empty:
-        df = pd.DataFrame(columns=COLUNAS_PROMO)
-    for col in COLUNAS_PROMO:
-        if col not in df.columns:
-            df[col] = "" 
-    return df[[col for col in COLUNAS_PROMO if col in df.columns]]
-
-def norm_promocoes(df):
-    """Normaliza o DataFrame de promoções."""
-    if df.empty: return df
-    df = df.copy()
-    df["Desconto"] = pd.to_numeric(df["Desconto"], errors='coerce').fillna(0.0)
-    df["DataInicio"] = pd.to_datetime(df["DataInicio"], errors='coerce').dt.date
-    df["DataFim"] = pd.to_datetime(df["DataFim"], errors='coerce').dt.date
-    # Filtra promoções expiradas
-    df = df[df["DataFim"] >= date.today()] 
-    return df
-
-@st.cache_data(show_spinner="Carregando histórico de compras...")
-def carregar_historico_compras():
-    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_COMPRAS}"
-    df = load_csv_github(url_raw)
-    if df is None or df.empty:
-        df = pd.DataFrame(columns=COLUNAS_COMPRAS)
-    for col in COLUNAS_COMPRAS:
-        if col not in df.columns:
-            df[col] = "" 
-    return df[[col for col in COLUNAS_COMPRAS if col in df.columns]]
-
-def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
-    """Salva o histórico de compras. CORRIGIDO para usar o ARQ_COMPRAS."""
-    try:
-        from github import Github
-    except ImportError:
-        pass
-        
-    # 1. Backup local 
-    try:
-        df.to_csv(ARQ_LOCAL, index=False, encoding="utf-8-sig") 
-    except Exception:
-        pass
-
-    # 2. Envio para o GitHub (usando ARQ_COMPRAS)
-    df_temp = df.copy()
-    for col_date in ['Data']:
-        if col_date in df_temp.columns:
-            df_temp[col_date] = pd.to_datetime(df_temp[col_date], errors='coerce').apply(
-                lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
-            )
-
-    try:
-        g = Github(TOKEN)
-        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
-
-        try:
-            contents = repo.get_contents(ARQ_COMPRAS, ref=BRANCH)
-            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
-        except Exception:
-            repo.create_file(ARQ_COMPRAS, commit_message, csv_string, branch=BRANCH)
-
-        carregar_historico_compras.clear()
-        return True
-
-    except Exception as e:
-        return False
-
-# A função processar_dataframe foi importada do utils
+# Funções que dependem do utils (carregar_promocoes, norm_promocoes, etc. são importadas)
 
 def highlight_value(row):
     color = row['Cor_Valor']
     return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
 
-@st.cache_data(show_spinner="Carregando produtos do estoque...")
-def inicializar_produtos():
-    COLUNAS_PRODUTOS = [
-        "ID", "Nome", "Marca", "Categoria", "Quantidade", "PrecoCusto", 
-        "PrecoVista", "PrecoCartao", "Validade", "FotoURL", "CodigoBarras", "PaiID"
-    ]
-    if "produtos" not in st.session_state:
-        url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}"
-        df_carregado = load_csv_github(url_raw)
-        if df_carregado is None or df_carregado.empty:
-            df_base = pd.DataFrame(columns=COLUNAS_PRODUTOS)
-        else:
-            df_base = df_carregado
-        for col in COLUNAS_PRODUTOS:
-            if col not in df_base.columns: df_base[col] = ''
-        df_base["Quantidade"] = pd.to_numeric(df_base["Quantidade"], errors='coerce').fillna(0).astype(int)
-        df_base["PrecoCusto"] = pd.to_numeric(df_base["PrecoCusto"], errors='coerce').fillna(0.0)
-        df_base["PrecoVista"] = pd.to_numeric(df_base["PrecoVista"], errors='coerce').fillna(0.0)
-        df_base["PrecoCartao"] = pd.to_numeric(df_base["PrecoCartao"], errors='coerce').fillna(0.0)
-        
-        # Converte validade para Date para facilitar a lógica de promoções
-        df_base["Validade"] = pd.to_datetime(df_base["Validade"], errors='coerce').dt.date
-        
-        st.session_state.produtos = df_base
-    return st.session_state.produtos
-
-def ajustar_estoque(id_produto, quantidade, operacao="debitar"):
-    produtos_df = st.session_state.produtos
-    idx_produto = produtos_df[produtos_df["ID"] == id_produto].index
-    if not idx_produto.empty:
-        idx = idx_produto[0]
-        qtd_atual = produtos_df.loc[idx, "Quantidade"]
-        if operacao == "debitar":
-            nova_qtd = qtd_atual - quantidade
-            produtos_df.loc[idx, "Quantidade"] = max(0, nova_qtd)
-            return True
-        elif operacao == "creditar":
-            nova_qtd = qtd_atual + quantidade
-            produtos_df.loc[idx, "Quantidade"] = nova_qtd
-            return True
-    return False
-
-def salvar_produtos_no_github(dataframe, commit_message):
-    return True
-
-def save_data_github_produtos(df, path, commit_message):
-    return False 
-
-def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações):
-    if not nome:
-        st.error("O nome do produto é obrigatório.")
-        return False
-        
-    def add_product_row(df, p_id, p_nome, p_marca, p_categoria, p_qtd, p_custo, p_vista, p_cartao, p_validade, p_foto, p_cb, p_pai_id=None):
-        novo_id = prox_id(df, "ID")
-        
-        novo = {
-            "ID": novo_id,
-            "Nome": p_nome.strip(),
-            "Marca": p_marca.strip(),
-            "Categoria": p_categoria.strip(),
-            "Quantidade": int(p_qtd),
-            "PrecoCusto": to_float(p_custo),
-            "PrecoVista": to_float(p_vista),
-            "PrecoCartao": to_float(p_cartao),
-            "Validade": str(p_validade),
-            "FotoURL": p_foto.strip(),
-            "CodigoBarras": str(p_cb).strip(),
-            "PaiID": str(p_pai_id).strip() if p_pai_id else ""
-        }
-        return pd.concat([df, pd.DataFrame([novo])], ignore_index=True), novo_id
-    
-    # Placeholder para save_csv_github (deve ser ajustado conforme a implementação real de persistência de produtos)
-    def save_csv_github(df, path, message):
-        return True
-
-    if tipo_produto == "Produto simples":
-        produtos, new_id = add_product_row(
-            produtos,
-            None,
-            nome, marca, categoria,
-            qtd, preco_custo, preco_vista, 
-            round(to_float(preco_vista) / FATOR_CARTAO, 2) if to_float(preco_vista) > 0 else 0.0,
-            validade, foto_url, codigo_barras
-        )
-        if save_csv_github(produtos, ARQ_PRODUTOS, f"Novo produto simples: {nome} (ID {new_id})"):
-            st.session_state.produtos = produtos
-            inicializar_produtos.clear()
-            st.success(f"Produto '{nome}' cadastrado com sucesso!")
-            # Limpa campos do formulário simples
-            st.session_state.cad_nome = ""
-            st.session_state.cad_marca = ""
-            st.session_state.cad_categoria = ""
-            st.session_state.cad_qtd = 0
-            st.session_state.cad_preco_custo = "0,00"
-            st.session_state.cad_preco_vista = "0,00"
-            st.session_state.cad_validade = date.today()
-            st.session_state.cad_foto_url = ""
-            if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
-            return True
-        return False
-    
-    elif tipo_produto == "Produto com variações (grade)":
-        
-        # 1. Cria o Produto Pai (sem estoque)
-        produtos, pai_id = add_product_row(
-            produtos,
-            None,
-            nome, marca, categoria,
-            0, 0.0, 0.0, 0.0,
-            validade, foto_url, codigo_barras,
-            p_pai_id=None # Este é o pai
-        )
-        
-        # 2. Cria as Variações (Filhos)
-        cont_variacoes = 0
-        for var in variações:
-            if var["Nome"] and var["Quantidade"] > 0:
-                produtos, _ = add_product_row(
-                    produtos,
-                    None,
-                    f"{nome} ({var['Nome']})", marca, categoria,
-                    var["Quantidade"], var["PrecoCusto"], var["PrecoVista"], var["PrecoCartao"],
-                    validade, foto_url, var["CodigoBarras"],
-                    p_pai_id=pai_id # Referência ao Pai
-                )
-                cont_variacoes += 1
-                
-        if cont_variacoes > 0:
-            if save_csv_github(produtos, ARQ_PRODUTOS, f"Novo produto com grade: {nome} ({cont_variacoes} variações)"):
-                st.session_state.produtos = produtos
-                inicializar_produtos.clear()
-                st.success(f"Produto '{nome}' com {cont_variacoes} variações cadastrado com sucesso!")
-                # Limpa campos do formulário complexo
-                st.session_state.cad_nome = ""
-                st.session_state.cad_marca = ""
-                st.session_state.cad_categoria = ""
-                st.session_state.cad_validade = date.today()
-                st.session_state.cad_foto_url = ""
-                if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
-                st.session_state.cb_grade_lidos = {}
-                return True
-            return False
-        else:
-            # Se não adicionou variações, exclui o pai criado (or avisa)
-            produtos = produtos[produtos["ID"] != pai_id]
-            st.session_state.produtos = produtos
-            st.error("Nenhuma variação válida foi fornecida. O produto principal não foi salvo.")
-            return False
-    return False
-
-def callback_adicionar_manual(nome, qtd, preco, custo):
-    if nome and qtd > 0:
-        st.session_state.lista_produtos.append({
-            "Produto_ID": "", 
-            "Produto": nome,
-            "Quantidade": qtd,
-            "Preço Unitário": preco,
-            "Custo Unitário": custo 
-        })
-        st.session_state.input_nome_prod_manual = ""
-        st.session_state.input_qtd_prod_manual = 1.0
-        st.session_state.input_preco_prod_manual = 0.01
-        st.session_state.input_custo_prod_manual = 0.00
-        st.session_state.input_produto_selecionado = "" 
-        
-def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_disp):
-    
-    # É importante carregar as promoções aqui, pois é onde o desconto é aplicado
-    promocoes = norm_promocoes(carregar_promocoes())
-    hoje = date.today()
-    
-    # Verifica se o produto tem promoção ativa hoje
-    promocao_ativa = promocoes[
-        (promocoes["IDProduto"] == prod_id) & 
-        (promocoes["DataInicio"] <= hoje) & 
-        (promocoes["DataFim"] >= hoje)
-    ]
-    
-    # Se houver promoção, aplica o desconto
-    preco_unitario_final = preco
-    desconto_aplicado = 0.0
-    if not promocao_ativa.empty:
-        desconto_aplicado = promocao_ativa.iloc[0]["Desconto"] / 100.0
-        preco_unitario_final = preco * (1 - desconto_aplicado)
-        st.toast(f"🏷️ Promoção de {promocao_ativa.iloc[0]['Desconto']:.0f}% aplicada a {prod_nome}!")
-
-    if qtd > 0 and qtd <= estoque_disp:
-        st.session_state.lista_produtos.append({
-            "Produto_ID": prod_id, 
-            "Produto": prod_nome,
-            "Quantidade": qtd,
-            # Usa o preço com desconto, se houver
-            "Preço Unitário": round(float(preco_unitario_final), 2), 
-            "Custo Unitário": custo 
-        })
-        st.session_state.input_produto_selecionado = ""
-    else:
-        st.warning("A quantidade excede o estoque ou é inválida.")
 
 # ==============================================================================
-# FUNÇÕES AUXILIARES PARA HOME E ANÁLISE DE PRODUTOS
-# ==============================================================================
-
-@st.cache_data(show_spinner="Calculando mais vendidos...")
-def get_most_sold_products(df_movimentacoes):
-    """
-    Calcula os produtos mais vendidos (por quantidade de itens vendidos).
-    CORRIGIDO: Tratamento de erro robusto para garantir a chave 'Produto_ID'.
-    """
-    
-    # 1. Filtra apenas as transações de Entrada (vendas) que foram Realizadas
-    df_vendas = df_movimentacoes[
-        (df_movimentacoes["Tipo"] == "Entrada") & 
-        (df_movimentacoes["Status"] == "Realizada") &
-        (df_movimentacoes["Produtos Vendidos"].notna()) &
-        (df_movimentacoes["Produtos Vendidos"] != "")
-    ].copy()
-
-    if df_vendas.empty:
-        # Garante que o DataFrame de saída tenha as colunas esperadas para o merge
-        return pd.DataFrame(columns=["Produto_ID", "Quantidade Total Vendida"])
-
-    vendas_list = []
-    
-    # 2. Desempacota o JSON de Produtos Vendidos
-    for produtos_json in df_vendas["Produtos Vendidos"]:
-        try:
-            # Tenta usar json.loads, mas usa ast.literal_eval como fallback
-            try:
-                produtos = json.loads(produtos_json)
-            except (json.JSONDecodeError, TypeError):
-                produtos = ast.literal_eval(produtos_json)
-            
-            if isinstance(produtos, list):
-                for item in produtos:
-                    # CORREÇÃO: Garante que 'Produto_ID' existe antes de tentar acessá-lo.
-                    # Se não existir (dados antigos), pula o item.
-                    produto_id = str(item.get("Produto_ID"))
-                    if produto_id and produto_id != "None":
-                         vendas_list.append({
-                            "Produto_ID": produto_id,
-                            "Quantidade": to_float(item.get("Quantidade", 0))
-                        })
-        except Exception:
-            # Ignora linhas com JSON de produto totalmente malformado
-            continue
-            
-    df_vendas_detalhada = pd.DataFrame(vendas_list)
-    
-    if df_vendas_detalhada.empty:
-        # Garante a coluna Produto_ID mesmo que vazia para o merge na homepage
-        return pd.DataFrame(columns=["Produto_ID", "Quantidade Total Vendida"])
-
-    # 3. Soma as quantidades por Produto_ID
-    df_mais_vendidos = df_vendas_detalhada.groupby("Produto_ID")["Quantidade"].sum().reset_index()
-    df_mais_vendidos.rename(columns={"Quantidade": "Quantidade Total Vendida"}, inplace=True)
-    df_mais_vendidos.sort_values(by="Quantidade Total Vendida", ascending=False, inplace=True)
-    
-    return df_mais_vendidos
-
-# ==============================================================================
-# 1. PÁGINA DE APRESENTAÇÃO (HOMEPAGE) (Mantida)
+# 1. PÁGINA DE APRESENTAÇÃO (HOMEPAGE)
 # ==============================================================================
 
 def homepage():
@@ -1726,7 +1367,7 @@ def historico_compras():
                         st.session_state.df_compras = pd.concat([df_original, pd.DataFrame([nova_linha])], ignore_index=True)
                         commit_msg = f"Nova compra registrada: {nome_produto}"
 
-                    if salvar_historico_no_github(st.session_state.df_compras, commit_msg):
+                    if salvar_historico_compras_no_github(st.session_state.df_compras, commit_msg):
                         st.session_state.edit_compra_idx = None
                         carregar_historico_compras.clear()
                         st.rerun()
@@ -1794,7 +1435,6 @@ def historico_compras():
             styled_df = df_styling.style.apply(highlight_color_compras, axis=1)
             styled_df = styled_df.hide(subset=['Cor', 'original_index'], axis=1)
 
-            st.markdown("##### Tabela de Itens Comprados")
             st.dataframe(
                 styled_df,
                 use_container_width=True,
@@ -1839,7 +1479,7 @@ def historico_compras():
                 if col_delete.button(f"🗑️ Excluir: {item_selecionado_str}", type="primary", use_container_width=True):
                     st.session_state.df_compras = st.session_state.df_compras.drop(original_idx_selecionado, errors='ignore')
                     
-                    if salvar_historico_no_github(st.session_state.df_compras, f"Exclusão da compra {item_selecionado_str}"):
+                    if salvar_historico_compras_no_github(st.session_state.df_compras, f"Exclusão da compra {item_selecionado_str}"):
                         carregar_historico_compras.clear()
                         st.rerun()
             else:
@@ -1891,128 +1531,127 @@ def livro_caixa():
         st.session_state.cashback_cliente_nome = None
 
     # ==================== LÓGICA DO DATAFRAME ====================
-df_dividas = st.session_state.df
-df_exibicao = processar_dataframe(df_dividas)
+    df_dividas = st.session_state.df
+    df_exibicao = processar_dataframe(df_dividas)
 
-# ==================== CORREÇÃO CRÍTICA DO VALUERROR: GARANTIR ÍNDICE ÚNICO ====================
-# Força a redefinição do índice se ele não for único, o que resolve a maioria dos problemas de filtro no Pandas/Streamlit
-if not df_exibicao.empty and not df_exibicao.index.is_unique:
-    df_exibicao = df_exibicao.reset_index(drop=True)
-# ==============================================================================================
+    # CORREÇÃO CRÍTICA DO VALUERROR: GARANTIR ÍNDICE ÚNICO
+    # Força a redefinição do índice se ele não for único, o que resolve a maioria dos problemas de filtro no Pandas/Streamlit
+    if not df_exibicao.empty and not df_exibicao.index.is_unique:
+        df_exibicao = df_exibicao.reset_index(drop=True)
 
-produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()].copy()
-opcoes_produtos = [""] + produtos_para_venda.apply(
-    lambda row: f"{row.ID} | {row.Nome} ({row.Marca}) | Estoque: {row.Quantidade}", axis=1
-).tolist()
-OPCAO_MANUAL = "Adicionar Item Manual (Sem Controle de Estoque)"
-opcoes_produtos.append(OPCAO_MANUAL)
+    produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()].copy()
+    opcoes_produtos = [""] + produtos_para_venda.apply(
+        lambda row: f"{row.ID} | {row.Nome} ({row.Marca}) | Estoque: {row.Quantidade}", axis=1
+    ).tolist()
+    OPCAO_MANUAL = "Adicionar Item Manual (Sem Controle de Estoque)"
+    opcoes_produtos.append(OPCAO_MANUAL)
 
-def extrair_id_do_nome(opcoes_str):
-    if ' | ' in opcoes_str: return opcoes_str.split(' | ')[0]
-    return None
+    def extrair_id_do_nome(opcoes_str):
+        if ' | ' in opcoes_str: return opcoes_str.split(' | ')[0]
+        return None
     
-def encontrar_opcao_por_cb(codigo_barras, produtos_df, opcoes_produtos_list):
-    if not codigo_barras: return None
-    
-    produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
-    
-    if not produto_encontrado.empty:
-        produto_id = produto_encontrado.iloc[0]["ID"]
+    def encontrar_opcao_por_cb(codigo_barras, produtos_df, opcoes_produtos_list):
+        if not codigo_barras: return None
         
-        for opcao in opcoes_produtos_list:
-            if opcao.startswith(f"{produto_id} |"):
-                return opcao
-    return None
-    
-if "input_nome_prod_manual" not in st.session_state: st.session_state.input_nome_prod_manual = ""
-if "input_qtd_prod_manual" not in st.session_state: st.session_state.input_qtd_prod_manual = 1.0
-if "input_preco_prod_manual" not in st.session_state: st.session_state.input_preco_prod_manual = 0.01
-if "input_custo_prod_manual" not in st.session_state: st.session_state.input_custo_prod_manual = 0.00
-if "input_produto_selecionado" not in st.session_state: st.session_state.input_produto_selecionado = ""
-
-edit_mode = st.session_state.edit_id is not None
-movimentacao_para_editar = None
-
-default_loja = LOJAS_DISPONIVEIS[0]
-default_data = datetime.now().date()
-default_cliente = ""
-default_valor = 0.01
-default_forma = "Dinheiro"
-default_tipo = "Entrada"
-default_produtos_json = ""
-default_categoria = CATEGORIAS_SAIDA[0]
-default_status = "Realizada" 
-default_data_pagamento = None 
-
-if edit_mode:
-    original_idx_to_edit = st.session_state.edit_id
-    linha_df_exibicao = df_exibicao[df_exibicao['original_index'] == original_idx_to_edit]
-
-    if not linha_df_exibicao.empty:
-        movimentacao_para_editar = linha_df_exibicao.iloc[0]
-        default_loja = movimentacao_para_editar['Loja']
-        default_data = movimentacao_para_editar['Data'] if pd.notna(movimentacao_para_editar['Data']) else datetime.now().date()
-        default_cliente = movimentacao_para_editar['Cliente']
-        default_valor = abs(movimentacao_para_editar['Valor']) if movimentacao_para_editar['Valor'] != 0 else 0.01 
-        default_forma = movimentacao_para_editar['Forma de Pagamento']
-        default_tipo = movimentacao_para_editar['Tipo']
-        default_produtos_json = movimentacao_para_editar['Produtos Vendidos'] if pd.notna(movimentacao_para_editar['Produtos Vendidos']) else ""
-        default_categoria = movimentacao_para_editar['Categoria']
-        default_status = movimentacao_para_editar['Status'] 
-        default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None) 
+        produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
         
-        # CORREÇÃO: Carrega a lista de produtos APENAS se o item for diferente do último carregado
-        if st.session_state.edit_id_loaded != original_idx_to_edit:
-            if default_tipo == "Entrada" and default_produtos_json:
-                try:
+        if not produto_encontrado.empty:
+            produto_id = produto_encontrado.iloc[0]["ID"]
+            
+            for opcao in opcoes_produtos_list:
+                if opcao.startswith(f"{produto_id} |"):
+                    return opcao
+        return None
+        
+    if "input_nome_prod_manual" not in st.session_state: st.session_state.input_nome_prod_manual = ""
+    if "input_qtd_prod_manual" not in st.session_state: st.session_state.input_qtd_prod_manual = 1.0
+    if "input_preco_prod_manual" not in st.session_state: st.session_state.input_preco_prod_manual = 0.01
+    if "input_custo_prod_manual" not in st.session_state: st.session_state.input_custo_prod_manual = 0.00
+    if "input_produto_selecionado" not in st.session_state: st.session_state.input_produto_selecionado = ""
+
+    edit_mode = st.session_state.edit_id is not None
+    movimentacao_para_editar = None
+
+    default_loja = LOJAS_DISPONIVEIS[0]
+    default_data = datetime.now().date()
+    default_cliente = ""
+    default_valor = 0.01
+    default_forma = "Dinheiro"
+    default_tipo = "Entrada"
+    default_produtos_json = ""
+    default_categoria = CATEGORIAS_SAIDA[0]
+    default_status = "Realizada" 
+    default_data_pagamento = None 
+
+    if edit_mode:
+        original_idx_to_edit = st.session_state.edit_id
+        linha_df_exibicao = df_exibicao[df_exibicao['original_index'] == original_idx_to_edit]
+
+        if not linha_df_exibicao.empty:
+            movimentacao_para_editar = linha_df_exibicao.iloc[0]
+            default_loja = movimentacao_para_editar['Loja']
+            default_data = movimentacao_para_editar['Data'] if pd.notna(movimentacao_para_editar['Data']) else datetime.now().date()
+            default_cliente = movimentacao_para_editar['Cliente']
+            default_valor = abs(movimentacao_para_editar['Valor']) if movimentacao_para_editar['Valor'] != 0 else 0.01 
+            default_forma = movimentacao_para_editar['Forma de Pagamento']
+            default_tipo = movimentacao_para_editar['Tipo']
+            default_produtos_json = movimentacao_para_editar['Produtos Vendidos'] if pd.notna(movimentacao_para_editar['Produtos Vendidos']) else ""
+            default_categoria = movimentacao_para_editar['Categoria']
+            default_status = movimentacao_para_editar['Status'] 
+            default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None) 
+            
+            # CORREÇÃO: Carrega a lista de produtos APENAS se o item for diferente do último carregado
+            if st.session_state.edit_id_loaded != original_idx_to_edit:
+                if default_tipo == "Entrada" and default_produtos_json:
                     try:
-                        produtos_list = json.loads(default_produtos_json)
-                    except json.JSONDecodeError:
-                        produtos_list = ast.literal_eval(default_produtos_json)
+                        try:
+                            produtos_list = json.loads(default_produtos_json)
+                        except json.JSONDecodeError:
+                            produtos_list = ast.literal_eval(default_produtos_json)
 
-                    for p in produtos_list:
-                        p['Quantidade'] = float(p.get('Quantidade', 0))
-                        p['Preço Unitário'] = float(p.get('Preço Unitário', 0))
-                        p['Custo Unitário'] = float(p.get('Custo Unitário', 0))
-                        p['Produto_ID'] = str(p.get('Produto_ID', ''))
-                        
-                    st.session_state.lista_produtos = [p for p in produtos_list if p['Quantidade'] > 0] 
-                except:
+                        for p in produtos_list:
+                            p['Quantidade'] = float(p.get('Quantidade', 0))
+                            p['Preço Unitário'] = float(p.get('Preço Unitário', 0))
+                            p['Custo Unitário'] = float(p.get('Custo Unitário', 0))
+                            p['Produto_ID'] = str(p.get('Produto_ID', ''))
+                            
+                        st.session_state.lista_produtos = [p for p in produtos_list if p['Quantidade'] > 0] 
+                    except:
+                        st.session_state.lista_produtos = []
+                else: # Tipo Saída ou sem produtos, limpa a lista.
                     st.session_state.lista_produtos = []
-            else: # Tipo Saída ou sem produtos, limpa a lista.
-                st.session_state.lista_produtos = []
+                
+                st.session_state.edit_id_loaded = original_idx_to_edit # Marca como carregado
+                st.session_state.cb_lido_livro_caixa = "" # Limpa CB lido
+                
+                # Reseta estado de cashback ao carregar uma edição
+                reset_cashback_state()
             
-            st.session_state.edit_id_loaded = original_idx_to_edit # Marca como carregado
-            st.session_state.cb_lido_livro_caixa = "" # Limpa CB lido
+            st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
             
-            # Reseta estado de cashback ao carregar uma edição
-            reset_cashback_state()
-        
-        st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
-        
+        else:
+            st.session_state.edit_id = None
+            st.session_state.edit_id_loaded = None # Limpa a chave de controle
+            st.session_state.lista_produtos = [] # Limpeza adicional
+            edit_mode = False
+            st.info("Movimentação não encontrada, saindo do modo de edição.")
+            st.rerun() 
     else:
-        st.session_state.edit_id = None
-        st.session_state.edit_id_loaded = None # Limpa a chave de controle
-        st.session_state.lista_produtos = [] # Limpeza adicional
-        edit_mode = False
-        st.info("Movimentação não encontrada, saindo do modo de edição.")
-        st.rerun() 
-else:
-    # NOVO: Se não está no modo edição, garante que a lista esteja vazia e a flag limpa
-    if st.session_state.edit_id_loaded is not None:
-         st.session_state.edit_id_loaded = None
-         st.session_state.lista_produtos = []
-    # NOVO: Limpa o alerta de dívida, exceto se houver um re-run imediato
-    if st.session_state.cliente_selecionado_divida and st.session_state.cliente_selecionado_divida != "CHECKED":
-         st.session_state.cliente_selecionado_divida = None
+        # NOVO: Se não está no modo edição, garante que a lista esteja vazia e a flag limpa
+        if st.session_state.edit_id_loaded is not None:
+             st.session_state.edit_id_loaded = None
+             st.session_state.lista_produtos = []
+        # NOVO: Limpa o alerta de dívida, exceto se houver um re-run imediato
+        if st.session_state.cliente_selecionado_divida and st.session_state.cliente_selecionado_divida != "CHECKED":
+             st.session_state.cliente_selecionado_divida = None
 
 
-# --- CRIAÇÃO DAS NOVAS ABAS ---
-abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
-
-# Adiciona garantia de que a chave existe e tem um valor válido
-if "aba_ativa_livro_caixa" not in st.session_state or str(st.session_state.aba_ativa_livro_caixa) not in abas_validas: 
-    st.session_state.aba_ativa_livro_caixa = abas_validas[0]
+    # --- CRIAÇÃO DAS NOVAS ABAS ---
+    abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
+    
+    # Adiciona garantia de que a chave existe e tem um valor válido
+    if "aba_ativa_livro_caixa" not in st.session_state or str(st.session_state.aba_ativa_livro_caixa) not in abas_validas: 
+        st.session_state.aba_ativa_livro_caixa = abas_validas[0]
 
     tab_nova_mov, tab_mov, tab_rel = st.tabs(abas_validas)
 
@@ -2182,7 +1821,12 @@ if "aba_ativa_livro_caixa" not in st.session_state or str(st.session_state.aba_a
                 
                 # Função de callback para resetar o estado de cashback e dívida (Centralizada)
                 # ATENÇÃO: Esta função precisa estar definida no escopo de livro_caixa()
-                # (A definição já foi incluída no início de livro_caixa())
+                def reset_all_states_on_client_change():
+                    st.session_state.cliente_selecionado_divida = None
+                    st.session_state.edit_id = None
+                    st.session_state.divida_a_quitar = None
+                    st.session_state.cashback_cliente_id = None
+                    st.session_state.cashback_cliente_nome = None
 
                 cliente = st.text_input("Nome do Cliente (ou Descrição)", 
                                         value=default_cliente, 
@@ -3298,6 +2942,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
