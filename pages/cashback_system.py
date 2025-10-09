@@ -92,8 +92,19 @@ def load_csv_github(url: str) -> pd.DataFrame | None:
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-        return pd.read_csv(StringIO(response.text), dtype=str)
-    except Exception:
+        
+        # --- NOVO TRATAMENTO PARA ARQUIVOS COM ASPAS DUPLAS ---
+        return pd.read_csv(
+            StringIO(response.text), 
+            sep=',', 
+            encoding="utf-8", 
+            engine="python", # Usa engine Python para lidar melhor com o formato CSV complexo (aspas dentro de aspas)
+            on_bad_lines="warn", # Apenas avisa sobre linhas mal-formadas, não falha
+            dtype=str
+        )
+        # -----------------------------------------------------
+    except Exception as e:
+        # st.error(f"Erro detalhado ao ler CSV do GitHub: {e}") # Descomente para debug
         return None
 
 def salvar_dados_no_github(df: pd.DataFrame, file_path: str, commit_message: str):
@@ -1034,3 +1045,4 @@ def cashback_system():
         PAGINAS_INTERNAS["Processar Pedidos"]()
 
 # Nenhuma chamada de função deve estar aqui. O app.py chama cashback_system().
+
