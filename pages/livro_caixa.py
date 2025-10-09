@@ -1513,9 +1513,10 @@ def livro_caixa():
 
     # Carregamento dos DataFrames
     df_produtos = st.session_state.produtos
-    df_promocoes_bruto = carregar_promocoes()
+    # AQUI: A função agora será encontrada
+    df_promocoes_bruto = carregar_promocoes() 
     df_promocoes = norm_promocoes(df_promocoes_bruto) 
-    df_cashback = carregar_cashback() # <-- CARREGA O DATAFRAME DE CASHBACK
+    df_cashback = carregar_cashback() 
 
     # ==================== FUNÇÕES AUXILIARES DE ESCOPO ====================
     # Funções de reset
@@ -2942,6 +2943,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
