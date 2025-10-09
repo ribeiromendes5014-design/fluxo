@@ -2471,32 +2471,27 @@ def livro_caixa():
                 cliente = st.text_input("Nome do Cliente (ou Descrição)", 
                                         value=default_cliente, 
                                         key="input_cliente_form",
+                                        # on_change força o re-run para checar dívida e cashback
                                         on_change=lambda: st.session_state.update(cliente_selecionado_divida="CHECKED", edit_id=None, divida_a_quitar=None, search_trigger=datetime.now().isoformat()),
                                         disabled=edit_mode)
                 
                 # ADIÇÃO: Instrução para o usuário
                 st.caption("Aperte ENTER ou clique fora do campo para buscar o cliente.")
                 
-                # --- EXIBIÇÃO DA TABELA DE CLIENTES (RESTAURADA) ---
-                st.markdown("##### 🔍 Clientes Carregados (Cashback)")
-                # A tabela de clientes carregados
-                st.dataframe(st.session_state.df_clientes.head(10), use_container_width=True, hide_index=True)
-                # ----------------------------------------------------
-                
-                # NOVO: Lógica de Cashback e Nível
+                # NOVO: Lógica de Alerta Inteligente de Dívida e Cashback
                 
                 cliente_normalizado = cliente.strip().lower()
 
-                # 1. Cria um DF temporário para a busca normalizada
+                # 1. Busca por Cashback/Fidelidade (Corrigido para buscar de forma limpa)
                 df_clientes_to_search = st.session_state.df_clientes.copy()
                 
-                # 2. Garante que a coluna de busca existe e está normalizada (Nome_Norm)
                 if "Nome_Norm" not in df_clientes_to_search.columns:
+                    # Cria a coluna de normalização para a busca
                     df_clientes_to_search["Nome_Norm"] = (
                         df_clientes_to_search["Nome"].astype(str).str.strip().str.lower()
                     )
 
-                # 3. Verifica se o cliente digitado existe no DF normalizado
+                # Cliente encontrado no Cashback/Fidelidade
                 cliente_df = df_clientes_to_search[
                    df_clientes_to_search["Nome_Norm"] == cliente_normalizado
                 ]
@@ -2504,14 +2499,78 @@ def livro_caixa():
                 
                 
                 if cliente.strip() and not edit_mode:
+                    
+                    # --- Exibe Alerta de Fidelidade (Encontrado ou Novo) ---
                     if cliente_encontrado:
-                        # Se encontrou, exibe as informações de fidelidade
                         c_cashback = cliente_df.iloc[0]["Cashback"]
                         c_nivel = cliente_df.iloc[0]["Nivel"]
-                        st.info(f"🎉 **Cliente Fidelidade:** Saldo Cashback: **R$ {c_cashback:,.2f}** | Nível: **{c_nivel}**")
+                        # CORREÇÃO CRÍTICA: Use o nome ORIGINAL do DF para exibição, não o normalizado
+                        st.info(f"🎉 **Cliente Fidelidade:** Saldo Cashback: **R$ {c_cashback:,.2f}** | Nível: **{c_nivel}**") 
                     else:
+                        # Alerta que é novo se não foi encontrado na busca limpa
                         st.info("✨ Cliente novo ou não encontrado na fidelidade. Será cadastrado após a venda!")
 
+                # --- LÓGICA DE DÍVIDA EM ABERTO (A PARTE QUE VINCULA A VENDA) ---
+                
+                if cliente.strip() and not edit_mode:
+                    
+                    df_dividas_cliente = df_exibicao[
+                        # A busca por dívida deve usar a coluna 'Cliente' do Livro Caixa (df_exibicao)
+                        (df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente_normalizado)) &
+                        (df_exibicao["Status"] == "Pendente") &
+                        (df_exibicao["Tipo"] == "Entrada")
+                    ].sort_values(by="Data Pagamento", ascending=True).copy()
+
+                    if not df_dividas_cliente.empty:
+                        
+                        total_divida = df_dividas_cliente["Valor"].abs().round(2).sum() 
+                        num_dividas = df_dividas_cliente.shape[0]
+                        divida_mais_antiga = df_dividas_cliente.iloc[0]
+                        
+                        # Extrai o valor da dívida mais antiga (a que será editada/quitada)
+                        valor_divida_antiga = calcular_valor_em_aberto(divida_mais_antiga)
+                        
+                        original_idx_divida = divida_mais_antiga['original_index']
+                        vencimento_str = divida_mais_antiga['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_mais_antiga['Data Pagamento']) else "S/ Data"
+
+                        st.session_state.cliente_selecionado_divida = divida_mais_antiga.name # Salva o índice original
+
+                        # Sua linha de alerta corrigida
+                        st.warning(f"💰 Dívida em Aberto para {cliente.strip()}: R$ {valor_divida_antiga:,.2f}") 
+                        
+                        st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
+
+                        col_btn_add, col_btn_conc, col_btn_canc = st.columns(3)
+
+                        if col_btn_add.button("➕ Adicionar Mais Produtos à Dívida", key="btn_add_produtos", use_container_width=True, type="secondary"):
+                            st.session_state.edit_id = original_idx_divida
+                            st.session_state.edit_id_loaded = None 
+                            st.rerun()
+
+                        if col_btn_conc.button("✅ Concluir/Pagar Dívida", key="btn_concluir_divida", use_container_width=True, type="primary"):
+                            st.session_state.divida_a_quitar = divida_mais_antiga['original_index']
+                            st.session_state.edit_id = None 
+                            st.session_state.edit_id_loaded = None 
+                            st.session_state.lista_produtos = []
+                            st.rerun()
+
+                        if col_btn_canc.button("🗑️ Cancelar Dívida", key="btn_cancelar_divida", use_container_width=True):
+                            # Lógica simplificada de exclusão (cancelamento)
+                            df_to_delete = df_dividas_cliente.copy()
+                            for idx in df_to_delete['original_index'].tolist():
+                                st.session_state.df = st.session_state.df.drop(idx, errors='ignore')
+                            
+                            if salvar_dados_no_github(st.session_state.df, f"Cancelamento de {num_dividas} dívida(s) de {cliente.strip()}"):
+                                st.session_state.cliente_selecionado_divida = None
+                                st.session_state.edit_id_loaded = None 
+                                st.cache_data.clear()
+                                st.success(f"{num_dividas} dívida(s) de {cliente.strip()} cancelada(s) com sucesso!")
+                                st.rerun()
+                    else:
+                        st.session_state.cliente_selecionado_divida = None # Limpa a chave se não houver dívida
+                
+                # --- FIM DA LÓGICA DE DÍVIDA EM ABERTO ---
+                
                 st.markdown("#### 🛍️ Detalhes dos Produtos")
                 
                 # FIM NOVO: Lógica de Cashback
@@ -3618,6 +3677,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
