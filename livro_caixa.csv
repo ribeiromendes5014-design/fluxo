@@ -54,7 +54,6 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-09-25,Doce&bella,compra de produtos,-614.4,PIX,Saída,,Fornecedores/Matéria Prima,Realizada,2025-09-25,,
 2025-09-30,Doce&bella,Compra de produtos ,-243.49,PIX,Saída,,Fornecedores/Matéria Prima,Realizada,2025-09-30,,
 2025-09-30,Doce&bella,Mara,30.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Creme nivea"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 30.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-09-30,,
-2025-10-09,Doce&bella,Andica,50.0,Pendente,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Body splash ju azul"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 30.0, ""Custo Unit\u00e1rio"": 0.0}, {""Produto_ID"": """", ""Produto"": ""Batom"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 15.0, ""Custo Unit\u00e1rio"": 0.0}, {""Produto_ID"": """", ""Produto"": ""lapis de olho"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 5.0, ""Custo Unit\u00e1rio"": 0.0}]",Doce&bella,Pendente,,,
 2025-06-16,Doce&bella,venda,128.0,PIX,Entrada,,,Realizada,2025-06-16,,
 2025-06-16,Doce&bella,venda,49.0,PIX,Entrada,,,Realizada,2025-06-16,,
 2025-06-16,Doce&bella,venda,66.7,PIX,Entrada,,,Realizada,2025-06-16,,
@@ -156,3 +155,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-10-08,Doce&bella,Marle,74.8,PIX,Entrada,,Doce&bella,Realizada,2025-10-08,,
 2025-09-17,Doce&bella,,-259.29,PIX,Saída,,Outro: correção,Realizada,2025-09-17,,
 2025-10-09,Doce&bella,Terezinha,10.5,PIX,Entrada,,Doce&bella,Realizada,2025-10-09,,
+2025-10-09,Doce&bella,Andica (Pagto de R$ 50.00),50.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Body splash ju azul"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 30.0, ""Custo Unit\u00e1rio"": 0.0}, {""Produto_ID"": """", ""Produto"": ""Batom"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 15.0, ""Custo Unit\u00e1rio"": 0.0}, {""Produto_ID"": """", ""Produto"": ""lapis de olho"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 5.0, ""Custo Unit\u00e1rio"": 0.0}]",Doce&bella,Realizada,2025-10-09,,55
