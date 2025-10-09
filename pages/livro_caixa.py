@@ -2260,7 +2260,9 @@ def livro_caixa():
     # ==============================================================================================
     with tab_nova_mov:
         # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
-        
+        if "df_clientes" not in st.session_state:
+            st.session_state.df_clientes = carregar_clientes_cash()
+            
         st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
 
         # --- NOVO: FORMULÁRIO DE QUITAÇÃO RÁPIDA (Se houver dívida selecionada na aba) ---
@@ -3571,6 +3573,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
