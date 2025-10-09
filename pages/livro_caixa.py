@@ -435,44 +435,35 @@ def calcular_nivel(total_gasto: float) -> str:
 
 @st.cache_data(show_spinner="Carregando clientes e cashback...")
 def carregar_clientes_cash():
-    """Carrega o histórico de clientes e cashback (GitHub primeiro) e renomeia as colunas."""
+    """Carrega o histórico de clientes e cashback, padronizando os nomes das colunas."""
     df = None
-    
-    # 1. Tenta carregar do GitHub (fonte principal)
     url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CLIENTES_CASH}"
     df = load_csv_github(url_raw)
 
-    # 2. Se falhar, tenta um fallback local
     if df is None or df.empty:
-        try:
-            if os.path.exists(ARQ_CLIENTES_CASH):
-                df = pd.read_csv(ARQ_CLIENTES_CASH, dtype=str)
-        except Exception:
-            pass 
+        # Se não encontrar no GitHub, cria um vazio com as colunas corretas (já em minúsculo)
+        colunas_padrao = ["nome", "apelido/descrição", "contato", "cashback_disponivel", "gasto_acumulado", "nivel_atual", "indicado_por"]
+        df = pd.DataFrame(columns=colunas_padrao)
+    else:
+        # PONTO CRÍTICO: Padroniza TODAS as colunas para minúsculas
+        df.columns = [str(col).strip().lower() for col in df.columns]
 
-    # 3. Se ainda assim não carregou, cria um DataFrame vazio
-    if df is None or df.empty:
-        df = pd.DataFrame(columns=["Nome", "Cashback", "TotalGasto", "Nivel"])
-
-    # ===================================================================
-    # CORREÇÃO PRINCIPAL: Renomeia as colunas do CSV para o padrão do app
-    # ===================================================================
+    # Renomeia as colunas para o padrão interno do app
     mapa_colunas = {
-        "CASHBACK_DISPONIVEL": "Cashback",
-        "GASTO_ACUMULADO": "TotalGasto",
-        "NIVEL_ATUAL": "Nivel"
+        "cashback_disponivel": "cashback",
+        "gasto_acumulado": "totalgasto",
+        "nivel_atual": "nivel"
     }
     df.rename(columns=mapa_colunas, inplace=True)
-    # ===================================================================
-
-    # Garante que as colunas padrão existam após renomear
-    for col in ["Nome", "Cashback", "TotalGasto", "Nivel"]:
+    
+    # Garante que as colunas essenciais existam
+    for col in ["nome", "cashback", "totalgasto", "nivel"]:
         if col not in df.columns:
-            df[col] = 0.0 if col in ["Cashback", "TotalGasto"] else ""
+            df[col] = ""
 
-    # Normaliza os tipos
-    df["Cashback"] = pd.to_numeric(df["Cashback"], errors='coerce').fillna(0.0)
-    df["TotalGasto"] = pd.to_numeric(df["TotalGasto"], errors='coerce').fillna(0.0)
+    # Converte tipos de dados
+    df["cashback"] = pd.to_numeric(df["cashback"], errors='coerce').fillna(0.0)
+    df["totalgasto"] = pd.to_numeric(df["totalgasto"], errors='coerce').fillna(0.0)
 
     return df
 
@@ -3529,6 +3520,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
