@@ -14,6 +14,25 @@ import base64
 import calendar 
 
 from constants_and_css import * # Linha 2 (CORRETA - Importa as funções específicas de renderização que estavam misturadas)
+from render_utils import render_global_config, render_custom_header
+
+from utils import (
+    to_float, prox_id, hash_df, parse_date_yyyy_mm_dd, add_months,
+    calcular_valor_em_aberto, format_produtos_resumo,
+    carregar_livro_caixa, salvar_dados_no_github,
+    carregar_historico_compras, salvar_historico_compras_no_github,
+    carregar_produtos, salvar_produtos_no_github, inicializar_produtos,
+    ajustar_estoque, ler_codigo_barras_api,
+    callback_salvar_novo_produto, callback_adicionar_manual, callback_adicionar_estoque,
+    calcular_resumo, norm_promocoes, get_most_sold_products,
+    processar_dataframe, save_data_github_produtos,
+    carregar_promocoes,  # 👈 ADICIONE ESTA LINHA
+    carregar_cashback, salvar_cashback_no_github,
+    calcular_cashback_venda, creditar_cashback_e_atualizar_gasto,
+    obter_nivel_cashback
+)
+
+
 # ==============================================================================
 # PLACEHOLDER CONSTANTS (Assumed to be imported from constants_and_css)
 # Estas constantes são cruciais para o funcionamento do código.
@@ -3522,6 +3541,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
