@@ -13,6 +13,7 @@ import ast
 import calendar
 import os
 from github import Github 
+from constants_and_css import URL_PROMOCOES_CSV
 
 
 # =================================================================================
@@ -1007,6 +1008,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
