@@ -435,29 +435,42 @@ def calcular_nivel(total_gasto: float) -> str:
 
 @st.cache_data(show_spinner="Carregando clientes e cashback...")
 def carregar_clientes_cash():
-    """Carrega o histórico de clientes e cashback (local ou GitHub)."""
-    try:
-        # 1️⃣ Tenta ler localmente primeiro
-        if os.path.exists("data/clientes_cash.csv"):
-            df = pd.read_csv("data/clientes_cash.csv", dtype=str)
-        else:
-            # 2️⃣ Fallback: tenta via GitHub
-            url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CLIENTES_CASH}"
-            df = load_csv_github(url_raw)
+    """Carrega o histórico de clientes e cashback (GitHub primeiro) e renomeia as colunas."""
+    df = None
+    
+    # 1. Tenta carregar do GitHub (fonte principal)
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CLIENTES_CASH}"
+    df = load_csv_github(url_raw)
 
-        # ⚙️ Se ainda assim não conseguiu carregar nada, cria dataframe vazio
-        if df is None or df.empty:
-            df = pd.DataFrame(columns=["Nome", "Cashback", "TotalGasto", "Nivel"])
+    # 2. Se falhar, tenta um fallback local
+    if df is None or df.empty:
+        try:
+            if os.path.exists(ARQ_CLIENTES_CASH):
+                df = pd.read_csv(ARQ_CLIENTES_CASH, dtype=str)
+        except Exception:
+            pass 
 
-    except Exception as e:
-        st.warning(f"⚠️ Falha ao carregar clientes: {e}")
+    # 3. Se ainda assim não carregou, cria um DataFrame vazio
+    if df is None or df.empty:
         df = pd.DataFrame(columns=["Nome", "Cashback", "TotalGasto", "Nivel"])
 
-    # Normaliza colunas e tipos
+    # ===================================================================
+    # CORREÇÃO PRINCIPAL: Renomeia as colunas do CSV para o padrão do app
+    # ===================================================================
+    mapa_colunas = {
+        "CASHBACK_DISPONIVEL": "Cashback",
+        "GASTO_ACUMULADO": "TotalGasto",
+        "NIVEL_ATUAL": "Nivel"
+    }
+    df.rename(columns=mapa_colunas, inplace=True)
+    # ===================================================================
+
+    # Garante que as colunas padrão existam após renomear
     for col in ["Nome", "Cashback", "TotalGasto", "Nivel"]:
         if col not in df.columns:
-            df[col] = ""
+            df[col] = 0.0 if col in ["Cashback", "TotalGasto"] else ""
 
+    # Normaliza os tipos
     df["Cashback"] = pd.to_numeric(df["Cashback"], errors='coerce').fillna(0.0)
     df["TotalGasto"] = pd.to_numeric(df["TotalGasto"], errors='coerce').fillna(0.0)
 
@@ -465,15 +478,33 @@ def carregar_clientes_cash():
 
 
 def salvar_clientes_cash_github(df: pd.DataFrame, commit_message: str):
-    """Salva o DataFrame CSV de Clientes no GitHub (ARQ_CLIENTES_CASH)."""
+    """Salva o DataFrame de Clientes no GitHub, renomeando as colunas para o formato original do CSV."""
     try:
         from github import Github
     except ImportError:
-        pass # Apenas para ambiente de desenvolvimento sem a lib instalada
+        pass 
         
     df_temp = df.copy()
+
+    # ===================================================================
+    # CORREÇÃO PRINCIPAL: Renomeia as colunas do app para o padrão do CSV antes de salvar
+    # ===================================================================
+    mapa_colunas_reverso = {
+        "Cashback": "CASHBACK_DISPONIVEL",
+        "TotalGasto": "GASTO_ACUMULADO",
+        "Nivel": "NIVEL_ATUAL"
+    }
+    df_temp.rename(columns=mapa_colunas_reverso, inplace=True)
+    # ===================================================================
     
-    # 1. Envio para o GitHub
+    # Garante que as outras colunas do seu CSV original sejam mantidas se existirem
+    colunas_finais = ["Nome", "Apelido/Descrição", "Contato", "CASHBACK_DISPONIVEL", "GASTO_ACUMULADO", "NIVEL_ATUAL", "Indicado_Por"]
+    for col in colunas_finais:
+        if col not in df_temp.columns:
+            df_temp[col] = "" # Adiciona colunas faltantes para não dar erro
+
+    df_temp = df_temp[colunas_finais] # Reordena para manter o padrão do arquivo
+
     try:
         g = Github(TOKEN)
         repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
@@ -489,7 +520,6 @@ def salvar_clientes_cash_github(df: pd.DataFrame, commit_message: str):
         return True
     
     except Exception as e:
-        # Não usar st.error fora da função principal para evitar NameError
         return False
 
 @st.cache_data(show_spinner="Carregando produtos do estoque...")
@@ -3537,6 +3567,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
