@@ -12,7 +12,7 @@ import hashlib
 import ast
 import calendar
 import os
-from github import Github # Adicionei aqui para garantir o uso em todas as funções de salvar
+from github import Github 
 
 
 # =================================================================================
@@ -25,7 +25,7 @@ from constants_and_css import (
     COLUNAS_PADRAO_COMPLETO,
     COLUNAS_COMPLETAS_PROCESSADAS,
     COLUNAS_PRODUTOS,
-    COLUNAS_PRODUTOS_COMPLETAS, # <--- CORREÇÃO!
+    COLUNAS_PRODUTOS_COMPLETAS, 
     FATOR_CARTAO, COMMIT_MESSAGE, COMMIT_MESSAGE_EDIT, COMMIT_MESSAGE_DELETE,
     # === NOVAS CONSTANTES DE CASHBACK ===
     ARQ_CASHBACK, COLUNAS_CASHBACK, NIVEIS_CASHBACK
@@ -183,18 +183,13 @@ def norm_promocoes(df_promocoes: pd.DataFrame) -> pd.DataFrame:
 def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
     """
     Função para salvar o Livro Caixa (movimentações) no GitHub. 
-    (Substitui 'salvar_historico_no_github' para maior clareza de uso).
     """
-    # Importa as constantes necessárias (melhor deixar fora do try/except se possível)
     try:
         from constants_and_css import PATH_DIVIDAS as CONST_PATH, OWNER as CONST_OWNER, REPO_NAME as CONST_REPO, BRANCH as CONST_BRANCH
-        from constants_and_css import GITHUB_TOKEN, ARQ_LOCAL # Garante a importação de GITHUB_TOKEN e ARQ_LOCAL
+        from constants_and_css import GITHUB_TOKEN, ARQ_LOCAL
     except Exception:
-        # Se as constantes não carregarem, a falha é estrutural.
         return False
         
-    # --- 1. Busca de Credenciais ---
-    # Usando o GITHUB_TOKEN já importado, garantindo o fallback
     token = (st.secrets.get("GITHUB_TOKEN") or st.secrets.get("github_token") or GITHUB_TOKEN)
     repo_owner = st.secrets.get("REPO_OWNER") or st.secrets.get("owner") or CONST_OWNER
     repo_name = st.secrets.get("REPO_NAME") or st.secrets.get("repo") or CONST_REPO
@@ -205,14 +200,11 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
         st.warning("⚠️ Nenhum token do GitHub encontrado. Salve manualmente.")
         return False
         
-    # --- 2. Backup Local (Corrigido index=True para index=False se for Livro Caixa) ---
     try:
-        # Nota: Livro Caixa geralmente não usa index=True, mas mantive o original se for seu requisito
         df.to_csv(ARQ_LOCAL, index=False, encoding="utf-8-sig") 
     except Exception as e:
         st.error(f"Erro ao salvar localmente: {e}")
         
-    # --- 3. Envio para o GitHub ---
     try:
         g = Github(token)
         repo = g.get_repo(f"{repo_owner}/{repo_name}")
@@ -226,7 +218,6 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
             repo.create_file(csv_remote_path, commit_message, csv_content, branch=branch)
             st.success("📁 Arquivo de dados criado no GitHub!")
             
-        # A LINHA CRÍTICA: LIMPEZA DO CACHE PARA FORÇAR O RELOAD
         carregar_livro_caixa.clear()
         
         return True
@@ -235,46 +226,55 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
         st.warning(f"Falha ao enviar dados para o GitHub — backup local mantido. ({e})")
         return False
 
+@st.cache_data(show_spinner=False)
 def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     """Processa o dataframe de movimentações para exibição e cálculo de saldo."""
     if df_movimentacoes is None or df_movimentacoes.empty:
         return pd.DataFrame(columns=[c.upper().replace(' ', '_') for c in COLUNAS_COMPLETAS_PROCESSADAS])
-    df = df_movimentacoes.copy()
-    if 'index' in df.columns:
-        df = df.drop(columns=['index'])
-    if 'original_index' in df.columns:
-        df = df.drop(columns=['original_index'])
-    df.index.name = 'original_index'
-    df = df.reset_index()
-    df["VALOR"] = pd.to_numeric(df["VALOR"], errors='coerce').fillna(0.0) 
-    df["DATA"] = pd.to_datetime(df["DATA"], errors='coerce').dt.date 
-    df["DATA_PAGAMENTO"] = pd.to_datetime(df["DATA_PAGAMENTO"], errors='coerce').dt.date 
+    df_proc = df_movimentacoes.copy()
     
-    # CORREÇÃO PARA GARANTIR QUE REGISTROS PENDENTES COM DATA INVÁLIDA NÃO SEJAM DESCARTADOS
-    df["Data_dt"] = pd.to_datetime(df["DATA"], errors='coerce')
-    df["Data_dt"] = df["Data_dt"].fillna(datetime(1900, 1, 1)) # Preenche NaT com data mínima para ordenação
-    # df.dropna(subset=['Data_dt'], inplace=True) <--- REMOVIDO PARA EVITAR DESCARTE DE PENDENTES
+    # 1. CRIAÇÃO E RENOAMEAÇÃO DO ÍNDICE/COLUNAS
+    if 'index' in df_proc.columns:
+        df_proc = df_proc.drop(columns=['index'])
+    if 'original_index' in df_proc.columns:
+        df_proc = df_proc.drop(columns=['original_index'])
+    df_proc.index.name = 'original_index'
+    df_proc = df_proc.reset_index() # <-- CRIA A COLUNA 'original_index'
+
+    # 2. CONVERSÃO DE TIPOS E CRIAÇÃO DE COLUNAS AUXILIARES
+    df_proc["VALOR"] = pd.to_numeric(df_proc["VALOR"], errors='coerce').fillna(0.0) 
+    df_proc["DATA"] = pd.to_datetime(df_proc["DATA"], errors='coerce').dt.date 
+    df_proc["DATA_PAGAMENTO"] = pd.to_datetime(df_proc["DATA_PAGAMENTO"], errors='coerce').dt.date 
     
-    df['Cor_Valor'] = df['VALOR'].apply(lambda x: 'green' if x >= 0 else 'red') 
-    if 'ID_VISÍVEL' not in df.columns or df['ID_VISÍVEL'].isnull().all():
-        df['ID_VISÍVEL'] = range(1, len(df) + 1)
+    # Cria a coluna 'DATA_dt' para ordenação (CORREÇÃO DA KEYERROR)
+    df_proc["DATA_dt"] = pd.to_datetime(df_proc["DATA"], errors='coerce')
+    df_proc["DATA_dt"] = df_proc["DATA_dt"].fillna(datetime(1900, 1, 1))
+    
+    df_proc['Cor_Valor'] = df_proc['VALOR'].apply(lambda x: 'green' if x >= 0 else 'red') 
+
+    if 'ID_VISÍVEL' not in df_proc.columns or df_proc['ID_VISÍVEL'].isnull().all():
+        df_proc['ID_VISÍVEL'] = range(1, len(df_proc) + 1)
         
-    df_realizadas = df[df['STATUS'] == 'REALIZADA'].copy()
+    # 3. CÁLCULO DO SALDO (USANDO AS COLUNAS CRIADAS)
+    df_realizadas = df_proc[df_proc['STATUS'] == 'REALIZADA'].copy()
+    
+    # Ordena e calcula o saldo usando 'DATA_dt' e 'original_index'
     if 'original_index' in df_realizadas.columns:
-        df_realizadas = df_realizadas.sort_values(by=['DATA_dt', 'original_index']) 
+        df_realizadas = df_realizadas.sort_values(by=['DATA_dt', 'original_index'], ascending=[True, True]) 
         df_realizadas['Saldo Acumulado'] = df_realizadas['VALOR'].cumsum() 
-        df = df.merge(df_realizadas[['original_index', 'Saldo Acumulado']], on='original_index', how='left')
+        df_proc = df_proc.merge(df_realizadas[['original_index', 'Saldo Acumulado']], on='original_index', how='left')
     else:
-        df['Saldo Acumulado'] = pd.NA
+        df_proc['Saldo Acumulado'] = pd.NA
         
+    # 4. RENOMEAÇÃO FINAL (Para o formato de exibição)
     livro_caixa_map = {
         'DATA': 'Data', 'LOJA': 'Loja', 'CLIENTE': 'Cliente', 'VALOR': 'Valor',
         'FORMA_DE_PAGAMENTO': 'Forma de Pagamento', 'TIPO': 'Tipo', 'PRODUTOS_VENDIDOS': 'Produtos Vendidos',
         'CATEGORIA': 'Categoria', 'STATUS': 'Status', 'DATA_PAGAMENTO': 'Data Pagamento', 
         'RECORRENCIAID': 'RecorrenciaID', 'TRANSACAOPAIID': 'TransacaoPaiID', 'ID_VISÍVEL': 'ID Visível', 
     }
-    df.rename(columns=livro_caixa_map, inplace=True, errors='ignore')
-    return df
+    df_proc.rename(columns=livro_caixa_map, inplace=True, errors='ignore')
+    return df_proc
 
 def calcular_resumo(df_movimentacoes: pd.DataFrame):
     """Calcula o total de entradas, saídas e o saldo líquido de um DataFrame."""
@@ -333,7 +333,7 @@ def salvar_historico_compras_no_github(df: pd.DataFrame, commit_message: str):
         st.warning("⚠️ Nenhum dado de compra para salvar — operação ignorada para evitar sobrescrever o CSV no GitHub.")
         return False
     try:
-        from constants_and_css import ARQ_COMPRAS, OWNER as CONST_OWNER, REPO_NAME as CONST_REPO, BRANCH as CONST_BRANCH, GITHUB_TOKEN # Re-importa constantes
+        from constants_and_css import ARQ_COMPRAS, OWNER as CONST_OWNER, REPO_NAME as CONST_REPO, BRANCH as CONST_BRANCH, GITHUB_TOKEN
     except Exception as e:
         st.error(f"❌ Erro ao carregar constantes do projeto: {e}")
         return False
@@ -801,7 +801,7 @@ def callback_salvar_novo_produto(df_produtos, tipo_produto, nome, marca, categor
         cont_variacoes = 0
         compras_para_historico = [] # Lista para acumular as compras das variações
         
-        for var in variacoes:
+        for var in variações:
             detalhes_grade_str = str(var.get("DetalhesGrade", "{}"))
             var_qtd = int(var.get("Quantidade", 0))
             
