@@ -25,13 +25,10 @@ from utils import (
     ajustar_estoque, ler_codigo_barras_api,
     callback_salvar_novo_produto, callback_adicionar_manual, callback_adicionar_estoque,
     calcular_resumo, norm_promocoes, get_most_sold_products,
-    processar_dataframe, 
-    save_data_github_produtos,
-    # === NOVAS FUNÇÕES DE CASHBACK ===
-    carregar_cashback,
-    salvar_cashback_no_github,
-    calcular_cashback_venda,
-    creditar_cashback_e_atualizar_gasto,
+    processar_dataframe, save_data_github_produtos,
+    carregar_promocoes,  # 👈 ADICIONE ESTA LINHA
+    carregar_cashback, salvar_cashback_no_github,
+    calcular_cashback_venda, creditar_cashback_e_atualizar_gasto,
     obter_nivel_cashback
 )
 
@@ -2943,6 +2940,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
