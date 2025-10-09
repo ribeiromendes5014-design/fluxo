@@ -1530,15 +1530,17 @@ def livro_caixa():
         st.session_state.cashback_cliente_nome = None
 
     # ==================== LÓGICA DO DATAFRAME ====================
-    # ==================== LÓGICA DO DATAFRAME ====================
     df_dividas = st.session_state.df
     df_exibicao = processar_dataframe(df_dividas)
 
-    # CORREÇÃO CRÍTICA DO VALUERROR: GARANTIR ÍNDICE ÚNICO
-    # A verificação condicional anterior pode não ser suficiente em todos os casos.
-    # Forçar o reset resolve o erro "cannot reindex on an axis with duplicate labels".
-    if not df_exibicao.empty: # Adiciona verificação de empty antes do reset
+    # CORREÇÃO CRÍTICA 1: GARANTIR ÍNDICE ÚNICO
+    if not df_exibicao.empty:
         df_exibicao = df_exibicao.reset_index(drop=True)
+    
+    # CORREÇÃO CRÍTICA 2: GARANTIR TIPO DE DADOS PARA COMPARAÇÃO
+    # Converte explicitamente a coluna 'Data' para datetime64[ns] para compatibilidade com 'primeiro_dia_mes'
+    if not df_exibicao.empty and "Data" in df_exibicao.columns:
+        df_exibicao["Data"] = pd.to_datetime(df_exibicao["Data"], errors='coerce').dt.normalize()
 
     produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()].copy()
     opcoes_produtos = [""] + produtos_para_venda.apply(
@@ -2945,6 +2947,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
