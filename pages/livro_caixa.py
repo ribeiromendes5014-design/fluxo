@@ -272,12 +272,27 @@ def processar_dataframe(df):
     df_proc = df.copy()
     df_proc["Valor"] = pd.to_numeric(df_proc["Valor"], errors="coerce").fillna(0.0)
     df_proc["Data"] = pd.to_datetime(df_proc["Data"], errors='coerce').dt.date
+    
+    # --- INÍCIO DA CORREÇÃO ---
+    # 1. Converte a coluna 'Data' para datetime
     df_proc["Data_dt"] = pd.to_datetime(df_proc["Data"], errors='coerce')
+    
+    # 2. Remove a linha que estava descartando os registros (dropna)
+    # df_proc.dropna(subset=['Data_dt'], inplace=True) 
+    
+    # 3. Substitui os valores de data inválidos (NaT) por uma data muito antiga para permitir a ordenação.
+    # Usamos o fillna no Data_dt para evitar erros de ordenação.
+    df_proc["Data_dt"] = df_proc["Data_dt"].fillna(datetime(1900, 1, 1))
+
+    # --- FIM DA CORREÇÃO ---
+    
     df_proc["Data Pagamento"] = pd.to_datetime(df_proc["Data Pagamento"], errors='coerce').dt.date
-    df_proc.dropna(subset=['Data_dt'], inplace=True)
-    df_proc = df_proc.reset_index(drop=False) 
+    
+    df_proc = df_proc.reset_index(drop=False)
     df_proc.rename(columns={'index': 'original_index'}, inplace=True)
-    df_proc['Saldo Acumulado'] = 0.0 
+    df_proc['Saldo Acumulado'] = 0.0
+    
+    # A lógica do saldo permanece a mesma, usando apenas 'Realizada' para o cálculo.
     df_realizadas = df_proc[df_proc['Status'] == 'Realizada'].copy()
     if not df_realizadas.empty:
         df_realizadas_sorted_asc = df_realizadas.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]).reset_index(drop=True)
@@ -285,6 +300,7 @@ def processar_dataframe(df):
         df_proc = pd.merge(df_proc, df_realizadas_sorted_asc[['original_index', 'TEMP_SALDO']], on='original_index', how='left')
         df_proc['Saldo Acumulado'] = df_proc['TEMP_SALDO'].fillna(method='ffill').fillna(0)
         df_proc.drop(columns=['TEMP_SALDO'], inplace=True, errors='ignore')
+        
     df_proc = df_proc.sort_values(by="Data_dt", ascending=False).reset_index(drop=True)
     df_proc.insert(0, 'ID Visível', df_proc.index + 1)
     df_proc['Cor_Valor'] = df_proc.apply(lambda row: 'green' if row['Tipo'] == 'Entrada' and row['Valor'] >= 0 else 'red', axis=1)
@@ -3351,6 +3367,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
