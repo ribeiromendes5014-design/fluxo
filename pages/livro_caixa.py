@@ -2624,6 +2624,43 @@ def livro_caixa():
                     if st.session_state.lista_produtos:
                         df_exibicao_produtos = pd.DataFrame(st.session_state.lista_produtos)
                         st.dataframe(df_exibicao_produtos[['Produto', 'Quantidade', 'Preço Unitário']], use_container_width=True, hide_index=True)
+                        # ==============================================================================
+                    # NOVA ÁREA DE CÁLCULO DE TOTAIS E RESGATE DE CASHBACK (LUGAR CORRETO)
+                    # ==============================================================================
+                    valor_compra_atual = 0.0
+                    if st.session_state.lista_produtos:
+                        df_produtos_temp = pd.DataFrame(st.session_state.lista_produtos)
+                        valor_compra_atual = (pd.to_numeric(df_produtos_temp['Quantidade']) * pd.to_numeric(df_produtos_temp['Preço Unitário'])).sum()
+                        st.success(f"Subtotal do Carrinho: R$ {valor_compra_atual:,.2f}")
+
+                    # Verifica se há um cliente fidelidade ativo na sessão E se há produtos no carrinho
+                    if "cliente_fidelidade_ativo" in st.session_state and valor_compra_atual > 0:
+                        cliente_ativo = st.session_state.cliente_fidelidade_ativo
+                        c_cashback = cliente_ativo['cashback']
+
+                        # Caso 1: Cliente PODE resgatar
+                        if c_cashback >= 20.00:
+                            max_resgate_permitido = round(valor_compra_atual * 0.5, 2)
+                            max_resgate_real = min(c_cashback, max_resgate_permitido, valor_compra_atual)
+
+                            st.session_state.cashback_a_usar = st.number_input(
+                                "💸 Usar Cashback (Desconto)",
+                                min_value=0.0, max_value=float(max_resgate_real),
+                                value=st.session_state.get('cashback_a_usar', 0.0), # Mantém o valor digitado
+                                step=1.0, format="%.2f",
+                                key="input_cashback_resgate",
+                                help=f"Você pode resgatar até R$ {max_resgate_real:,.2f} nesta compra."
+                            )
+                        # Caso 2: Cliente TEM cashback, mas MENOS de R$20,00
+                        elif c_cashback > 0:
+                            st.info(f"ℹ️ Cliente tem R$ {c_cashback:,.2f} de cashback. O resgate é permitido apenas para saldos acima de R$ 20,00.")
+                            st.session_state.cashback_a_usar = 0.0
+                    else:
+                        # Garante que o cashback a ser usado seja zero se não houver cliente ou produtos
+                        st.session_state.cashback_a_usar = 0.0
+                    # ==============================================================================
+                    # FIM DA NOVA ÁREA
+                    # ==============================================================================
                     else:
                         st.info("Lista de produtos vazia.")
                     
@@ -3657,6 +3694,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
