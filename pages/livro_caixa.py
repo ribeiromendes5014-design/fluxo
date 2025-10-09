@@ -2883,7 +2883,16 @@ def livro_caixa():
                 elif is_recorrente and not edit_mode and not nome_despesa_recorrente:
                     st.error("O nome da Despesa Recorrente é obrigatório.")
                 else:
-                    valor_armazenado = valor_final_movimentacao if tipo == "Entrada" else -valor_final_movimentacao
+                    # Pega o valor do resgate para aplicar o desconto
+                    cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
+                    valor_final_com_desconto = valor_final_movimentacao - cashback_resgatado
+                    
+                    # Atualiza a descrição do cliente se houver resgate
+                    cliente_final_com_nota = cliente_final
+                    if cashback_resgatado > 0:
+                        cliente_final_com_nota = f"{cliente_final} (Cashback Usado: R$ {cashback_resgatado:,.2f})"
+
+                    valor_armazenado = valor_final_com_desconto if tipo == "Entrada" else -valor_final_com_desconto
                     
                     # Lógica de ajuste de estoque (reversão e débito)
                     if edit_mode:
@@ -3614,6 +3623,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
