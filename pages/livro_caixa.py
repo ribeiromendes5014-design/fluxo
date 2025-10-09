@@ -17,8 +17,15 @@ from constants_and_css import * # Linha 2 (CORRETA - Importa as funções espec�
 from render_utils import render_global_config, render_custom_header
 
 from utils import (
-    # ... suas funções existentes ...
-    processar_dataframe,
+    to_float, prox_id, hash_df, parse_date_yyyy_mm_dd, add_months,
+    calcular_valor_em_aberto, format_produtos_resumo,
+    carregar_livro_caixa, salvar_dados_no_github,
+    carregar_historico_compras, salvar_historico_no_github,
+    carregar_produtos, salvar_produtos_no_github, inicializar_produtos,
+    ajustar_estoque, ler_codigo_barras_api,
+    callback_salvar_novo_produto, callback_adicionar_manual, callback_adicionar_estoque,
+    calcular_resumo, norm_promocoes, get_most_sold_products,
+    processar_dataframe, # GARANTINDO QUE A VERSÃO CORRIGIDA É USADA
     save_data_github_produtos,
     # === NOVAS FUNÇÕES DE CASHBACK ===
     carregar_cashback,
@@ -190,191 +197,7 @@ def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
     except Exception as e:
         return False
 
-@st.cache_data(show_spinner="Carregando dados...")
-def carregar_livro_caixa():
-    """Orquestra o carregamento do Livro Caixa."""
-    df = None
-    
-    # 1. Tenta carregar do GitHub (usando a URL raw com o PATH_DIVIDAS / CSV_PATH)
-    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{PATH_DIVIDAS}"
-    df = load_csv_github(url_raw)
-
-    if df is None or df.empty:
-        # 2. Fallback local/garantia de colunas
-        try:
-            df = pd.read_csv(ARQ_LOCAL, dtype=str)
-        except Exception:
-            df = pd.DataFrame(columns=COLUNAS_PADRAO)
-        
-    if df.empty:
-        df = pd.DataFrame(columns=COLUNAS_PADRAO)
-
-    # Garante que as colunas padrão existam
-    for col in COLUNAS_PADRAO:
-        if col not in df.columns:
-            df[col] = "Realizada" if col == "Status" else "" 
-            
-    # Adiciona RecorrenciaID, TransacaoPaiID se não existirem
-    for col in ["RecorrenciaID", "TransacaoPaiID"]:
-        if col not in df.columns:
-            df[col] = ''
-        
-    # Retorna apenas as colunas padrão na ordem correta
-    cols_to_return = COLUNAS_PADRAO_COMPLETO
-    return df[[col for col in cols_to_return if col in df.columns]]
-
-
-def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
-    """
-    Salva o DataFrame CSV do Livro Caixa no GitHub usando a API e também localmente (backup).
-    Essa função garante a persistência de dados para o Streamlit.
-    """
-    
-    # 1. Backup local (Tenta salvar, ignora se falhar)
-    try:
-        df.to_csv(ARQ_LOCAL, index=False, encoding="utf-8-sig") 
-    except Exception:
-        pass
-
-    # 2. Prepara DataFrame para envio ao GitHub
-    df_temp = df.copy()
-    
-    # Prepara os dados de data para serem salvos como string no formato YYYY-MM-DD
-    for col_date in ['Data', 'Data Pagamento']:
-        if col_date in df_temp.columns:
-            df_temp[col_date] = pd.to_datetime(df_temp[col_date], errors='coerce').apply(
-                lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
-            )
-
-    try:
-        g = Github(TOKEN)
-        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
-
-        try:
-            # Tenta obter o SHA do conteúdo atual
-            contents = repo.get_contents(PATH_DIVIDAS, ref=BRANCH)
-            # Atualiza o arquivo
-            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
-            st.success("📁 Livro Caixa salvo (atualizado) no GitHub!")
-        except Exception:
-            # Cria o arquivo (se não existir)
-            repo.create_file(PATH_DIVIDAS, commit_message, csv_string, branch=BRANCH)
-            st.success("📁 Livro Caixa salvo (criado) no GitHub!")
-
-        # IMPORTANTE: Limpa o cache após o salvamento bem-sucedido
-        carregar_livro_caixa.clear()
-        
-        return True
-
-    except Exception as e:
-        st.error(f"❌ Erro ao salvar no GitHub: {e}")
-        st.error("Verifique se seu 'GITHUB_TOKEN' tem permissões e se o repositório existe.")
-        return False
-
-
-@st.cache_data(show_spinner=False)
-def processar_dataframe(df):
-    for col in COLUNAS_PADRAO:
-        if col not in df.columns: df[col] = ""
-    for col in ["RecorrenciaID", "TransacaoPaiID"]:
-        if col not in df.columns: df[col] = ''
-
-    if df.empty: return pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
-    df_proc = df.copy()
-    df_proc["Valor"] = pd.to_numeric(df_proc["Valor"], errors="coerce").fillna(0.0)
-    df_proc["Data"] = pd.to_datetime(df_proc["Data"], errors='coerce').dt.date
-    
-    # --- INÍCIO DA CORREÇÃO ---
-    # 1. Converte a coluna 'Data' para datetime
-    df_proc["Data_dt"] = pd.to_datetime(df_proc["Data"], errors='coerce')
-    
-    # 2. Remove a linha que estava descartando os registros (dropna)
-    # df_proc.dropna(subset=['Data_dt'], inplace=True) 
-    
-    # 3. Substitui os valores de data inválidos (NaT) por uma data muito antiga para permitir a ordenação.
-    # Usamos o fillna no Data_dt para evitar erros de ordenação.
-    df_proc["Data_dt"] = df_proc["Data_dt"].fillna(datetime(1900, 1, 1))
-
-    # --- FIM DA CORREÇÃO ---
-    
-    df_proc["Data Pagamento"] = pd.to_datetime(df_proc["Data Pagamento"], errors='coerce').dt.date
-    
-    df_proc = df_proc.reset_index(drop=False)
-    df_proc.rename(columns={'index': 'original_index'}, inplace=True)
-    df_proc['Saldo Acumulado'] = 0.0
-    
-    # A lógica do saldo permanece a mesma, usando apenas 'Realizada' para o cálculo.
-    df_realizadas = df_proc[df_proc['Status'] == 'Realizada'].copy()
-    if not df_realizadas.empty:
-        df_realizadas_sorted_asc = df_realizadas.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]).reset_index(drop=True)
-        df_realizadas_sorted_asc['TEMP_SALDO'] = df_realizadas_sorted_asc['Valor'].cumsum()
-        df_proc = pd.merge(df_proc, df_realizadas_sorted_asc[['original_index', 'TEMP_SALDO']], on='original_index', how='left')
-        df_proc['Saldo Acumulado'] = df_proc['TEMP_SALDO'].fillna(method='ffill').fillna(0)
-        df_proc.drop(columns=['TEMP_SALDO'], inplace=True, errors='ignore')
-        
-    df_proc = df_proc.sort_values(by="Data_dt", ascending=False).reset_index(drop=True)
-    df_proc.insert(0, 'ID Visível', df_proc.index + 1)
-    df_proc['Cor_Valor'] = df_proc.apply(lambda row: 'green' if row['Tipo'] == 'Entrada' and row['Valor'] >= 0 else 'red', axis=1)
-    
-    # Adiciona TransacaoPaiID para processamento
-    if 'TransacaoPaiID' not in df_proc.columns:
-        df_proc['TransacaoPaiID'] = ''
-        
-    return df_proc
-
-def calcular_resumo(df):
-    df_realizada = df[df['Status'] == 'Realizada']
-    if df_realizada.empty: return 0.0, 0.0, 0.0
-    total_entradas = df_realizada[df_realizada["Tipo"] == "Entrada"]["Valor"].sum()
-    total_saidas = abs(df_realizada[df_realizada["Tipo"] == "Saída"]["Valor"].sum()) 
-    saldo = df_realizada["Valor"].sum()
-    return total_entradas, total_saidas, saldo
-
-def calcular_valor_em_aberto(linha):
-    """Calcula o valor absoluto e arredondado para 2 casas decimais de uma linha do DataFrame."""
-    try:
-        if isinstance(linha, pd.DataFrame) and not linha.empty:
-            valor_raw = pd.to_numeric(linha['Valor'].iloc[0], errors='coerce')
-        elif isinstance(linha, pd.Series):
-            valor_raw = pd.to_numeric(linha['Valor'], errors='coerce')
-        else:
-            return 0.0
-            
-        valor_float = float(valor_raw) if pd.notna(valor_raw) and not isinstance(valor_raw, pd.Series) else 0.0
-        return round(abs(valor_float), 2)
-    except Exception:
-        return 0.0
-
-
-def format_produtos_resumo(produtos_json):
-    if pd.isna(produtos_json) or produtos_json == "": return ""
-    if produtos_json:
-        try:
-            try:
-                produtos = json.loads(produtos_json)
-            except json.JSONDecodeError:
-                produtos = ast.literal_eval(produtos_json)
-            if not isinstance(produtos, list) or not all(isinstance(p, dict) for p in produtos): return "Dados inválidos"
-            count = len(produtos)
-            if count > 0:
-                primeiro = produtos[0].get('Produto', 'Produto Desconhecido')
-                total_custo = 0.0
-                total_venda = 0.0
-                for p in produtos:
-                    try:
-                        qtd = float(p.get('Quantidade', 0))
-                        preco_unitario = float(p.get('Preço Unitário', 0))
-                        custo_unitario = float(p.get('Custo Unitário', 0))
-                        total_custo += custo_unitario * qtd
-                        total_venda += preco_unitario * qtd
-                    except ValueError: continue
-                lucro = total_venda - total_custo
-                lucro_str = f"| Lucro R$ {lucro:,.2f}" if lucro != 0 else ""
-                return f"{count} item(s): {primeiro}... {lucro_str}"
-        except:
-            return "Erro na formatação/JSON InváLido"
-    return ""
+# A função processar_dataframe foi importada do utils
 
 def highlight_value(row):
     color = row['Cor_Valor']
@@ -796,7 +619,7 @@ def homepage():
             <div class="carousel-outer-container">
                 <div class="product-wrapper">
                     {''.join(html_cards_novidades)}
-               
+                
             </div>
         """, unsafe_allow_html=True)
 
@@ -1486,7 +1309,7 @@ def gestao_produtos():
             # CORREÇÃO CRÍTICA: Filtra apenas os produtos que NÃO são variações (PaiID é nulo ou vazio/NaN)
             # Produtos que têm PaiID preenchido são listados *dentro* do expander do produto Pai.
             produtos_pai = produtos_filtrados[produtos_filtrados["PaiID"].isnull() | (produtos_filtrados["PaiID"] == '')]
-            produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull() & (produtos_filtrados["PaiID"] != '')]
+            produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull() | (produtos_filtrados["PaiID"] != '')]
             
             st.markdown("""
                 <style>
@@ -2177,7 +2000,6 @@ def livro_caixa():
 
 
     # --- CRIAÇÃO DAS NOVAS ABAS ---
-    # CORREÇÃO DO TypeError: Removido default_index para compatibilidade
     abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
     
     # Adiciona garantia de que a chave existe e tem um valor válido
@@ -2283,9 +2105,8 @@ def livro_caixa():
                         # Pagamento parcial: atualiza a dívida original
                         novo_valor_restante_com_sinal = valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
 
-                        # st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal # Linha anterior
-
-                        st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})" # Removido o <br>
+                        st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal
+                        st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
                         
                         commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f} da dívida. Resta R$ {valor_restante:,.2f}."
                         
@@ -2312,7 +2133,8 @@ def livro_caixa():
                         st.rerun()
 
             # Não exibe o restante do formulário "Nova Movimentação" se estiver no modo quitação
-            st.stop()
+            if 'divida_a_quitar' in st.session_state and st.session_state.divida_a_quitar is not None:
+                st.stop()
         
         # O layout principal do formulário agora vai aqui, sem o `st.sidebar`
         
@@ -2352,12 +2174,7 @@ def livro_caixa():
                 
                 # Função de callback para resetar o estado de cashback e dívida (Centralizada)
                 # ATENÇÃO: Esta função precisa estar definida no escopo de livro_caixa()
-                def reset_all_states_on_client_change():
-                    st.session_state.cliente_selecionado_divida = None
-                    st.session_state.edit_id = None
-                    st.session_state.divida_a_quitar = None
-                    st.session_state.cashback_cliente_id = None
-                    st.session_state.cashback_cliente_nome = None
+                # (A definição já foi incluída no início de livro_caixa())
 
                 cliente = st.text_input("Nome do Cliente (ou Descrição)", 
                                         value=default_cliente, 
@@ -2365,238 +2182,237 @@ def livro_caixa():
                                         # Gatilho de busca/reset: Chama a função que reseta TUDO
                                         on_change=reset_all_states_on_client_change, 
                                         disabled=edit_mode)
-        
-    
-    # --- LÓGICA DE BUSCA/CRIAÇÃO DE CASHBACK (INTEGRAÇÃO) ---
-    if cliente.strip() and not edit_mode:
-        
-        # 1. Busca por clientes existentes
-        df_cb_filtrado = df_cashback[
-            df_cashback["Nome"].astype(str).str.lower().str.contains(cliente.strip().lower(), na=False)
-        ].copy()
-        
-        # Só mostra a busca se um cliente ainda não foi selecionado
-        if st.session_state.cashback_cliente_id is None:
-            
-            if not df_cb_filtrado.empty:
                 
-                st.warning(f"Clientes de Cashback Encontrados ({len(df_cb_filtrado)}):")
-                
-                # Prepara as opções para o Selectbox
-                opcoes_cb = df_cb_filtrado.apply(
-                    lambda row: f"ID: {row['ID']} | {row['Nome']} | Nível: {row['Nivel']}", axis=1
-                ).tolist()
-                opcoes_cb.insert(0, "Selecione o cliente de Cashback...")
-                opcoes_cb.append("Criar novo cadastro de Cashback para este nome")
-                
-                cb_selecionado_str = st.selectbox(
-                    "Escolha uma opção de Cashback:",
-                    options=opcoes_cb,
-                    key="cb_select_cliente"
-                )
-                
-                if cb_selecionado_str.startswith("ID:"):
-                    cb_id_selecionado = cb_selecionado_str.split(" | ")[0].replace("ID: ", "")
-                    st.session_state.cashback_cliente_id = cb_id_selecionado
-                    st.session_state.cashback_cliente_nome = cb_selecionado_str.split(" | ")[1].strip()
-                    st.rerun() 
+                # --- LÓGICA DE BUSCA/CRIAÇÃO DE CASHBACK ---
+                if cliente.strip() and not edit_mode:
                     
-                elif cb_selecionado_str == "Criar novo cadastro de Cashback para este nome":
-                    st.session_state.cashback_cliente_id = "NOVO_CLIENTE" 
-                    st.session_state.cashback_cliente_nome = cliente.strip()
-                    st.rerun()
+                    # 1. Busca por clientes existentes
+                    df_cb_filtrado = df_cashback[
+                        df_cashback["Nome"].astype(str).str.lower().str.contains(cliente.strip().lower(), na=False)
+                    ].copy()
                     
-            else:
-                # Cliente não encontrado, sugere a criação
-                if st.button(f"➕ Criar Cadastro Cashback para '{cliente}'", key="btn_cb_novo"):
-                    st.session_state.cashback_cliente_id = "NOVO_CLIENTE"
-                    st.session_state.cashback_cliente_nome = cliente.strip()
-                    st.rerun() # Rerun para que o status de "NOVO_CLIENTE" apareça
-        
-        # --- EXIBIÇÃO DO STATUS DE CASHBACK SELECIONADO ---
-        if st.session_state.cashback_cliente_id:
-            
-            if st.session_state.cashback_cliente_id == "NOVO_CLIENTE":
-                st.success(f"Cadastro de Cashback será **CRIADO** para: **{st.session_state.cashback_cliente_nome}**")
-            else:
-                # Exibe os dados atuais do cliente
-                cliente_data = df_cashback[df_cashback["ID"] == st.session_state.cashback_cliente_id].iloc[0]
-                st.success(f"Cliente Selecionado: **{cliente_data['Nome']}**")
-                st.info(f"Nível: **{cliente_data['Nivel']}** | Saldo Atual: **R$ {cliente_data['Saldo_Cashback']:,.2f}**")
-                
-                # Opção de desvincular
-                if st.button("Desvincular Cliente de Cashback", key="btn_cb_desvincular"):
-                    st.session_state.cashback_cliente_id = None
-                    st.session_state.cashback_cliente_nome = None
-                    st.rerun()
+                    # Só mostra a busca se um cliente ainda não foi selecionado
+                    if st.session_state.cashback_cliente_id is None:
+                        
+                        if not df_cb_filtrado.empty:
+                            
+                            st.warning(f"Clientes de Cashback Encontrados ({len(df_cb_filtrado)}):")
+                            
+                            # Prepara as opções para o Selectbox
+                            opcoes_cb = df_cb_filtrado.apply(
+                                lambda row: f"ID: {row['ID']} | {row['Nome']} | Nível: {row['Nivel']}", axis=1
+                            ).tolist()
+                            opcoes_cb.insert(0, "Selecione o cliente de Cashback...")
+                            opcoes_cb.append("Criar novo cadastro de Cashback para este nome")
+                            
+                            cb_selecionado_str = st.selectbox(
+                                "Escolha uma opção de Cashback:",
+                                options=opcoes_cb,
+                                key="cb_select_cliente"
+                            )
+                            
+                            if cb_selecionado_str.startswith("ID:"):
+                                cb_id_selecionado = cb_selecionado_str.split(" | ")[0].replace("ID: ", "")
+                                st.session_state.cashback_cliente_id = cb_id_selecionado
+                                st.session_state.cashback_cliente_nome = cb_selecionado_str.split(" | ")[1].strip()
+                                st.rerun() 
+                                
+                            elif cb_selecionado_str == "Criar novo cadastro de Cashback para este nome":
+                                st.session_state.cashback_cliente_id = "NOVO_CLIENTE" 
+                                st.session_state.cashback_cliente_nome = cliente.strip()
+                                st.rerun()
+                                
+                        else:
+                            # Cliente não encontrado, sugere a criação
+                            if st.button(f"➕ Criar Cadastro Cashback para '{cliente}'", key="btn_cb_novo"):
+                                st.session_state.cashback_cliente_id = "NOVO_CLIENTE"
+                                st.session_state.cashback_cliente_nome = cliente.strip()
+                                st.rerun() # Rerun para que o status de "NOVO_CLIENTE" apareça
                     
-    # --- LÓGICA DE ALERTA INTELIGENTE DE DÍVIDA (BLOCO ORIGINAL) ---
-    if cliente.strip() and not edit_mode:
-        
-        df_dividas_cliente = df_exibicao[
-            (df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente.strip().lower())) &
-            (df_exibicao["Status"] == "Pendente") &
-            (df_exibicao["Tipo"] == "Entrada")
-        ].sort_values(by="Data Pagamento", ascending=True).copy()
+                    # --- EXIBIÇÃO DO STATUS DE CASHBACK SELECIONADO ---
+                    if st.session_state.cashback_cliente_id:
+                        
+                        if st.session_state.cashback_cliente_id == "NOVO_CLIENTE":
+                            st.success(f"Cadastro de Cashback será **CRIADO** para: **{st.session_state.cashback_cliente_nome}**")
+                        else:
+                            # Exibe os dados atuais do cliente
+                            cliente_data = df_cashback[df_cashback["ID"] == st.session_state.cashback_cliente_id].iloc[0]
+                            st.success(f"Cliente Selecionado: **{cliente_data['Nome']}**")
+                            st.info(f"Nível: **{cliente_data['Nivel']}** | Saldo Atual: **R$ {cliente_data['Saldo_Cashback']:,.2f}**")
+                            
+                            # Opção de desvincular
+                            if st.button("Desvincular Cliente de Cashback", key="btn_cb_desvincular"):
+                                st.session_state.cashback_cliente_id = None
+                                st.session_state.cashback_cliente_nome = None
+                                st.rerun()
+                    
+                # --- LÓGICA DE ALERTA INTELIGENTE DE DÍVIDA (BLOCO ORIGINAL) ---
+                if cliente.strip() and not edit_mode:
+                    
+                    df_dividas_cliente = df_exibicao[
+                        (df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente.strip().lower())) &
+                        (df_exibicao["Status"] == "Pendente") &
+                        (df_exibicao["Tipo"] == "Entrada")
+                    ].sort_values(by="Data Pagamento", ascending=True).copy()
 
-        if not df_dividas_cliente.empty:
-            
-            total_divida = df_dividas_cliente["Valor"].abs().round(2).sum() 
-            num_dividas = df_dividas_cliente.shape[0]
-            divida_mais_antiga = df_dividas_cliente.iloc[0]
-            
-            valor_divida_antiga = calcular_valor_em_aberto(divida_mais_antiga)
-            
-            original_idx_divida = divida_mais_antiga['original_index']
-            vencimento_str = divida_mais_antiga['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_mais_antiga['Data Pagamento']) else "S/ Data"
+                    if not df_dividas_cliente.empty:
+                        
+                        total_divida = df_dividas_cliente["Valor"].abs().round(2).sum() 
+                        num_dividas = df_dividas_cliente.shape[0]
+                        divida_mais_antiga = df_dividas_cliente.iloc[0]
+                        
+                        valor_divida_antiga = calcular_valor_em_aberto(divida_mais_antiga)
+                        
+                        original_idx_divida = divida_mais_antiga['original_index']
+                        vencimento_str = divida_mais_antiga['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_mais_antiga['Data Pagamento']) else "S/ Data"
 
-            st.session_state.cliente_selecionado_divida = divida_mais_antiga.name 
+                        st.session_state.cliente_selecionado_divida = divida_mais_antiga.name 
 
-            st.warning(f"💰 Dívida em Aberto para {cliente}: R$ {valor_divida_antiga:,.2f}") 
-            
-            st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
+                        st.warning(f"💰 Dívida em Aberto para {cliente}: R$ {valor_divida_antiga:,.2f}") 
+                        
+                        st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
 
-            col_btn_add, col_btn_conc, col_btn_canc = st.columns(3)
+                        col_btn_add, col_btn_conc, col_btn_canc = st.columns(3)
 
-            if col_btn_add.button("➕ Adicionar Mais Produtos à Dívida", key="btn_add_produtos", use_container_width=True, type="secondary"):
-                st.session_state.edit_id = original_idx_divida
-                st.session_state.edit_id_loaded = None 
-                st.rerun()
+                        if col_btn_add.button("➕ Adicionar Mais Produtos à Dívida", key="btn_add_produtos", use_container_width=True, type="secondary"):
+                            st.session_state.edit_id = original_idx_divida
+                            st.session_state.edit_id_loaded = None 
+                            st.rerun()
 
-            if col_btn_conc.button("✅ Concluir/Pagar Dívida", key="btn_concluir_divida", use_container_width=True, type="primary"):
-                st.session_state.divida_a_quitar = divida_mais_antiga['original_index']
-                st.session_state.edit_id = None 
-                st.session_state.edit_id_loaded = None 
-                st.session_state.lista_produtos = []
-                st.rerun()
+                        if col_btn_conc.button("✅ Concluir/Pagar Dívida", key="btn_concluir_divida", use_container_width=True, type="primary"):
+                            st.session_state.divida_a_quitar = divida_mais_antiga['original_index']
+                            st.session_state.edit_id = None 
+                            st.session_state.edit_id_loaded = None 
+                            st.session_state.lista_produtos = []
+                            st.rerun()
 
-            if col_btn_canc.button("🗑️ Cancelar Dívida", key="btn_cancelar_divida", use_container_width=True):
+                        if col_btn_canc.button("🗑️ Cancelar Dívida", key="btn_cancelar_divida", use_container_width=True):
+                            
+                            df_to_delete = df_dividas_cliente.copy()
+                            for idx in df_to_delete['original_index'].tolist():
+                                st.session_state.df = st.session_state.df.drop(idx, errors='ignore')
+                            
+                            if salvar_dados_no_github(st.session_state.df, f"Cancelamento de {num_dividas} dívida(s) de {cliente.strip()}"):
+                                st.session_state.cliente_selecionado_divida = None
+                                st.session_state.edit_id_loaded = None 
+                                st.cache_data.clear()
+                                st.success(f"{num_dividas} dívida(s) de {cliente.strip()} cancelada(s) com sucesso!")
+                                st.rerun()
+                    else:
+                        st.session_state.cliente_selecionado_divida = None 
+
+                st.markdown("#### 🛍️ Detalhes dos Produtos")
                 
-                df_to_delete = df_dividas_cliente.copy()
-                for idx in df_to_delete['original_index'].tolist():
-                    st.session_state.df = st.session_state.df.drop(idx, errors='ignore')
+                # Exibe a soma calculada dos produtos (se houver)
+                if st.session_state.lista_produtos:
+                    df_produtos = pd.DataFrame(st.session_state.lista_produtos)
+                    df_produtos['Quantidade'] = pd.to_numeric(df_produtos['Quantidade'], errors='coerce').fillna(0)
+                    df_produtos['Preço Unitário'] = pd.to_numeric(df_produtos['Preço Unitário'], errors='coerce').fillna(0.0)
+                    df_produtos['Custo Unitário'] = pd.to_numeric(df_produtos['Custo Unitário'], errors='coerce').fillna(0.0)
+                    
+                    valor_calculado = (df_produtos['Quantidade'] * df_produtos['Preço Unitário']).sum()
+                    
+                    produtos_para_json = df_produtos[['Produto_ID', 'Produto', 'Quantidade', 'Preço Unitário', 'Custo Unitário']].to_dict('records')
+                    produtos_vendidos_json = json.dumps(produtos_para_json)
+                    
+                    st.success(f"Soma Total da Venda Calculada: R$ {valor_calculado:,.2f}")
+
+            # Expandido para adicionar produtos
+            with st.expander("➕ Adicionar/Limpar Lista de Produtos (Venda)", expanded=True):
                 
-                if salvar_dados_no_github(st.session_state.df, f"Cancelamento de {num_dividas} dívida(s) de {cliente.strip()}"):
-                    st.session_state.cliente_selecionado_divida = None
-                    st.session_state.edit_id_loaded = None 
-                    st.cache_data.clear()
-                    st.success(f"{num_dividas} dívida(s) de {cliente.strip()} cancelada(s) com sucesso!")
-                    st.rerun()
-        else:
-            st.session_state.cliente_selecionado_divida = None 
+                col_prod_lista, col_prod_add = st.columns([1, 1])
+                
+                with col_prod_lista:
+                    st.markdown("##### Produtos Atuais:")
+                    if st.session_state.lista_produtos:
+                        df_exibicao_produtos = pd.DataFrame(st.session_state.lista_produtos)
+                        st.dataframe(df_exibicao_produtos[['Produto', 'Quantidade', 'Preço Unitário']], use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Lista de produtos vazia.")
+                    
+                    if st.button("Limpar Lista", key="limpar_lista_button", type="secondary", use_container_width=True, help="Limpa todos os produtos da lista de venda"):
+                        st.session_state.lista_produtos = []
+                        # NOVO: Limpa o ID de carregamento para a próxima edição/nova venda
+                        st.session_state.edit_id_loaded = None 
+                        st.rerun()
 
-    st.markdown("#### 🛍️ Detalhes dos Produtos")
-    
-    # Exibe a soma calculada dos produtos (se houver)
-    if st.session_state.lista_produtos:
-        df_produtos = pd.DataFrame(st.session_state.lista_produtos)
-        df_produtos['Quantidade'] = pd.to_numeric(df_produtos['Quantidade'], errors='coerce').fillna(0)
-        df_produtos['Preço Unitário'] = pd.to_numeric(df_produtos['Preço Unitário'], errors='coerce').fillna(0.0)
-        df_produtos['Custo Unitário'] = pd.to_numeric(df_produtos['Custo Unitário'], errors='coerce').fillna(0.0)
-        
-        valor_calculado = (df_produtos['Quantidade'] * df_produtos['Preço Unitário']).sum()
-        
-        produtos_para_json = df_produtos[['Produto_ID', 'Produto', 'Quantidade', 'Preço Unitário', 'Custo Unitário']].to_dict('records')
-        produtos_vendidos_json = json.dumps(produtos_para_json)
-        
-        st.success(f"Soma Total da Venda Calculada: R$ {valor_calculado:,.2f}")
+                with col_prod_add:
+                    st.markdown("##### Adicionar Produto")
+                    
+                    # --- NOVO: Upload de imagem para leitura do Código de Barras ---
+                    foto_cb_upload_caixa = st.file_uploader(
+                        "📤 Upload de imagem do código de barras", 
+                        type=["png", "jpg", "jpeg"], 
+                        key="cb_upload_caixa"
+                    )
+                    
+                    if foto_cb_upload_caixa is not None:
+                        imagem_bytes = foto_cb_upload_caixa.getvalue() 
+                        codigos_lidos = ler_codigo_barras_api(imagem_bytes)
+                        if codigos_lidos:
+                            st.session_state.cb_lido_livro_caixa = codigos_lidos[0]
+                            st.toast(f"Código de barras lido: {codigos_lidos[0]}")
+                        else:
+                            st.session_state.cb_lido_livro_caixa = ""
+                            st.error("❌ Não foi possível ler nenhum código na imagem enviada.")
+                    
+                    index_selecionado = 0
+                    if st.session_state.cb_lido_livro_caixa: 
+                        opcao_encontrada = encontrar_opcao_por_cb(st.session_state.cb_lido_livro_caixa, produtos_para_venda, opcoes_produtos)
+                        if opcao_encontrada:
+                            index_selecionado = opcoes_produtos.index(opcao_encontrada)
+                            st.toast(f"Produto correspondente ao CB encontrado! Selecionado: {opcao_encontrada}")
+                        else:
+                            st.warning(f"Código '{st.session_state.cb_lido_livro_caixa}' lido, mas nenhum produto com esse CB encontrado no estoque.")
+                            st.session_state.cb_lido_livro_caixa = ""
 
-# Expandido para adicionar produtos
-with st.expander("➕ Adicionar/Limpar Lista de Produtos (Venda)", expanded=True):
-    
-    col_prod_lista, col_prod_add = st.columns([1, 1])
-    
-    with col_prod_lista:
-        st.markdown("##### Produtos Atuais:")
-        if st.session_state.lista_produtos:
-            df_exibicao_produtos = pd.DataFrame(st.session_state.lista_produtos)
-            st.dataframe(df_exibicao_produtos[['Produto', 'Quantidade', 'Preço Unitário']], use_container_width=True, hide_index=True)
-        else:
-            st.info("Lista de produtos vazia.")
-        
-        if st.button("Limpar Lista", key="limpar_lista_button", type="secondary", use_container_width=True, help="Limpa todos os produtos da lista de venda"):
-            st.session_state.lista_produtos = []
-            # NOVO: Limpa o ID de carregamento para a próxima edição/nova venda
-            st.session_state.edit_id_loaded = None 
-            st.rerun()
+                    produto_selecionado = st.selectbox(
+                        "Selecione o Produto (ID | Nome)", 
+                        opcoes_produtos, 
+                        key="input_produto_selecionado",
+                        index=index_selecionado if index_selecionado != 0 else (opcoes_produtos.index(st.session_state.input_produto_selecionado) if st.session_state.input_produto_selecionado in opcoes_produtos else 0)
+                    )
+                    
+                    if produto_selecionado != opcoes_produtos[index_selecionado] and index_selecionado != 0 and st.session_state.cb_lido_livro_caixa:
+                         st.session_state.cb_lido_livro_caixa = ""
 
-    with col_prod_add:
-        st.markdown("##### Adicionar Produto")
-        
-        # --- NOVO: Upload de imagem para leitura do Código de Barras ---
-        foto_cb_upload_caixa = st.file_uploader(
-            "📤 Upload de imagem do código de barras", 
-            type=["png", "jpg", "jpeg"], 
-            key="cb_upload_caixa"
-        )
-        
-        if foto_cb_upload_caixa is not None:
-            imagem_bytes = foto_cb_upload_caixa.getvalue() 
-            codigos_lidos = ler_codigo_barras_api(imagem_bytes)
-            if codigos_lidos:
-                st.session_state.cb_lido_livro_caixa = codigos_lidos[0]
-                st.toast(f"Código de barras lido: {codigos_lidos[0]}")
-            else:
-                st.session_state.cb_lido_livro_caixa = ""
-                st.error("❌ Não foi possível ler nenhum código na imagem enviada.")
-        
-        index_selecionado = 0
-        if st.session_state.cb_lido_livro_caixa: 
-            opcao_encontrada = encontrar_opcao_por_cb(st.session_state.cb_lido_livro_caixa, produtos_para_venda, opcoes_produtos)
-            if opcao_encontrada:
-                index_selecionado = opcoes_produtos.index(opcao_encontrada)
-                st.toast(f"Produto correspondente ao CB encontrado! Selecionado: {opcao_encontrada}")
-            else:
-                st.warning(f"Código '{st.session_state.cb_lido_livro_caixa}' lido, mas nenhum produto com esse CB encontrado no estoque.")
-                st.session_state.cb_lido_livro_caixa = ""
+                    if produto_selecionado == OPCAO_MANUAL:
+                        # Lógica de Adição Manual
+                        nome_produto_manual = st.text_input("Nome do Produto (Manual)", value=st.session_state.input_nome_prod_manual, key="input_nome_prod_manual")
+                        col_m1, col_m2 = st.columns(2)
+                        with col_m1:
+                            quantidade_manual = st.number_input("Qtd Manual", min_value=0.01, value=st.session_state.input_qtd_prod_manual, step=1.0, key="input_qtd_prod_manual")
+                            custo_unitario_manual = st.number_input("Custo Unitário (R$)", min_value=0.00, value=st.session_state.input_custo_prod_manual, format="%.2f", key="input_custo_prod_manual")
+                        with col_m2:
+                            preco_unitario_manual = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=st.session_state.input_preco_prod_manual, key="input_preco_prod_manual")
+                        
+                        if st.button("Adicionar Manual", key="adicionar_item_manual_button", use_container_width=True,
+                            on_click=callback_adicionar_manual,
+                            args=(nome_produto_manual, quantidade_manual, preco_unitario_manual, custo_unitario_manual)): st.rerun() 
 
-        produto_selecionado = st.selectbox(
-            "Selecione o Produto (ID | Nome)", 
-            opcoes_produtos, 
-            key="input_produto_selecionado",
-            index=index_selecionado if index_selecionado != 0 else (opcoes_produtos.index(st.session_state.input_produto_selecionado) if st.session_state.input_produto_selecionado in opcoes_produtos else 0)
-        )
-        
-        if produto_selecionado != opcoes_produtos[index_selecionado] and index_selecionado != 0 and st.session_state.cb_lido_livro_caixa:
-             st.session_state.cb_lido_livro_caixa = ""
+                    elif produto_selecionado != "":
+                        # Lógica de Adição do Estoque
+                        produto_id_selecionado = extrair_id_do_nome(produto_selecionado) 
+                        produto_row_completa = produtos_para_venda[produtos_para_venda["ID"] == produto_id_selecionado]
+                        
+                        if not produto_row_completa.empty:
+                            produto_data = produto_row_completa.iloc[0]
+                            nome_produto = produto_data['Nome']
+                            preco_sugerido = produto_data['PrecoVista'] 
+                            custo_unit = produto_data['PrecoCusto']
+                            estoque_disp = produto_data['Quantidade']
 
-        if produto_selecionado == OPCAO_MANUAL:
-            # Lógica de Adição Manual
-            nome_produto_manual = st.text_input("Nome do Produto (Manual)", value=st.session_state.input_nome_prod_manual, key="input_nome_prod_manual")
-            col_m1, col_m2 = st.columns(2)
-            with col_m1:
-                quantidade_manual = st.number_input("Qtd Manual", min_value=0.01, value=st.session_state.input_qtd_prod_manual, step=1.0, key="input_qtd_prod_manual")
-                custo_unitario_manual = st.number_input("Custo Unitário (R$)", min_value=0.00, value=st.session_state.input_custo_prod_manual, format="%.2f", key="input_custo_prod_manual")
-            with col_m2:
-                preco_unitario_manual = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=st.session_state.input_preco_prod_manual, key="input_preco_prod_manual")
-            
-            if st.button("Adicionar Manual", key="adicionar_item_manual_button", use_container_width=True,
-                on_click=callback_adicionar_manual,
-                args=(nome_produto_manual, quantidade_manual, preco_unitario_manual, custo_unitario_manual)): st.rerun() 
+                            col_p1, col_p2 = st.columns(2)
+                            with col_p1:
+                                quantidade_input = st.number_input("Qtd", min_value=1, value=1, step=1, max_value=int(estoque_disp) if estoque_disp > 0 else 1, key="input_qtd_prod_edit")
+                                st.caption(f"Estoque Disponível: {int(estoque_disp)}")
+                            with col_p2:
+                                preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=float(preco_sugerido), key="input_preco_prod_edit")
+                                st.caption(f"Custo Unitário: R$ {custo_unit:,.2f}")
 
-        elif produto_selecionado != "":
-            # Lógica de Adição do Estoque
-            produto_id_selecionado = extrair_id_do_nome(produto_selecionado) 
-            produto_row_completa = produtos_para_venda[produtos_para_venda["ID"] == produto_id_selecionado]
-            
-            if not produto_row_completa.empty:
-                produto_data = produto_row_completa.iloc[0]
-                nome_produto = produto_data['Nome']
-                preco_sugerido = produto_data['PrecoVista'] 
-                custo_unit = produto_data['PrecoCusto']
-                estoque_disp = produto_data['Quantidade']
-
-                col_p1, col_p2 = st.columns(2)
-                with col_p1:
-                    quantidade_input = st.number_input("Qtd", min_value=1, value=1, step=1, max_value=int(estoque_disp) if estoque_disp > 0 else 1, key="input_qtd_prod_edit")
-                    st.caption(f"Estoque Disponível: {int(estoque_disp)}")
-                with col_p2:
-                    preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=float(preco_sugerido), key="input_preco_prod_edit")
-                    st.caption(f"Custo Unitário: R$ {custo_unit:,.2f}")
-
-                if st.button("Adicionar Item", key="adicionar_item_button", use_container_width=True,
-                    on_click=callback_adicionar_estoque,
-                    args=(produto_id_selecionado, nome_produto, quantidade_input, preco_unitario_input, custo_unit, estoque_disp)): st.rerun()
+                            if st.button("Adicionar Item", key="adicionar_item_manual_button", use_container_width=True,
+                                on_click=callback_adicionar_estoque,
+                                args=(produto_id_selecionado, nome_produto, quantidade_input, preco_unitario_input, custo_unit, estoque_disp)): st.rerun()
 
 
             # Input do Valor Total e Status para Entrada
@@ -3474,6 +3290,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
