@@ -2477,7 +2477,45 @@ def livro_caixa():
                         cliente_df = df_clientes[df_clientes[col_nome].str.strip().str.lower() == cliente_normalizado]
                         c_cashback = cliente_df.iloc[0]["Cashback"]
                         c_nivel = cliente_df.iloc[0]["Nivel"]
-                        st.success(f"🎉 Cliente Fidelidade Encontrado! Saldo Cashback: R$ {c_cashback:,.2f} | Nível: {c_nivel}") 
+                        st.success(f"🎉 Cliente Fidelidade Encontrado! Saldo Cashback: R$ {c_cashback:,.2f} | Nível: {c_nivel}")
+                        # ==============================================================================
+# NOVO BLOCO: LÓGICA PARA RESGATE DE CASHBACK (INÍCIO)
+# ==============================================================================
+                        
+                        # Inicializa o valor de cashback a ser usado no session_state
+                        if "cashback_a_usar" not in st.session_state:
+                            st.session_state.cashback_a_usar = 0.0
+                        
+                        # Calcula o valor total dos produtos no carrinho
+                        valor_compra_atual = 0.0
+                        if st.session_state.lista_produtos:
+                            df_produtos_temp = pd.DataFrame(st.session_state.lista_produtos)
+                            valor_compra_atual = (pd.to_numeric(df_produtos_temp['Quantidade']) * pd.to_numeric(df_produtos_temp['Preço Unitário'])).sum()
+
+                        # Regras para permitir o resgate
+                        if c_cashback >= 20.00 and valor_compra_atual > 0:
+                            max_resgate_permitido = round(valor_compra_atual * 0.5, 2)
+                            
+                            # O valor máximo que o cliente pode de fato usar é o menor entre seu saldo, 
+                            # o limite de 50% da compra, e o próprio valor da compra.
+                            max_resgate_real = min(c_cashback, max_resgate_permitido, valor_compra_atual)
+
+                            st.session_state.cashback_a_usar = st.number_input(
+                                "💸 Usar Cashback (Desconto)",
+                                min_value=0.0,
+                                max_value=float(max_resgate_real),
+                                value=0.0,
+                                step=1.0,
+                                format="%.2f",
+                                key="input_cashback_resgate",
+                                help=f"Você pode resgatar até R$ {max_resgate_real:,.2f} nesta compra."
+                            )
+                        else:
+                             # Se não atender aos critérios, garante que o cashback a usar seja zero
+                            st.session_state.cashback_a_usar = 0.0
+# ==============================================================================
+# NOVO BLOCO: LÓGICA PARA RESGATE DE CASHBACK (FIM)
+# ==============================================================================
                     else:
                         st.error("Ainda não encontrou. Veja acima o nome normalizado para comparar.")
                         st.info("✨ Cliente novo ou não encontrado na fidelidade. Será cadastrado após a venda!")
@@ -3567,6 +3605,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
