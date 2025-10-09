@@ -2146,14 +2146,10 @@ def livro_caixa():
     # 🔧 Busca do cliente existente no CSV de cashback (corrigido)
     # ===========================================================
     nome_cliente = st.text_input("Nome do cliente")
-
-    # Evita erro de variável não definida
-    nome_cliente_normalizado = ""
-
     if nome_cliente:
         nome_cliente_normalizado = nome_cliente.strip().lower()
-    
-    # Corrige o nome da coluna de cliente
+
+    # Corrige o nome da coluna de cliente (aceita "Nome", "NOME", etc.)
     col_nome = None
     for c in df_clientes.columns:
         if c.strip().lower() == "nome":
@@ -2166,9 +2162,11 @@ def livro_caixa():
     else:
         nomes_normalizados_existentes = [
             str(n).strip().lower() for n in df_clientes[col_nome].fillna("").tolist()
+            for n in df_clientes[col_nome].fillna("").tolist()
         ]
+    # 🔎 Debug opcional — mostra os nomes normalizados carregados
     st.write("🔍 Nomes normalizados carregados:", nomes_normalizados_existentes)
-    
+        
     
     # Garante que todas as colunas de controle existam
     for col in ['RecorrenciaID', 'TransacaoPaiID']:
@@ -2485,28 +2483,36 @@ def livro_caixa():
                 
                 cliente_normalizado = cliente.strip().lower()
 
-                # --- INÍCIO DA CORREÇÃO ---
-                
-                # 1. Cria um DF temporário para a busca normalizada
-                df_clientes_to_search = st.session_state.df_clientes.copy()
-                
-                # 2. Garante que a coluna de busca existe e está normalizada corretamente
-                df_clientes_to_search["Nome_Norm"] = (
-                    df_clientes_to_search["Nome"].astype(str).str.strip().str.lower()
+                df_clientes_normalizado = st.session_state.df_clientes.copy()
+                df_clientes_normalizado["Nome_Norm"] = (
+                    df_clientes_normalizado["Nome"].astype(str).str.strip().str.lower()
                 )
 
-                # 3. Verifica se existe
-                cliente_df = df_clientes_to_search[
-                   df_clientes_to_search["Nome_Norm"] == cliente_normalizado
+                # Verifica se existe
+                cliente_df = df_clientes_normalizado[
+                   df_clientes_normalizado["Nome_Norm"] == cliente_normalizado
                 ]
                 cliente_encontrado = not cliente_df.empty
-                
-                # --- FIM DA CORREÇÃO (remoção dos blocos de debug e checagem duplicada) ---
 
+                # 🔍 DEBUG TEMPORÁRIO — verificar correspondência de cliente
+                st.write("🔍 Verificando clientes carregados:")
+                st.dataframe(st.session_state.df_clientes)
+
+                st.write("🔎 Cliente digitado:", cliente)
+                st.write("🔎 Normalizado:", cliente.strip().lower())
+
+                df_clientes_normalizado = st.session_state.df_clientes.copy()
+                df_clientes_normalizado["Nome_Norm"] = df_clientes_normalizado["Nome"].astype(str).str.strip().str.lower()
+                st.write("🧾 Nomes normalizados existentes:", df_clientes_normalizado["Nome_Norm"].tolist())
+
+                if cliente.strip().lower() in df_clientes_normalizado["Nome_Norm"].values:
+                    st.success("✅ Encontrou o cliente!")
+                else:
+                    st.error("❌ Ainda não encontrou. Veja acima o nome normalizado para comparar.")
+                
                 
                 if cliente.strip() and not edit_mode:
                     if cliente_encontrado:
-                        # Pega os valores do cliente encontrado no DF normalizado
                         c_cashback = cliente_df.iloc[0]["Cashback"]
                         c_nivel = cliente_df.iloc[0]["Nivel"]
                         st.info(f"🎉 **Cliente Fidelidade:** Saldo Cashback: **R$ {c_cashback:,.2f}** | Nível: **{c_nivel}**")
@@ -3617,9 +3623,6 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
-
-
-
 
 
 
