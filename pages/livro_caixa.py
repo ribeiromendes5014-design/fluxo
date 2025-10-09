@@ -2283,8 +2283,9 @@ def livro_caixa():
                         # Pagamento parcial: atualiza a dívida original
                         novo_valor_restante_com_sinal = valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
 
-                        st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal
-                        st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"<br>
+                        # st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal # Linha anterior
+
+                        st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})" # Removido o <br>
                         
                         commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f} da dívida. Resta R$ {valor_restante:,.2f}."
                         
@@ -3473,6 +3474,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
