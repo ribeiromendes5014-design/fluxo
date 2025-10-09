@@ -50,7 +50,7 @@ ARQ_PRODUTOS = "data/produtos.csv"
 
 # NOVO: Constante para o arquivo de clientes
 ARQ_CLIENTES_CASH = "data/clientes_cash.csv"
-COLUNAS_CLIENTES_CASH = ["Nome", "Cashback", "TotalGasto", "Nivel"]
+COLUNAS_CLIENTES_CASH = ["Nome", "Telefone", "Cashback", "TotalGasto", "Nivel"]
 
 COLUNAS_COMPRAS = ["Data", "Produto", "Quantidade", "Valor Total", "Cor", "FotoURL"]
 COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo", "Produtos Vendidos", "Categoria", "Status", "Data Pagamento"]
@@ -3503,6 +3503,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
