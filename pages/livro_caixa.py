@@ -1198,13 +1198,13 @@ def historico_compras():
     df_exibicao.rename(columns={'index': 'original_index'}, inplace=True)
     df_exibicao.insert(0, 'ID', df_exibicao.index + 1)
     
-    hoje = date.today()
+    hoje = pd.Timestamp.today().normalize()  # garante tipo datetime64[ns]
     primeiro_dia_mes = hoje.replace(day=1)
     if hoje.month == 12:
         proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
     else:
         proximo_mes = hoje.replace(month=hoje.month + 1, day=1)
-    ultimo_dia_mes = proximo_mes - timedelta(days=1)
+    ultimo_dia_mes = proximo_mes - pd.Timedelta(days=1)
     
     df_mes_atual = df_exibicao[
         (df_exibicao["Data"].apply(lambda x: pd.notna(x) and x >= primeiro_dia_mes and x <= ultimo_dia_mes)) &
@@ -2942,6 +2942,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
