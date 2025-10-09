@@ -20,12 +20,14 @@ from utils import (
     to_float, prox_id, hash_df, parse_date_yyyy_mm_dd, add_months,
     calcular_valor_em_aberto, format_produtos_resumo,
     carregar_livro_caixa, salvar_dados_no_github,
-    carregar_historico_compras, salvar_historico_no_github,
+    # REMOVIDO: salvar_historico_no_github (nome problemático)
+    carregar_historico_compras, # Mantenha esta
+    salvar_historico_compras_no_github, # Mantenha esta (se for o nome correto no utils.py)
     carregar_produtos, salvar_produtos_no_github, inicializar_produtos,
     ajustar_estoque, ler_codigo_barras_api,
     callback_salvar_novo_produto, callback_adicionar_manual, callback_adicionar_estoque,
     calcular_resumo, norm_promocoes, get_most_sold_products,
-    processar_dataframe, # GARANTINDO QUE A VERSÃO CORRIGIDA É USADA
+    processar_dataframe, 
     save_data_github_produtos,
     # === NOVAS FUNÇÕES DE CASHBACK ===
     carregar_cashback,
@@ -3290,6 +3292,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
