@@ -435,35 +435,44 @@ def calcular_nivel(total_gasto: float) -> str:
 
 @st.cache_data(show_spinner="Carregando clientes e cashback...")
 def carregar_clientes_cash():
-    """Carrega o histórico de clientes e cashback, padronizando os nomes das colunas."""
+    """Carrega o histórico de clientes e cashback (GitHub primeiro) e renomeia as colunas."""
     df = None
+    
+    # 1. Tenta carregar do GitHub (fonte principal)
     url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CLIENTES_CASH}"
     df = load_csv_github(url_raw)
 
+    # 2. Se falhar, tenta um fallback local
     if df is None or df.empty:
-        # Se não encontrar no GitHub, cria um vazio com as colunas corretas (já em minúsculo)
-        colunas_padrao = ["nome", "apelido/descrição", "contato", "cashback_disponivel", "gasto_acumulado", "nivel_atual", "indicado_por"]
-        df = pd.DataFrame(columns=colunas_padrao)
-    else:
-        # PONTO CRÍTICO: Padroniza TODAS as colunas para minúsculas
-        df.columns = [str(col).strip().lower() for col in df.columns]
+        try:
+            if os.path.exists(ARQ_CLIENTES_CASH):
+                df = pd.read_csv(ARQ_CLIENTES_CASH, dtype=str)
+        except Exception:
+            pass 
 
-    # Renomeia as colunas para o padrão interno do app
+    # 3. Se ainda assim não carregou, cria um DataFrame vazio
+    if df is None or df.empty:
+        df = pd.DataFrame(columns=["Nome", "Cashback", "TotalGasto", "Nivel"])
+
+    # ===================================================================
+    # CORREÇÃO PRINCIPAL: Renomeia as colunas do CSV para o padrão do app
+    # ===================================================================
     mapa_colunas = {
-        "cashback_disponivel": "cashback",
-        "gasto_acumulado": "totalgasto",
-        "nivel_atual": "nivel"
+        "CASHBACK_DISPONIVEL": "Cashback",
+        "GASTO_ACUMULADO": "TotalGasto",
+        "NIVEL_ATUAL": "Nivel"
     }
     df.rename(columns=mapa_colunas, inplace=True)
-    
-    # Garante que as colunas essenciais existam
-    for col in ["nome", "cashback", "totalgasto", "nivel"]:
-        if col not in df.columns:
-            df[col] = ""
+    # ===================================================================
 
-    # Converte tipos de dados
-    df["cashback"] = pd.to_numeric(df["cashback"], errors='coerce').fillna(0.0)
-    df["totalgasto"] = pd.to_numeric(df["totalgasto"], errors='coerce').fillna(0.0)
+    # Garante que as colunas padrão existam após renomear
+    for col in ["Nome", "Cashback", "TotalGasto", "Nivel"]:
+        if col not in df.columns:
+            df[col] = 0.0 if col in ["Cashback", "TotalGasto"] else ""
+
+    # Normaliza os tipos
+    df["Cashback"] = pd.to_numeric(df["Cashback"], errors='coerce').fillna(0.0)
+    df["TotalGasto"] = pd.to_numeric(df["TotalGasto"], errors='coerce').fillna(0.0)
 
     return df
 
@@ -2154,200 +2163,256 @@ def historico_compras():
                 st.info("Selecione um item no menu acima para editar ou excluir.")
 
 def livro_caixa():
-    st.header("📘 Livro Caixa - Gerenciamento de Movimentações")
+    
+    st.header("📘 Livro Caixa - Gerenciamento de Movimentações") 
 
-    # Carrega os dados usando as funções (a de clientes agora é mais robusta)
-    produtos = inicializar_produtos()
+    produtos = inicializar_produtos() 
+
     if "df" not in st.session_state: st.session_state.df = carregar_livro_caixa()
+    # NOVO: Inicialização de clientes e cashback
     if "df_clientes" not in st.session_state: st.session_state.df_clientes = carregar_clientes_cash()
+    df_clientes = st.session_state.df_clientes # Referência para o DataFrame de clientes
     
-    df_clientes = st.session_state.df_clientes
-
-    # Inicialização das variáveis de estado (session_state)
-    if "desconto_cashback" not in st.session_state: st.session_state.desconto_cashback = 0.0
-    if "quer_resgatar" not in st.session_state: st.session_state.quer_resgatar = False
-    # ... (outras inicializações de session_state) ...
+    # ===========================================================
+    # 🔧 Busca do cliente existente no CSV de cashback (corrigido)
+    # ===========================================================
+    # Esta seção foi movida para dentro da aba "Nova Movimentação" para ser executada no contexto correto.
     
-    edit_mode = st.session_state.get('edit_id') is not None
-
+    # Garante que todas as colunas de controle existam
+    for col in ['RecorrenciaID', 'TransacaoPaiID']:
+        if col not in st.session_state.df.columns: st.session_state.df[col] = ''
+        
+    if "produtos" not in st.session_state: st.session_state.produtos = produtos
+    if "lista_produtos" not in st.session_state: st.session_state.lista_produtos = []
+    if "edit_id" not in st.session_state: st.session_state.edit_id = None
+    if "operacao_selecionada" not in st.session_state: st.session_state.operacao_selecionada = "Editar" 
+    if "cb_lido_livro_caixa" not in st.session_state: st.session_state.cb_lido_livro_caixa = ""
+    if "edit_id_loaded" not in st.session_state: st.session_state.edit_id_loaded = None
+    if "cliente_selecionado_divida" not in st.session_state: st.session_state.cliente_selecionado_divida = None
+    if "divida_parcial_id" not in st.session_state: st.session_state.divida_parcial_id = None
+    if "divida_a_quitar" not in st.session_state: st.session_state.divida_a_quitar = None 
+    if "search_trigger" not in st.session_state: st.session_state.search_trigger = ""
+    
     abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
+    
+    if "aba_ativa_livro_caixa" not in st.session_state or str(st.session_state.aba_ativa_livro_caixa) not in abas_validas: 
+        st.session_state.aba_ativa_livro_caixa = abas_validas[0]
+
+    df_dividas = st.session_state.df
+    df_exibicao = processar_dataframe(df_dividas)
+
+    produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()].copy()
+    opcoes_produtos = [""] + produtos_para_venda.apply(
+        lambda row: f"{row.ID} | {row.Nome} ({row.Marca}) | Estoque: {row.Quantidade}", axis=1
+    ).tolist()
+    OPCAO_MANUAL = "Adicionar Item Manual (Sem Controle de Estoque)"
+    opcoes_produtos.append(OPCAO_MANUAL)
+
+    def extrair_id_do_nome(opcoes_str):
+        if ' | ' in opcoes_str: return opcoes_str.split(' | ')[0]
+        return None
+    
+    def encontrar_opcao_por_cb(codigo_barras, produtos_df, opcoes_produtos_list):
+        if not codigo_barras: return None
+        
+        produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
+        
+        if not produto_encontrado.empty:
+            produto_id = produto_encontrado.iloc[0]["ID"]
+            
+            for opcao in opcoes_produtos_list:
+                if opcao.startswith(f"{produto_id} |"):
+                    return opcao
+        return None
+        
+    if "input_nome_prod_manual" not in st.session_state: st.session_state.input_nome_prod_manual = ""
+    if "input_qtd_prod_manual" not in st.session_state: st.session_state.input_qtd_prod_manual = 1.0
+    if "input_preco_prod_manual" not in st.session_state: st.session_state.input_preco_prod_manual = 0.01
+    if "input_custo_prod_manual" not in st.session_state: st.session_state.input_custo_prod_manual = 0.00
+    if "input_produto_selecionado" not in st.session_state: st.session_state.input_produto_selecionado = ""
+
+    edit_mode = st.session_state.edit_id is not None
+    movimentacao_para_editar = None
+
+    default_loja = LOJAS_DISPONIVEIS[0]
+    default_data = datetime.now().date()
+    default_cliente = ""
+    default_valor = 0.01
+    default_forma = "Dinheiro"
+    default_tipo = "Entrada"
+    default_produtos_json = ""
+    default_categoria = CATEGORIAS_SAIDA[0]
+    default_status = "Realizada" 
+    default_data_pagamento = None 
+
+    if edit_mode:
+        original_idx_to_edit = st.session_state.edit_id
+        linha_df_exibicao = df_exibicao[df_exibicao['original_index'] == original_idx_to_edit]
+
+        if not linha_df_exibicao.empty:
+            movimentacao_para_editar = linha_df_exibicao.iloc[0]
+            default_loja = movimentacao_para_editar['Loja']
+            default_data = movimentacao_para_editar['Data'] if pd.notna(movimentacao_para_editar['Data']) else datetime.now().date()
+            default_cliente = movimentacao_para_editar['Cliente']
+            default_valor = abs(movimentacao_para_editar['Valor']) if movimentacao_para_editar['Valor'] != 0 else 0.01 
+            default_forma = movimentacao_para_editar['Forma de Pagamento']
+            default_tipo = movimentacao_para_editar['Tipo']
+            default_produtos_json = movimentacao_para_editar['Produtos Vendidos'] if pd.notna(movimentacao_para_editar['Produtos Vendidos']) else ""
+            default_categoria = movimentacao_para_editar['Categoria']
+            default_status = movimentacao_para_editar['Status'] 
+            default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None) 
+            
+            if st.session_state.edit_id_loaded != original_idx_to_edit:
+                if default_tipo == "Entrada" and default_produtos_json:
+                    try:
+                        try:
+                            produtos_list = json.loads(default_produtos_json)
+                        except json.JSONDecodeError:
+                            produtos_list = ast.literal_eval(default_produtos_json)
+
+                        for p in produtos_list:
+                            p['Quantidade'] = float(p.get('Quantidade', 0))
+                            p['Preço Unitário'] = float(p.get('Preço Unitário', 0))
+                            p['Custo Unitário'] = float(p.get('Custo Unitário', 0))
+                            p['Produto_ID'] = str(p.get('Produto_ID', ''))
+                            
+                        st.session_state.lista_produtos = [p for p in produtos_list if p['Quantidade'] > 0] 
+                    except:
+                        st.session_state.lista_produtos = []
+                else: 
+                    st.session_state.lista_produtos = []
+                
+                st.session_state.edit_id_loaded = original_idx_to_edit 
+                st.session_state.cb_lido_livro_caixa = "" 
+            
+            st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
+            
+        else:
+            st.session_state.edit_id = None
+            st.session_state.edit_id_loaded = None 
+            st.session_state.lista_produtos = [] 
+            edit_mode = False
+            st.info("Movimentação não encontrada, saindo do modo de edição.")
+            st.rerun() 
+    else:
+        if st.session_state.edit_id_loaded is not None:
+             st.session_state.edit_id_loaded = None
+             st.session_state.lista_produtos = []
+        if st.session_state.cliente_selecionado_divida and st.session_state.cliente_selecionado_divida != "CHECKED":
+             st.session_state.cliente_selecionado_divida = None
+
     tab_nova_mov, tab_mov, tab_rel = st.tabs(abas_validas)
 
     with tab_nova_mov:
+        if "df_clientes" not in st.session_state:
+            st.session_state.df_clientes = carregar_clientes_cash()
+            
         st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
-        
-        col_principal_1, col_principal_2 = st.columns([1, 1])
-        with col_principal_1:
-            tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0, key="input_tipo", disabled=edit_mode)
 
-        if tipo == "Entrada":
-            with col_principal_2:
-                def reset_resgate():
-                    st.session_state.quer_resgatar = False
-                    st.session_state.desconto_cashback = 0.0
-
-                # =======================================================================
-                # CORREÇÃO CRÍTICA AQUI: Removido o `value=""` que causou o problema
-                # =======================================================================
-                cliente = st.text_input(
-                    "Nome do Cliente (ou Descrição)",
-                    key="input_cliente_form",
-                    on_change=reset_resgate,
-                    disabled=edit_mode
-                )
-                # =======================================================================
-                st.caption("Aperte ENTER ou clique fora do campo para buscar o cliente.")
-
-            # --- Lógica de Busca de Cliente e Saldo de Cashback (agora com colunas minúsculas) ---
-            saldo_cashback_cliente = 0.0
-            if cliente.strip() and not edit_mode:
-                cliente_normalizado = cliente.strip().lower()
-                
-                # A busca agora usa 'nome' (minúsculo) porque a função carregar_clientes_cash padronizou
-                cliente_encontrado_df = df_clientes[df_clientes["nome"].str.strip().str.lower() == cliente_normalizado]
-
-                if not cliente_encontrado_df.empty:
-                    # Acessa as colunas padronizadas em minúsculo
-                    saldo_cashback_cliente = cliente_encontrado_df.iloc[0]["cashback"]
-                    nivel_cliente = cliente_encontrado_df.iloc[0]["nivel"]
-                    st.success(f"🎉 Cliente Encontrado! Saldo Cashback: R$ {saldo_cashback_cliente:,.2f} | Nível: {nivel_cliente}")
-                else:
-                    st.info("✨ Cliente novo ou não encontrado na fidelidade.")
+        if 'divida_a_quitar' in st.session_state and st.session_state.divida_a_quitar is not None:
             
-            # ... (A lógica de Dívida em Aberto continua a mesma) ...
-
-            st.markdown("#### 🛍️ Detalhes dos Produtos")
+            idx_quitar = st.session_state.divida_a_quitar
             
-            # --- Cálculo do Valor da Venda ---
-            valor_calculado = 0.0
-            if st.session_state.lista_produtos:
-                df_produtos = pd.DataFrame(st.session_state.lista_produtos)
-                valor_calculado = (pd.to_numeric(df_produtos['Quantidade']) * pd.to_numeric(df_produtos['Preço Unitário'])).sum()
-
-            # --- Expander para Adicionar Produtos (código existente) ---
-            with st.expander("➕ Adicionar/Limpar Lista de Produtos (Venda)", expanded=True):
-                # ... (seu código para adicionar produtos na lista vai aqui, sem alterações) ...
-                pass # Apenas para o exemplo, mantenha seu código original aqui
-
-            # =======================================================================
-            # NOVO: SEÇÃO DE RESGATE DE CASHBACK (INTERFACE)
-            # =======================================================================
-            if saldo_cashback_cliente >= 20.00 and valor_calculado > 0:
-                st.markdown("---")
-                st.markdown("#### 💸 Resgate de Cashback")
+            try:
+                divida_para_quitar = st.session_state.df.loc[idx_quitar].copy()
+            except KeyError:
+                st.session_state.divida_a_quitar = None
+                st.error("Erro: A dívida selecionada não foi encontrada no registro principal. Tente novamente ou cancele.")
+                st.rerun()
                 
-                st.session_state.quer_resgatar = st.checkbox(f"Usar saldo de cashback? (Disponível: R$ {saldo_cashback_cliente:,.2f})", key="check_resgatar")
+            except Exception as e:
+                st.session_state.divida_a_quitar = None
+                st.error(f"Erro inesperado ao carregar dívida: {e}. Cancelando quitação.")
+                st.rerun()
 
-                if st.session_state.quer_resgatar:
-                    limite_resgate_compra = round(valor_calculado * 0.50, 2)
-                    max_resgate_possivel = min(saldo_cashback_cliente, limite_resgate_compra)
-
-                    st.info(f"Para esta compra de R$ {valor_calculado:,.2f}, você pode resgatar até R$ {max_resgate_possivel:,.2f} (50% do valor ou seu saldo total).")
-                    
-                    valor_resgate_input = st.number_input(
-                        "Valor a resgatar (R$)",
-                        min_value=0.01,
-                        max_value=float(max_resgate_possivel),
-                        value=float(max_resgate_possivel),
+            valor_em_aberto = calcular_valor_em_aberto(divida_para_quitar)
+            
+            if valor_em_aberto <= 0.01:
+                st.session_state.divida_a_quitar = None
+                st.warning("Dívida já quitada.")
+                st.rerun()
+            
+            st.subheader(f"✅ Quitar Dívida: {divida_para_quitar['Cliente']}")
+            st.info(f"Valor Total em Aberto: **R$ {valor_em_aberto:,.2f}**")
+            
+            with st.form("form_quitar_divida_rapida", clear_on_submit=False):
+                col_q1, col_q2, col_q3 = st.columns(3)
+                
+                with col_q1:
+                    valor_pago = st.number_input(
+                        f"Valor Pago Agora (Máx: R$ {valor_em_aberto:,.2f})", 
+                        min_value=0.01, 
+                        max_value=valor_em_aberto, 
+                        value=valor_em_aberto, 
                         format="%.2f",
-                        key="input_valor_resgate"
+                        key="input_valor_pago_quitar"
                     )
-                    st.session_state.desconto_cashback = valor_resgate_input
-                else:
-                    st.session_state.desconto_cashback = 0.0
-            else:
-                st.session_state.desconto_cashback = 0.0
-            # =======================================================================
+                with col_q2:
+                    data_conclusao = st.date_input("Data Real do Pagamento", value=date.today(), key="data_conclusao_quitar")
+                with col_q3:
+                    forma_pagt_concluir = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="forma_pagt_quitar")
 
-            # --- Exibição dos Totais ---
-            if valor_calculado > 0:
-                st.success(f"Subtotal da Venda: R$ {valor_calculado:,.2f}")
-                if st.session_state.desconto_cashback > 0:
-                    st.warning(f"Desconto Cashback: - R$ {st.session_state.desconto_cashback:,.2f}")
-            
-            # Valor final que será pago e registrado
-            valor_final_movimentacao = valor_calculado - st.session_state.desconto_cashback
+                concluir = st.form_submit_button("✅ Registrar Pagamento e Quitar", type="primary", use_container_width=True)
+                cancelar_quitacao = st.form_submit_button("❌ Cancelar Quitação", type="secondary", use_container_width=True)
 
-        # ... (A lógica para TIPO == "SAÍDA" continua a mesma) ...
-        
-        # --- FORMULÁRIO FINAL E BOTÃO SALVAR ---
-        st.markdown("---")
-        with st.form("form_movimentacao", clear_on_submit=not edit_mode):
-            st.markdown("#### Dados Finais da Transação")
-            # ... (seu código de loja, data, forma de pagamento, etc. continua o mesmo) ...
-            st.markdown(f"**Valor Final (com desconto):** R$ {valor_final_movimentacao:,.2f}")
+                if cancelar_quitacao:
+                    st.session_state.divida_a_quitar = None
+                    st.rerun()
 
-            enviar = st.form_submit_button("Adicionar e Salvar", type="primary", use_container_width=True)
-
-            if enviar:
-                if tipo == "Entrada" and status_selecionado == "Realizada":
+                if concluir:
+                    valor_restante = round(valor_em_aberto - valor_pago, 2)
+                    idx_original = idx_quitar
                     
-                    # =============================================================
-                    # ALTERADO: LÓGICA DE SALVAMENTO ATUALIZADA
-                    # =============================================================
-                    nome_cliente_original = cliente.strip()
-                    nome_cliente_final = nome_cliente_original
-                    
-                    # Adiciona nota sobre o resgate no nome do cliente para o histórico
-                    if st.session_state.desconto_cashback > 0:
-                        nome_cliente_final = f"{nome_cliente_original} (Resgate CB: R$ {st.session_state.desconto_cashback:,.2f})"
+                    if idx_original not in st.session_state.df.index:
+                        st.error("Erro interno ao localizar dívida. O registro original foi perdido.")
+                        st.rerun()
+                        return
 
-                    # --- Atualiza o arquivo de clientes (clientes_cash.csv) ---
-                    df_clientes_to_update = st.session_state.df_clientes.copy()
-                    cliente_idx = df_clientes_to_update[df_clientes_to_update["Nome"].str.strip().str.lower() == nome_cliente_original.lower()].index
+                    row_original = divida_para_quitar 
                     
-                    # Atualiza um cliente existente
-                    if not cliente_idx.empty:
-                        idx = cliente_idx[0]
-                        # 1. SUBTRAI o valor resgatado do saldo
-                        df_clientes_to_update.loc[idx, "Cashback"] -= st.session_state.desconto_cashback
-                        
-                        # 2. SOMA o cashback ganho sobre o valor final pago
-                        cashback_ganho = round(valor_final_movimentacao * 0.03, 2)
-                        df_clientes_to_update.loc[idx, "Cashback"] += cashback_ganho
-                        
-                        # 3. ATUALIZA o total gasto com o valor que o cliente efetivamente pagou
-                        df_clientes_to_update.loc[idx, "TotalGasto"] += valor_final_movimentacao
-                        
-                        # 4. RECALCULA o nível
-                        total_gasto_atualizado = df_clientes_to_update.loc[idx, "TotalGasto"]
-                        df_clientes_to_update.loc[idx, "Nivel"] = calcular_nivel(total_gasto_atualizado)
+                    valor_pagamento_com_sinal = valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago
                     
-                    # Cria um novo cliente
-                    else:
-                        cashback_ganho = round(valor_final_movimentacao * 0.03, 2)
-                        novo_cliente = {
-                            "Nome": nome_cliente_original,
-                            "Cashback": cashback_ganho,
-                            "TotalGasto": valor_final_movimentacao,
-                            "Nivel": calcular_nivel(valor_final_movimentacao)
-                        }
-                        df_clientes_to_update = pd.concat([df_clientes_to_update, pd.DataFrame([novo_cliente])], ignore_index=True)
-
-                    # Salva as alterações no arquivo de clientes no GitHub
-                    salvar_clientes_cash_github(df_clientes_to_update, f"Atualização de cashback para {nome_cliente_original}")
-                    
-                    # --- Salva a movimentação no livro caixa ---
-                    produtos_vendidos_json = json.dumps(st.session_state.lista_produtos)
-                    nova_linha_data = {
-                        "Data": data_input, # Supondo que `data_input` é a variável da data da transação
-                        "Loja": loja_selecionada, # Supondo `loja_selecionada`
-                        "Cliente": nome_cliente_final,
-                        "Valor": valor_final_movimentacao, # Salva o valor com desconto
-                        "Forma de Pagamento": forma_pagamento, # Supondo `forma_pagamento`
-                        "Tipo": tipo,
-                        "Produtos Vendidos": produtos_vendidos_json,
-                        "Categoria": "", # Categoria para entrada
-                        "Status": status_selecionado, 
-                        "Data Pagamento": data_pagamento_final, # Supondo `data_pagamento_final`
-                        "RecorrenciaID": "", "TransacaoPaiID": ""
+                    nova_transacao_pagamento = {
+                        "Data": data_conclusao,
+                        "Loja": row_original['Loja'],
+                        "Cliente": f"{row_original['Cliente'].split(' (')[0]} (Pagto de R$ {valor_pago:,.2f})",
+                        "Valor": valor_pagamento_com_sinal, 
+                        "Forma de Pagamento": forma_pagt_concluir,
+                        "Tipo": row_original['Tipo'],
+                        "Produtos Vendidos": row_original['Produtos Vendidos'],
+                        "Categoria": row_original['Categoria'],
+                        "Status": "Realizada",
+                        "Data Pagamento": data_conclusao,
+                        "RecorrenciaID": row_original['RecorrenciaID'],
+                        "TransacaoPaiID": idx_original 
                     }
                     
-                    st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_linha_data])], ignore_index=True)
-                    if salvar_dados_no_github(st.session_state.df, "Nova movimentação com resgate de cashback"):
-                        # Limpa tudo para a próxima venda
-                        reset_resgate()
-                        st.session_state.lista_produtos = []
+                    st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([nova_transacao_pagamento])], ignore_index=True)
+                    
+                    if valor_restante > 0.01:
+                        novo_valor_restante_com_sinal = valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
+
+                        st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal
+                        st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
+                        
+                        commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f} da dívida. Resta R$ {valor_restante:,.2f}."
+                        
+                    else: 
+                        st.session_state.df = st.session_state.df.drop(idx_original, errors='ignore')
+                        
+                        if row_original["Tipo"] == "Entrada" and row_original["Produtos Vendidos"]:
+                            try:
+                                produtos_vendidos = ast.literal_eval(row_original['Produtos Vendidos'])
+                                for item in produtos_vendidos:
+                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+                                if salvar_produtos_no_github(st.session_state.produtos, f"Débito de estoque por conclusão total"): inicializar_produtos.clear()
+                            except: st.warning("⚠️ Venda concluída, mas falha no débito do estoque (JSON inválido).")
+                            
+                        commit_msg = f"Pagamento total de R$ {valor_pago:,.2f} da dívida."
+                        
+                    if salvar_dados_no_github(st.session_state.df, commit_msg):
+                        st.session_state.divida_a_quitar = None
+                        st.session_state.cliente_selecionado_divida = None 
                         st.cache_data.clear()
                         st.rerun()
 
@@ -3502,10 +3567,6 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
-
-
-
-
 
 
 
