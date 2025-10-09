@@ -2026,8 +2026,9 @@ def livro_caixa():
 
     produtos = inicializar_produtos() 
 
+    # ==================== ESTADOS E CARREGAMENTO ====================
+    # Inicialização de estados
     if "df" not in st.session_state: st.session_state.df = carregar_livro_caixa()
-    # Garante que todas as colunas de controle existam
     for col in ['RecorrenciaID', 'TransacaoPaiID']:
         if col not in st.session_state.df.columns: st.session_state.df[col] = ''
         
@@ -2039,30 +2040,32 @@ def livro_caixa():
     if "edit_id_loaded" not in st.session_state: st.session_state.edit_id_loaded = None
     if "cliente_selecionado_divida" not in st.session_state: st.session_state.cliente_selecionado_divida = None
     if "divida_parcial_id" not in st.session_state: st.session_state.divida_parcial_id = None
-    # NOVA CHAVE: Para controlar a quitação rápida na aba Nova Movimentação
     if "divida_a_quitar" not in st.session_state: st.session_state.divida_a_quitar = None 
 
     # === NOVOS ESTADOS DE SESSÃO PARA CASHBACK ===
     if "cashback_cliente_id" not in st.session_state: st.session_state.cashback_cliente_id = None
     if "cashback_cliente_nome" not in st.session_state: st.session_state.cashback_cliente_nome = None
 
-    # ... (Seu carregamento de dados existente) ...
+    # Carregamento dos DataFrames
     df_produtos = st.session_state.produtos
     df_promocoes = norm_promocoes(st.cache_data(show_spinner=False)(lambda: carregar_promocoes())())
     df_cashback = carregar_cashback() # <-- CARREGA O DATAFRAME DE CASHBACK
 
-    # ... (Crie a função de reset do estado de cashback para uso posterior)
+    # ==================== FUNÇÕES AUXILIARES DE ESCOPO ====================
+    # Funções de reset
     def reset_cashback_state():
         st.session_state.cashback_cliente_id = None
         st.session_state.cashback_cliente_nome = None
-    
-    # CORREÇÃO CRÍTICA: Inicializa a aba ativa com um valor padrão válido
-    abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
-    
-    # Adiciona garantia de que a chave existe e tem um valor válido
-    if "aba_ativa_livro_caixa" not in st.session_state or str(st.session_state.aba_ativa_livro_caixa) not in abas_validas: 
-        st.session_state.aba_ativa_livro_caixa = abas_validas[0]
+        
+    # Esta função será chamada no on_change do input do cliente
+    def reset_all_states_on_client_change():
+        st.session_state.cliente_selecionado_divida = None
+        st.session_state.edit_id = None
+        st.session_state.divida_a_quitar = None
+        st.session_state.cashback_cliente_id = None
+        st.session_state.cashback_cliente_nome = None
 
+    # ==================== LÓGICA DO DATAFRAME ====================
     df_dividas = st.session_state.df
     df_exibicao = processar_dataframe(df_dividas)
 
@@ -2150,6 +2153,9 @@ def livro_caixa():
                 
                 st.session_state.edit_id_loaded = original_idx_to_edit # Marca como carregado
                 st.session_state.cb_lido_livro_caixa = "" # Limpa CB lido
+                
+                # Reseta estado de cashback ao carregar uma edição
+                reset_cashback_state()
             
             st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
             
@@ -2172,15 +2178,19 @@ def livro_caixa():
 
     # --- CRIAÇÃO DAS NOVAS ABAS ---
     # CORREÇÃO DO TypeError: Removido default_index para compatibilidade
-    tab_nova_mov, tab_mov, tab_rel = st.tabs(abas_validas)
+    abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
+    
+    # Adiciona garantia de que a chave existe e tem um valor válido
+    if "aba_ativa_livro_caixa" not in st.session_state or str(st.session_state.aba_ativa_livro_caixa) not in abas_validas: 
+        st.session_state.aba_ativa_livro_caixa = abas_validas[0]
 
+    tab_nova_mov, tab_mov, tab_rel = st.tabs(abas_validas)
 
 
     # ==============================================================================================
     # NOVA ABA: NOVA MOVIMENTAÇÃO (Substitui a Sidebar)
     # ==============================================================================================
     with tab_nova_mov:
-        # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
         
         st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
 
@@ -2191,28 +2201,18 @@ def livro_caixa():
             
             # --- VERIFICAÇÃO DE SEGURANÇA ADICIONAL ---
             try:
-                # Tenta acessar o registro. Isso deve retornar uma Series do Pandas.
                 divida_para_quitar = st.session_state.df.loc[idx_quitar].copy()
             except KeyError:
-                # Se a chave não existir mais (já foi excluída/quitada totalmente)
                 st.session_state.divida_a_quitar = None
                 st.error("Erro: A dívida selecionada não foi encontrada no registro principal. Tente novamente ou cancele.")
                 st.rerun()
-                # O stop é alcançado pelo rerun
                 
             except Exception as e:
-                # Captura outros erros de acesso inesperados
                 st.session_state.divida_a_quitar = None
                 st.error(f"Erro inesperado ao carregar dívida: {e}. Cancelando quitação.")
                 st.rerun()
-                # O stop é alcançado pelo rerun
 
-
-            # FIM DA VERIFICAÇÃO DE SEGURANÇA
-            
-            # >> USO DA NOVA FUNÇÃO PARA GARANTIR VALOR CORRETO E ARREDONDADO <<
             valor_em_aberto = calcular_valor_em_aberto(divida_para_quitar)
-            # << FIM DO USO DA NOVA FUNÇÃO >>
             
             if valor_em_aberto <= 0.01:
                 st.session_state.divida_a_quitar = None
@@ -2284,7 +2284,7 @@ def livro_caixa():
                         novo_valor_restante_com_sinal = valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
 
                         st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal
-                        st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"
+                        st.session_state.df.loc[idx_original, 'Cliente'] = f"{row_original['Cliente'].split(' (')[0]} (EM ABERTO: R$ {valor_restante:,.2f})"<br>
                         
                         commit_msg = f"Pagamento parcial de R$ {valor_pago:,.2f} da dívida. Resta R$ {valor_restante:,.2f}."
                         
@@ -2305,68 +2305,66 @@ def livro_caixa():
                         
                     
                     if salvar_dados_no_github(st.session_state.df, commit_msg):
+                        st.session_state.divida_a_quitar = None
+                        st.session_state.cliente_selecionado_divida = None # Garante que o alerta do cliente suma
+                        st.cache_data.clear()
+                        st.rerun()
+
+            # Não exibe o restante do formulário "Nova Movimentação" se estiver no modo quitação
+            st.stop()
+        
+        # O layout principal do formulário agora vai aqui, sem o `st.sidebar`
+        
+        # Categoria Principal
+        col_principal_1, col_principal_2 = st.columns([1, 1])
+        with col_principal_1:
+            tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1, key="input_tipo", disabled=edit_mode)
+        
+        # Variáveis de estado
+        is_recorrente = False
+        status_selecionado = default_status
+        data_primeira_parcela = date.today().replace(day=1) + timedelta(days=32)
+        valor_parcela = default_valor
+        nome_despesa_recorrente = default_cliente
+        num_parcelas = 1
+        valor_calculado = 0.0
+        produtos_vendidos_json = ""
+        categoria_selecionada = ""
+
+        # --- Seção de Entrada (Venda/Produtos) ---
+        if tipo == "Entrada":
+            
+            # [O bloco with col_principal_1: DA ENTRADA deve estar aqui]
+            with col_principal_1:
+                # Exemplo de campos que iriam aqui: Loja e Data
+                loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_form_entrada")
+                data_input = st.date_input("Data da Transação (Lançamento)", value=default_data, key="input_data_form_entrada")
+
+            
+            # A linha 'with col_principal_2:' está agora alinhada corretamente
+            with col_principal_2:
+                
+                st.markdown("##### 👤 Cliente & Cashback")
+                
+                cliente_input_key = "input_cliente_form" 
+                if edit_mode: cliente_input_key = "input_cliente_form_edit"
+                
+                # Função de callback para resetar o estado de cashback e dívida (Centralizada)
+                # ATENÇÃO: Esta função precisa estar definida no escopo de livro_caixa()
+                def reset_all_states_on_client_change():
+                    st.session_state.cliente_selecionado_divida = None
+                    st.session_state.edit_id = None
                     st.session_state.divida_a_quitar = None
-                    st.session_state.cliente_selecionado_divida = None # Garante que o alerta do cliente suma
-                    st.cache_data.clear()
-                    st.rerun()
+                    st.session_state.cashback_cliente_id = None
+                    st.session_state.cashback_cliente_nome = None
 
-    # Não exibe o restante do formulário "Nova Movimentação" se estiver no modo quitação
-    if 'divida_a_quitar' in st.session_state and st.session_state.divida_a_quitar is not None:
-        st.stop()
-    # --- FIM DO BLOCO DE QUITAÇÃO RÁPIDA ---
-    
-    # O layout principal do formulário agora vai aqui, sem o `st.sidebar`
-    
-    # Categoria Principal
-    col_principal_1, col_principal_2 = st.columns([1, 1])
-    with col_principal_1:
-        tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1, key="input_tipo", disabled=edit_mode)
-    
-    # Variáveis de estado
-    is_recorrente = False
-status_selecionado = default_status
-data_primeira_parcela = date.today().replace(day=1) + timedelta(days=32)
-valor_parcela = default_valor
-nome_despesa_recorrente = default_cliente
-num_parcelas = 1
-valor_calculado = 0.0
-produtos_vendidos_json = ""
-categoria_selecionada = ""
-
-# --- Seção de Entrada (Venda/Produtos) ---
-if tipo == "Entrada":
-    
-    # [O bloco with col_principal_1: DA ENTRADA deve estar aqui, se você tiver campos específicos de entrada na coluna 1]
-    # Se não tiver campos específicos, o bloco pode estar vazio ou usar o pass.
-    with col_principal_1:
-        # Exemplo de campos que iriam aqui: Loja e Data
-        loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_form_entrada")
-        data_input = st.date_input("Data da Transação (Lançamento)", value=default_data, key="input_data_form_entrada")
-
-
-    # A linha 'with col_principal_2:' está agora alinhada corretamente (continuação da lógica de Entrada)
-    with col_principal_2:
+                cliente = st.text_input("Nome do Cliente (ou Descrição)", 
+                                        value=default_cliente, 
+                                        key=cliente_input_key,
+                                        # Gatilho de busca/reset: Chama a função que reseta TUDO
+                                        on_change=reset_all_states_on_client_change, 
+                                        disabled=edit_mode)
         
-        st.markdown("##### 👤 Cliente & Cashback")
-        
-        cliente_input_key = "input_cliente_form" 
-        if edit_mode: cliente_input_key = "input_cliente_form_edit"
-        
-        # Função de callback para resetar o estado de cashback e dívida (Centralizada)
-        # ATENÇÃO: Esta função precisa estar definida no escopo de livro_caixa()
-        def reset_all_states_on_client_change():
-            st.session_state.cliente_selecionado_divida = None
-            st.session_state.edit_id = None
-            st.session_state.divida_a_quitar = None
-            st.session_state.cashback_cliente_id = None
-            st.session_state.cashback_cliente_nome = None
-
-        cliente = st.text_input("Nome do Cliente (ou Descrição)", 
-                                value=default_cliente, 
-                                key=cliente_input_key,
-                                # Gatilho de busca/reset: Chama a função que reseta TUDO
-                                on_change=reset_all_states_on_client_change, 
-                                disabled=edit_mode)
     
     # --- LÓGICA DE BUSCA/CRIAÇÃO DE CASHBACK (INTEGRAÇÃO) ---
     if cliente.strip() and not edit_mode:
@@ -3475,6 +3473,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
