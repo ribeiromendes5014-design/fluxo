@@ -2334,7 +2334,7 @@ def livro_caixa():
         # --- Seção de Entrada (Venda/Produtos) ---
         if tipo == "Entrada":
             
-            # Campo de Cliente (precisa ser definido antes para a lógica de dívida)
+# A linha 'with col_principal_2:' deve começar na mesma coluna de 'with col_principal_1:'
 with col_principal_2:
     
     st.markdown("##### 👤 Cliente & Cashback")
@@ -2343,12 +2343,13 @@ with col_principal_2:
     if edit_mode: cliente_input_key = "input_cliente_form_edit"
     
     # Função de callback para resetar o estado de cashback e dívida (Centralizada)
+    # ATENÇÃO: Esta função precisa estar definida no escopo de livro_caixa()
     def reset_all_states_on_client_change():
         st.session_state.cliente_selecionado_divida = None
         st.session_state.edit_id = None
         st.session_state.divida_a_quitar = None
-        st.session_state.cashback_cliente_id = None # NOVO: Limpa estado de Cashback
-        st.session_state.cashback_cliente_nome = None # NOVO: Limpa estado de Cashback
+        st.session_state.cashback_cliente_id = None
+        st.session_state.cashback_cliente_nome = None
 
     cliente = st.text_input("Nome do Cliente (ou Descrição)", 
                             value=default_cliente, 
@@ -2357,7 +2358,7 @@ with col_principal_2:
                             on_change=reset_all_states_on_client_change, 
                             disabled=edit_mode)
     
-    # --- LÓGICA DE BUSCA/CRIAÇÃO DE CASHBACK (NOVA) ---
+    # --- LÓGICA DE BUSCA/CRIAÇÃO DE CASHBACK ---
     if cliente.strip() and not edit_mode:
         
         # 1. Busca por clientes existentes
@@ -2420,13 +2421,8 @@ with col_principal_2:
                     st.session_state.cashback_cliente_nome = None
                     st.rerun()
                     
-    # ... (AQUI CONTINUA SUA LÓGICA EXISTENTE DE ALERTA INTELIGENTE DE DÍVIDA) ...
-    # [O bloco de if cliente.strip() and not edit_mode: para alerta de dívida deve vir aqui, 
-    #  abaixo do bloco de exibição do status de cashback, mas dentro do 'with col_principal_2:']
-
-    # --- LÓGICA DE ALERTA INTELIGENTE DE DÍVIDA (BLOCO ORIGINAL REINICIADO) ---
+    # --- LÓGICA DE ALERTA INTELIGENTE DE DÍVIDA ---
     if cliente.strip() and not edit_mode:
-        # A lógica de dívida continua a partir daqui, usando o 'cliente' do st.text_input
         
         df_dividas_cliente = df_exibicao[
             (df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente.strip().lower())) &
@@ -2436,7 +2432,6 @@ with col_principal_2:
 
         if not df_dividas_cliente.empty:
             
-            # CORREÇÃO: Arredonda o valor antes de somar para evitar erros de float
             total_divida = df_dividas_cliente["Valor"].abs().round(2).sum() 
             num_dividas = df_dividas_cliente.shape[0]
             divida_mais_antiga = df_dividas_cliente.iloc[0]
@@ -2446,7 +2441,7 @@ with col_principal_2:
             original_idx_divida = divida_mais_antiga['original_index']
             vencimento_str = divida_mais_antiga['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_mais_antiga['Data Pagamento']) else "S/ Data"
 
-            st.session_state.cliente_selecionado_divida = divida_mais_antiga.name # Salva o índice original
+            st.session_state.cliente_selecionado_divida = divida_mais_antiga.name 
 
             st.warning(f"💰 Dívida em Aberto para {cliente}: R$ {valor_divida_antiga:,.2f}") 
             
@@ -2456,10 +2451,9 @@ with col_principal_2:
 
             if col_btn_add.button("➕ Adicionar Mais Produtos à Dívida", key="btn_add_produtos", use_container_width=True, type="secondary"):
                 st.session_state.edit_id = original_idx_divida
-                st.session_state.edit_id_loaded = None # Força o recarregamento dos dados na próxima execução
+                st.session_state.edit_id_loaded = None 
                 st.rerun()
 
-            # ALTERADO: Este botão agora define a nova chave de estado para abrir o formulário de quitação rápida
             if col_btn_conc.button("✅ Concluir/Pagar Dívida", key="btn_concluir_divida", use_container_width=True, type="primary"):
                 st.session_state.divida_a_quitar = divida_mais_antiga['original_index']
                 st.session_state.edit_id = None 
@@ -2468,7 +2462,7 @@ with col_principal_2:
                 st.rerun()
 
             if col_btn_canc.button("🗑️ Cancelar Dívida", key="btn_cancelar_divida", use_container_width=True):
-                # Lógica simplificada de exclusão (cancelamento)
+                
                 df_to_delete = df_dividas_cliente.copy()
                 for idx in df_to_delete['original_index'].tolist():
                     st.session_state.df = st.session_state.df.drop(idx, errors='ignore')
@@ -2480,7 +2474,7 @@ with col_principal_2:
                     st.success(f"{num_dividas} dívida(s) de {cliente.strip()} cancelada(s) com sucesso!")
                     st.rerun()
         else:
-            st.session_state.cliente_selecionado_divida = None # Limpa a chave se não houver dívida
+            st.session_state.cliente_selecionado_divida = None 
 
     st.markdown("#### 🛍️ Detalhes dos Produtos")
     
@@ -3471,6 +3465,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
