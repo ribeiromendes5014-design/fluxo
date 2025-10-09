@@ -2041,6 +2041,20 @@ def livro_caixa():
     if "divida_parcial_id" not in st.session_state: st.session_state.divida_parcial_id = None
     # NOVA CHAVE: Para controlar a quitação rápida na aba Nova Movimentação
     if "divida_a_quitar" not in st.session_state: st.session_state.divida_a_quitar = None 
+
+    # === NOVOS ESTADOS DE SESSÃO PARA CASHBACK ===
+    if "cashback_cliente_id" not in st.session_state: st.session_state.cashback_cliente_id = None
+    if "cashback_cliente_nome" not in st.session_state: st.session_state.cashback_cliente_nome = None
+
+    # ... (Seu carregamento de dados existente) ...
+    df_produtos = st.session_state.produtos
+    df_promocoes = norm_promocoes(st.cache_data(show_spinner=False)(lambda: carregar_promocoes())())
+    df_cashback = carregar_cashback() # <-- CARREGA O DATAFRAME DE CASHBACK
+
+    # ... (Crie a função de reset do estado de cashback para uso posterior)
+    def reset_cashback_state():
+        st.session_state.cashback_cliente_id = None
+        st.session_state.cashback_cliente_nome = None
     
     # CORREÇÃO CRÍTICA: Inicializa a aba ativa com um valor padrão válido
     abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
@@ -3379,6 +3393,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
