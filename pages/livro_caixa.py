@@ -2146,10 +2146,14 @@ def livro_caixa():
     # 🔧 Busca do cliente existente no CSV de cashback (corrigido)
     # ===========================================================
     nome_cliente = st.text_input("Nome do cliente")
+
+    # Evita erro de variável não definida
+    nome_cliente_normalizado = ""
+
     if nome_cliente:
         nome_cliente_normalizado = nome_cliente.strip().lower()
-
-    # Corrige o nome da coluna de cliente (aceita "Nome", "NOME", etc.)
+    
+    # Corrige o nome da coluna de cliente
     col_nome = None
     for c in df_clientes.columns:
         if c.strip().lower() == "nome":
@@ -2162,11 +2166,9 @@ def livro_caixa():
     else:
         nomes_normalizados_existentes = [
             str(n).strip().lower() for n in df_clientes[col_nome].fillna("").tolist()
-            for n in df_clientes[col_nome].fillna("").tolist()
         ]
-    # 🔎 Debug opcional — mostra os nomes normalizados carregados
     st.write("🔍 Nomes normalizados carregados:", nomes_normalizados_existentes)
-        
+    
     
     # Garante que todas as colunas de controle existam
     for col in ['RecorrenciaID', 'TransacaoPaiID']:
@@ -3623,6 +3625,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
