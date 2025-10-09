@@ -1542,15 +1542,18 @@ def livro_caixa():
     if not df_exibicao.empty and "Data" in df_exibicao.columns:
         # AQUI COMEÇA O BLOCO CORRIGIDO COM RECUO DE 4 ESPAÇOS
         
-        # 1. Converte explicitamente todos os elementos da Série para string, garantindo que objetos Python complexos sejam serializados.
-        df_exibicao["Data"] = df_exibicao["Data"].apply(lambda x: str(x) if pd.notna(x) else x)
+        # 1. Converte explicitamente todos os elementos da Série para string...
+    # Usando verificação de nulidade escalar (x is not None) para evitar o ValueError ambíguo.
+    df_exibicao["Data"] = df_exibicao["Data"].apply(
+        lambda x: str(x) if x is not None and x is not pd.NaT else None
+    )
 
-        # 2. Executa a conversão para datetime com o formato forçado, que deve funcionar agora.
-        df_exibicao["Data"] = pd.to_datetime(
-            df_exibicao["Data"], 
-            format='%Y-%m-%d',          # Formato forçado para evitar o erro "duplicate keys"
-            errors='coerce'
-        ).dt.normalize()
+    # 2. Executa a conversão para datetime com o formato forçado.
+    df_exibicao["Data"] = pd.to_datetime(
+        df_exibicao["Data"], 
+        format='%Y-%m-%d',         
+        errors='coerce'
+    ).dt.normalize()
 
     produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()].copy()
     opcoes_produtos = [""] + produtos_para_venda.apply(
@@ -2957,6 +2960,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
