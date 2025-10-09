@@ -20,7 +20,7 @@ from utils import (
     to_float, prox_id, hash_df, parse_date_yyyy_mm_dd, add_months,
     calcular_valor_em_aberto, format_produtos_resumo,
     carregar_livro_caixa, salvar_dados_no_github,
-    carregar_historico_compras, salvar_historico_compras_no_github, # Nome corrigido para salvar compras
+    carregar_historico_compras, salvar_historico_compras_no_github,
     carregar_produtos, salvar_produtos_no_github, inicializar_produtos,
     ajustar_estoque, ler_codigo_barras_api,
     callback_salvar_novo_produto, callback_adicionar_manual, callback_adicionar_estoque,
@@ -445,7 +445,7 @@ def gestao_promocoes():
     st.markdown("---")
     
     # 2. Sugestão de Produtos Perto da Validade
-    st.markdown("#### ⏳ Produtos Próximos da Validade")
+    st.markdown(f"#### ⏳ Produtos Próximos da Validade")
     
     dias_validade_limite = st.number_input(
         "Considerar perto da validade (dias restantes)",
@@ -677,7 +677,7 @@ def relatorio_produtos():
     else:
         st.warning(f"🚨 **{len(df_vencimento)}** produto(s) vencendo em breve (até {dias_validade_alerta} dias)!")
         st.dataframe(
-            df_vencimento[["ID", "Nome", "Marca", "Quantidade", "Validade", "Dias Restantes"]],
+            df_vencimento[["ID", "Nome", "Quantidade", "Validade", "Dias Restantes"]],
             use_container_width=True, hide_index=True
         )
 
@@ -1230,7 +1230,7 @@ def historico_compras():
         st.header("📈 Análise de Gastos com Compras")
         
         if df_exibicao.empty:
-            st.info("Nenhum dado de compra registrado para gerar o dashboard.")
+            st.info("Nenhuma dado de compra registrado para gerar o dashboard.")
         else:
             df_gasto_por_produto = df_exibicao.groupby('Produto')['Valor Total'].sum().reset_index()
             df_gasto_por_produto = df_gasto_por_produto.sort_values(by='Valor Total', ascending=False)
@@ -1262,7 +1262,7 @@ def historico_compras():
                 df_temp_data['Data_dt'] = pd.to_datetime(df_temp_data['Data'])
                 df_temp_data['MesAno'] = df_temp_data['Data_dt'].dt.strftime('%Y-%m')
                 
-                df_gasto_mensal = df_temp_data.groupby('MesAno')['Valor Total'].sum().reset_index()
+                df_gasto_mensal = df_temp_data.groupby('Produto')['Valor Total'].sum().reset_index()
                 df_gasto_mensal = df_gasto_mensal.sort_values(by='MesAno')
 
                 fig_mensal = px.line(
@@ -1513,7 +1513,7 @@ def livro_caixa():
 
     # Carregamento dos DataFrames
     df_produtos = st.session_state.produtos
-    # AQUI: A função agora será encontrada
+    # CORREÇÃO DA CHAMA DE PROMOÇÕES (Simplificado, assumindo cache no utils)
     df_promocoes_bruto = carregar_promocoes() 
     df_promocoes = norm_promocoes(df_promocoes_bruto) 
     df_cashback = carregar_cashback() 
@@ -2943,6 +2943,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
