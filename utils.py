@@ -227,6 +227,8 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
         st.warning(f"Falha ao enviar dados para o GitHub — backup local mantido. ({e})")
         return False
 
+# utils.py - dentro de def processar_dataframe(df_movimentacoes: pd.DataFrame):
+
 @st.cache_data(show_spinner=False)
 def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     """Processa o dataframe de movimentações para exibição e cálculo de saldo."""
@@ -242,41 +244,46 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     df_proc.index.name = 'original_index'
     df_proc = df_proc.reset_index() # <-- CRIA A COLUNA 'original_index'
 
-    # 2. CONVERSÃO DE TIPOS E CRIAÇÃO DE COLUNAS AUXILIARES
+    # 2. Mapeamento e Conversão de Tipos
     
     # --- Mapeamento de Colunas Críticas (para tratar a capitalização/underscores) ---
     
-    # Tenta mapear VALOR (Usa o nome mais provável 'VALOR' ou 'VALOR_TOTAL')
+    # Mapeia VALOR (Se não encontrar 'VALOR', tenta 'VALOR_TOTAL')
     valor_col_name = 'VALOR'
-    if 'VALOR' not in df_proc.columns and 'VALOR_TOTAL' in df_proc.columns:
+    if valor_col_name not in df_proc.columns and 'VALOR_TOTAL' in df_proc.columns:
         valor_col_name = 'VALOR_TOTAL'
-    elif 'VALOR' not in df_proc.columns:
-        df_proc['VALOR'] = 0.0 # Cria coluna default se não encontrou o valor principal
-        valor_col_name = 'VALOR' # Usa o nome default
-    
-    # Tenta mapear DATA (Usa 'DATA' ou procura alternativas)
+    elif valor_col_name not in df_proc.columns:
+        df_proc['VALOR'] = 0.0
+        valor_col_name = 'VALOR' 
+        
+    # Mapeia DATA (Se não encontrar 'DATA', tenta alternativas. Se nada, cria vazia.)
     data_col_name = 'DATA'
     possible_date_cols = ['DATA_DE_LANCAMENTO', 'DATA_LANCAMENTO', 'DATA_DA_TRANSACAO']
     found_date_col = next((col for col in possible_date_cols if col in df_proc.columns), None)
 
-    if 'DATA' not in df_proc.columns and found_date_col:
+    if data_col_name not in df_proc.columns and found_date_col:
         data_col_name = found_date_col
-    elif 'DATA' not in df_proc.columns:
+    elif data_col_name not in df_proc.columns:
         df_proc['DATA'] = ''
         data_col_name = 'DATA'
-    
-    # Aplica conversão nos nomes mapeados:
+        
+    # Mapeia STATUS (Tenta STATUS, senão cria "REALIZADA" como default)
+    status_col_name = 'STATUS'
+    if status_col_name not in df_proc.columns:
+        df_proc[status_col_name] = 'REALIZADA'
+        
+    # --- Conversão de Tipos ---
     df_proc["VALOR"] = pd.to_numeric(df_proc[valor_col_name], errors='coerce').fillna(0.0) 
     df_proc["DATA"] = pd.to_datetime(df_proc[data_col_name], errors='coerce').dt.date 
     
-    # DATA_PAGAMENTO é menos crítica, mas também precisa de tratamento de existência
+    # DATA_PAGAMENTO é menos crítica, mas precisa de tratamento de existência
     data_pagamento_col = 'DATA_PAGAMENTO'
     if data_pagamento_col in df_proc.columns:
         df_proc[data_pagamento_col] = pd.to_datetime(df_proc[data_pagamento_col], errors='coerce').dt.date
     else:
-        df_proc[data_pagamento_col] = pd.NaT # Adiciona a coluna se estiver faltando
+        df_proc[data_pagamento_col] = pd.NaT 
     
-    # Cria a coluna 'DATA_dt' para ordenação
+    # Cria coluna auxiliar de data para ordenação
     df_proc["Data_dt"] = pd.to_datetime(df_proc["DATA"], errors='coerce')
     df_proc["Data_dt"] = df_proc["Data_dt"].fillna(datetime(1900, 1, 1))
     
@@ -285,10 +292,10 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     if 'ID_VISÍVEL' not in df_proc.columns or df_proc['ID_VISÍVEL'].isnull().all():
         df_proc['ID_VISÍVEL'] = range(1, len(df_proc) + 1)
         
-    # 3. CÁLCULO DO SALDO (USANDO AS COLUNAS CRIADAS)
-    df_realizadas = df_proc[df_proc['STATUS'] == 'REALIZADA'].copy()
+    # 3. CÁLCULO DO SALDO (AGORA USANDO O NOME 'STATUS' GARANTIDO)
+    df_realizadas = df_proc[df_proc[status_col_name] == 'REALIZADA'].copy()
     
-    # Ordena e calcula o saldo usando 'Data_dt' e 'original_index'
+    # Ordena e calcula o saldo
     if 'original_index' in df_realizadas.columns:
         df_realizadas = df_realizadas.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]) 
         df_realizadas['Saldo Acumulado'] = df_realizadas['VALOR'].cumsum() 
@@ -976,6 +983,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
