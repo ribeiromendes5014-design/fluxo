@@ -245,7 +245,8 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     # 2. CONVERSÃO DE TIPOS E CRIAÇÃO DE COLUNAS AUXILIARES
     
     # --- Mapeamento de Colunas Críticas (para tratar a capitalização/underscores) ---
-    # Busca a coluna de valor. Tenta 'VALOR' e depois 'VALOR_TOTAL'
+    
+    # Tenta mapear VALOR (Usa o nome mais provável 'VALOR' ou 'VALOR_TOTAL')
     valor_col_name = 'VALOR'
     if 'VALOR' not in df_proc.columns and 'VALOR_TOTAL' in df_proc.columns:
         valor_col_name = 'VALOR_TOTAL'
@@ -253,21 +254,27 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
         df_proc['VALOR'] = 0.0 # Cria coluna default se não encontrou o valor principal
         valor_col_name = 'VALOR' # Usa o nome default
     
-    # Busca a coluna de data principal. Tenta 'DATA'
+    # Tenta mapear DATA (Usa 'DATA' ou procura alternativas)
     data_col_name = 'DATA'
-    if 'DATA' not in df_proc.columns and 'DATA_DE_LANCAMENTO' in df_proc.columns:
-        data_col_name = 'DATA_DE_LANCAMENTO'
+    possible_date_cols = ['DATA_DE_LANCAMENTO', 'DATA_LANCAMENTO', 'DATA_DA_TRANSACAO']
+    found_date_col = next((col for col in possible_date_cols if col in df_proc.columns), None)
+
+    if 'DATA' not in df_proc.columns and found_date_col:
+        data_col_name = found_date_col
     elif 'DATA' not in df_proc.columns:
-        # Se 'DATA' não existir, cria com valor nulo para ser tratado
         df_proc['DATA'] = ''
         data_col_name = 'DATA'
-        
+    
     # Aplica conversão nos nomes mapeados:
     df_proc["VALOR"] = pd.to_numeric(df_proc[valor_col_name], errors='coerce').fillna(0.0) 
     df_proc["DATA"] = pd.to_datetime(df_proc[data_col_name], errors='coerce').dt.date 
     
-    # DATA_PAGAMENTO é menos crítica, tenta converter o que tiver
-    df_proc["DATA_PAGAMENTO"] = pd.to_datetime(df_proc["DATA_PAGAMENTO"], errors='coerce').dt.date 
+    # DATA_PAGAMENTO é menos crítica, mas também precisa de tratamento de existência
+    data_pagamento_col = 'DATA_PAGAMENTO'
+    if data_pagamento_col in df_proc.columns:
+        df_proc[data_pagamento_col] = pd.to_datetime(df_proc[data_pagamento_col], errors='coerce').dt.date
+    else:
+        df_proc[data_pagamento_col] = pd.NaT # Adiciona a coluna se estiver faltando
     
     # Cria a coluna 'DATA_dt' para ordenação
     df_proc["Data_dt"] = pd.to_datetime(df_proc["DATA"], errors='coerce')
@@ -281,7 +288,7 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     # 3. CÁLCULO DO SALDO (USANDO AS COLUNAS CRIADAS)
     df_realizadas = df_proc[df_proc['STATUS'] == 'REALIZADA'].copy()
     
-    # Ordena e calcula o saldo usando 'DATA_dt' e 'original_index'
+    # Ordena e calcula o saldo usando 'Data_dt' e 'original_index'
     if 'original_index' in df_realizadas.columns:
         df_realizadas = df_realizadas.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]) 
         df_realizadas['Saldo Acumulado'] = df_realizadas['VALOR'].cumsum() 
@@ -969,5 +976,6 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
