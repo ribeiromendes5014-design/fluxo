@@ -2145,7 +2145,9 @@ def livro_caixa():
     # ===========================================================
     # 🔧 Busca do cliente existente no CSV de cashback (corrigido)
     # ===========================================================
-    nome_cliente_normalizado = nome_cliente.strip().lower()
+    nome_cliente = st.text_input("Nome do cliente")
+    if nome_cliente:
+        nome_cliente_normalizado = nome_cliente.strip().lower()
 
     # Corrige o nome da coluna de cliente (aceita "Nome", "NOME", etc.)
     col_nome = None
@@ -3621,6 +3623,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
