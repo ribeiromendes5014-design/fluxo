@@ -2440,7 +2440,7 @@ def livro_caixa():
                 
                 # NOVO: Lógica de Alerta Inteligente de Dívida
                 # NOVO: Lógica de Cashback e Nível
-                cliente_df = df_clientes[df_clientes["Nome"].astype(str).str.strip().str.lower() == cliente.strip().lower()]
+                cliente_df = df_clientes[df_clientes["Nome"].astype(str).str.contains(cliente.strip(), case=False, na=False)]
                 cliente_encontrado = not cliente_df.empty
                 
                 if cliente.strip() and not edit_mode: # Apenas para novas vendas, verifica se existe
@@ -3503,6 +3503,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
