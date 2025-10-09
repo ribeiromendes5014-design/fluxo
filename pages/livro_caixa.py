@@ -2442,6 +2442,23 @@ def livro_caixa():
                 ]
                 cliente_encontrado = not cliente_df.empty
 
+                # 🔍 DEBUG TEMPORÁRIO — verificar correspondência de cliente
+                st.write("🔍 Verificando clientes carregados:")
+                st.dataframe(st.session_state.df_clientes)
+
+                st.write("🔎 Cliente digitado:", cliente)
+                st.write("🔎 Normalizado:", cliente.strip().lower())
+
+                df_clientes_normalizado = st.session_state.df_clientes.copy()
+                df_clientes_normalizado["Nome_Norm"] = df_clientes_normalizado["Nome"].astype(str).str.strip().str.lower()
+                st.write("🧾 Nomes normalizados existentes:", df_clientes_normalizado["Nome_Norm"].tolist())
+
+                if cliente.strip().lower() in df_clientes_normalizado["Nome_Norm"].values:
+                    st.success("✅ Encontrou o cliente!")
+                else:
+                    st.error("❌ Ainda não encontrou. Veja acima o nome normalizado para comparar.")
+                
+                
                 if cliente.strip() and not edit_mode:
                     if cliente_encontrado:
                         c_cashback = cliente_df.iloc[0]["Cashback"]
@@ -3554,6 +3571,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
