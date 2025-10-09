@@ -68,5 +68,18 @@ URL_MAIS_VENDIDOS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rt
 URL_OFERTAS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-oferta.png"   
 URL_NOVIDADES = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-novidades.png"
 
+# --- NOVAS CONSTANTES PARA CASHBACK ---
+ARQ_CASHBACK = "clientes_cash.csv"
+COLUNAS_CASHBACK = ["ID", "Nome", "Nivel", "Saldo_Cashback", "Total_Gasto"]
+
+# Definição dos níveis e percentuais de cashback (Baseado na discussão anterior)
+# O nível será determinado pelo Total_Gasto, mas o percentual é fixo por nível
+NIVEIS_CASHBACK = {
+    "Bronze": {"min_gasto": 0, "percentual": 0.00}, # 0%
+    "Prata": {"min_gasto": 500, "percentual": 0.01},  # 1%
+    "Ouro": {"min_gasto": 2000, "percentual": 0.03},   # 3%
+    "Diamante": {"min_gasto": 5000, "percentual": 0.05} # 5%
+}
+
 
 
