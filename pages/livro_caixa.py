@@ -2142,7 +2142,28 @@ def livro_caixa():
     # NOVO: Inicialização de clientes e cashback
     if "df_clientes" not in st.session_state: st.session_state.df_clientes = carregar_clientes_cash()
     df_clientes = st.session_state.df_clientes # Referência para o DataFrame de clientes
+    # ===========================================================
+    # 🔧 Correção para normalização de nomes de clientes
+    # ===========================================================
 
+    # Corrige o nome da coluna de cliente (aceita "Nome", "NOME", etc.)
+    col_nome = None
+    for c in df_clientes.columns:
+        if c.strip().lower() == "nome":
+            col_nome = c
+            break
+
+    if col_nome is None:
+        st.warning("⚠️ Coluna 'Nome' não encontrada no CSV de clientes.")
+        nomes_normalizados_existentes = []
+    else:
+        nomes_normalizados_existentes = [
+            str(n).strip().lower() for n in df_clientes[col_nome].fillna("").tolist()
+        ]
+    # 🔎 Debug opcional — mostra os nomes normalizados carregados
+    st.write("🔍 Nomes normalizados carregados:", nomes_normalizados_existentes)
+        
+    
     # Garante que todas as colunas de controle existam
     for col in ['RecorrenciaID', 'TransacaoPaiID']:
         if col not in st.session_state.df.columns: st.session_state.df[col] = ''
@@ -3598,6 +3619,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
