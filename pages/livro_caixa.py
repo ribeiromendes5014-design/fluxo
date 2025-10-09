@@ -2996,56 +2996,65 @@ def livro_caixa():
                             commit_msg = COMMIT_MESSAGE
                         
                         
-                        # NOVO: Lógica de Cashback (Apenas para Entrada Realizada)
-                        # Este é o bloco de Cashback que estava causando o erro de indentação
+                        # ==============================================================================
+                        # BLOCO MODIFICADO: LÓGICA DE CASHBACK (GANHO E RESGATE)
+                        # ==============================================================================
                         if tipo == "Entrada" and status_selecionado == "Realizada":
                             
-                            # O valor_final_movimentacao é a soma dos produtos vendidos
-                            valor_compra = valor_final_movimentacao
-                            cashback_ganho = round(valor_compra * 0.03, 2)
+                            # Pega o valor do resgate do session_state
+                            cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
+                            
+                            # O valor da compra para CÁLCULO de cashback é o valor ANTES do desconto
+                            valor_base_compra = valor_final_movimentacao + cashback_resgatado
+                            cashback_ganho = round(valor_base_compra * 0.03, 2) # Cashback é calculado sobre o valor total
+                            
                             nome_cliente_norm = cliente_final.strip()
                             
-                            # 1. Verifica se o cliente já existe
                             df_clientes_to_update = st.session_state.df_clientes.copy()
-                            # Utiliza a coluna temporária Nome_Norm para a busca, caso exista, ou a original normalizada
-                            
-                            # Garante que a coluna de normalização existe antes de tentar usá-la
                             if "Nome_Norm" not in df_clientes_to_update.columns:
                                 df_clientes_to_update["Nome_Norm"] = df_clientes_to_update["Nome"].astype(str).str.strip().str.lower()
                                 
                             cliente_idx = df_clientes_to_update[df_clientes_to_update["Nome_Norm"] == nome_cliente_norm.lower()].index
                             
+                            commit_msg_cashback = ""
+
                             if not cliente_idx.empty:
-                                # Atualiza cliente existente
+                                # ATUALIZA CLIENTE EXISTENTE
                                 idx = cliente_idx[0]
-                                df_clientes_to_update.loc[idx, "Cashback"] += cashback_ganho
-                                df_clientes_to_update.loc[idx, "TotalGasto"] += valor_compra
+                                saldo_anterior = df_clientes_to_update.loc[idx, "Cashback"]
+                                
+                                # Lógica de débito e crédito
+                                novo_saldo = saldo_anterior - cashback_resgatado + cashback_ganho
+                                
+                                df_clientes_to_update.loc[idx, "Cashback"] = novo_saldo
+                                df_clientes_to_update.loc[idx, "TotalGasto"] += valor_base_compra
                                 total_gasto_atualizado = df_clientes_to_update.loc[idx, "TotalGasto"]
                                 df_clientes_to_update.loc[idx, "Nivel"] = calcular_nivel(total_gasto_atualizado)
+                                commit_msg_cashback = f"Cashback para {nome_cliente_norm}. Resgate: R$ {cashback_resgatado:,.2f} | Ganho: R$ {cashback_ganho:,.2f}"
                             else:
-                                # Novo cliente (adiciona)
+                                # NOVO CLIENTE (ganha cashback, não resgata)
                                 novo_cliente = {
                                     "Nome": nome_cliente_norm,
                                     "Cashback": cashback_ganho,
-                                    "TotalGasto": valor_compra,
-                                    "Nivel": calcular_nivel(valor_compra)
+                                    "TotalGasto": valor_base_compra,
+                                    "Nivel": calcular_nivel(valor_base_compra)
                                 }
-                                # Adiciona a coluna de normalização para evitar erro na próxima busca (caso não tenha salvado no GitHub ainda)
                                 novo_cliente["Nome_Norm"] = nome_cliente_norm.lower() 
-                                
                                 df_clientes_to_update = pd.concat([df_clientes_to_update, pd.DataFrame([novo_cliente])], ignore_index=True)
+                                commit_msg_cashback = f"Novo cliente {nome_cliente_norm}. Ganho: R$ {cashback_ganho:,.2f}"
                             
-                            # Remove a coluna temporária antes de salvar no GitHub
                             df_clientes_to_update.drop(columns=["Nome_Norm"], errors="ignore", inplace=True)
                                 
-                            # Salva e atualiza o estado
-                            if salvar_clientes_cash_github(df_clientes_to_update, f"Cashback para {nome_cliente_norm}. Ganho: R$ {cashback_ganho:,.2f}"):
-                                st.session_state.df_clientes = df_clientes_to_update # Atualiza o estado da sessão
-                                carregar_clientes_cash.clear() # Limpa o cache
-                                # st.success(f"💰 Cashback de R$ {cashback_ganho:,.2f} registrado para {nome_cliente_norm}!") # Use toast or remove, as success message will be overridden
-                                st.toast(f"💰 Cashback de R$ {cashback_ganho:,.2f} registrado para {nome_cliente_norm}!")
+                            if salvar_clientes_cash_github(df_clientes_to_update, commit_msg_cashback):
+                                st.session_state.df_clientes = df_clientes_to_update
+                                carregar_clientes_cash.clear()
+                                st.toast(commit_msg_cashback) # Mensagem rápida de confirmação
                             else:
                                 st.error("❌ Falha ao salvar os dados de cashback no GitHub.")
+                        
+                        # ==============================================================================
+                        # FIM DO BLOCO MODIFICADO
+                        # ==============================================================================
                         
                     # A persistência agora está correta e limpa o cache (no salvar_dados_no_github)
                     if salvar_dados_no_github(st.session_state.df, commit_msg):
@@ -3605,6 +3614,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
