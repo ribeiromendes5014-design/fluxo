@@ -1540,11 +1540,12 @@ def livro_caixa():
     # CORREÇÃO CRÍTICA 2: GARANTIR TIPO DE DADOS PARA COMPARAÇÃO
     # Converte explicitamente a coluna 'Data' para datetime64[ns] para compatibilidade com 'primeiro_dia_mes'
     if not df_exibicao.empty and "Data" in df_exibicao.columns:
-    df_exibicao["Data"] = pd.to_datetime(
-        df_exibicao["Data"].astype(str), 
-        format='%Y-%m-%d',         # <-- ESSA LINHA FORÇA O PARSING E EVITA A FALHA
-        errors='coerce'
-    ).dt.normalize()
+        # A nova linha deve ter 8 espaços (4 do 'if' principal + 4 do 'if' interno)
+        df_exibicao["Data"] = pd.to_datetime(
+            df_exibicao["Data"].astype(str), 
+            format='%Y-%m-%d',         # <-- Garante o formato e resolve o erro interno do Pandas
+            errors='coerce'
+        ).dt.normalize()
 
     produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()].copy()
     opcoes_produtos = [""] + produtos_para_venda.apply(
@@ -2951,6 +2952,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
