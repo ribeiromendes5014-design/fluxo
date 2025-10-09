@@ -2485,36 +2485,28 @@ def livro_caixa():
                 
                 cliente_normalizado = cliente.strip().lower()
 
-                df_clientes_normalizado = st.session_state.df_clientes.copy()
-                df_clientes_normalizado["Nome_Norm"] = (
-                    df_clientes_normalizado["Nome"].astype(str).str.strip().str.lower()
+                # --- INÍCIO DA CORREÇÃO ---
+                
+                # 1. Cria um DF temporário para a busca normalizada
+                df_clientes_to_search = st.session_state.df_clientes.copy()
+                
+                # 2. Garante que a coluna de busca existe e está normalizada corretamente
+                df_clientes_to_search["Nome_Norm"] = (
+                    df_clientes_to_search["Nome"].astype(str).str.strip().str.lower()
                 )
 
-                # Verifica se existe
-                cliente_df = df_clientes_normalizado[
-                   df_clientes_normalizado["Nome_Norm"] == cliente_normalizado
+                # 3. Verifica se existe
+                cliente_df = df_clientes_to_search[
+                   df_clientes_to_search["Nome_Norm"] == cliente_normalizado
                 ]
                 cliente_encontrado = not cliente_df.empty
-
-                # 🔍 DEBUG TEMPORÁRIO — verificar correspondência de cliente
-                st.write("🔍 Verificando clientes carregados:")
-                st.dataframe(st.session_state.df_clientes)
-
-                st.write("🔎 Cliente digitado:", cliente)
-                st.write("🔎 Normalizado:", cliente.strip().lower())
-
-                df_clientes_normalizado = st.session_state.df_clientes.copy()
-                df_clientes_normalizado["Nome_Norm"] = df_clientes_normalizado["Nome"].astype(str).str.strip().str.lower()
-                st.write("🧾 Nomes normalizados existentes:", df_clientes_normalizado["Nome_Norm"].tolist())
-
-                if cliente.strip().lower() in df_clientes_normalizado["Nome_Norm"].values:
-                    st.success("✅ Encontrou o cliente!")
-                else:
-                    st.error("❌ Ainda não encontrou. Veja acima o nome normalizado para comparar.")
                 
+                # --- FIM DA CORREÇÃO (remoção dos blocos de debug e checagem duplicada) ---
+
                 
                 if cliente.strip() and not edit_mode:
                     if cliente_encontrado:
+                        # Pega os valores do cliente encontrado no DF normalizado
                         c_cashback = cliente_df.iloc[0]["Cashback"]
                         c_nivel = cliente_df.iloc[0]["Nivel"]
                         st.info(f"🎉 **Cliente Fidelidade:** Saldo Cashback: **R$ {c_cashback:,.2f}** | Nível: **{c_nivel}**")
@@ -3625,6 +3617,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
