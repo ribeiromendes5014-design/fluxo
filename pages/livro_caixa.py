@@ -16,22 +16,6 @@ import calendar
 from constants_and_css import * # Linha 2 (CORRETA - Importa as funções específicas de renderização que estavam misturadas)
 from render_utils import render_global_config, render_custom_header
 
-from utils import (
-    to_float, prox_id, hash_df, parse_date_yyyy_mm_dd, add_months,
-    calcular_valor_em_aberto, format_produtos_resumo,
-    carregar_livro_caixa, salvar_dados_no_github,
-    carregar_historico_compras, salvar_historico_compras_no_github,
-    carregar_produtos, salvar_produtos_no_github, inicializar_produtos,
-    ajustar_estoque, ler_codigo_barras_api,
-    callback_salvar_novo_produto, callback_adicionar_manual, callback_adicionar_estoque,
-    calcular_resumo, norm_promocoes, get_most_sold_products,
-    processar_dataframe, save_data_github_produtos,
-    carregar_promocoes,  # 👈 ADICIONE ESTA LINHA
-    carregar_cashback, salvar_cashback_no_github,
-    calcular_cashback_venda, creditar_cashback_e_atualizar_gasto,
-    obter_nivel_cashback
-)
-
 # ==============================================================================
 # CONFIGURAÇÃO GERAL E INÍCIO DO APP (Usando render_global_config)
 # ==============================================================================
@@ -51,6 +35,31 @@ except ImportError:
         def get_repo(self, repo_name): return self
         def update_file(self, path, msg, content, sha, branch): pass
         def create_file(self, path, msg, content, branch): pass
+
+def ler_codigo_barras_api(image_bytes):
+    """Decodifica códigos de barras usando a API pública ZXing."""
+    URL_DECODER_ZXING = "https://zxing.org/w/decode"
+    
+    try:
+        files = {"f": ("barcode.png", image_bytes, "image/png")}
+        response = requests.post(URL_DECODER_ZXING, files=files, timeout=30)
+        if response.status_code != 200:
+            if 'streamlit' in globals(): st.error(f"❌ Erro na API ZXing. Status HTTP: {response.status_code}")
+            return []
+        text = response.text
+        codigos = []
+        if "<pre>" in text:
+            partes = text.split("<pre>")
+            for p in partes[1:]:
+                codigo = p.split("</pre>")[0].strip()
+                if codigo and not codigo.startswith("Erro na decodificação"):
+                    codigos.append(codigo)
+        if not codigos and 'streamlit' in globals():
+            st.toast("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
+        return codigos
+    except Exception as e:
+        if 'streamlit' in globals(): st.error(f"❌ Erro inesperado: {e}")
+        return []
 
 def add_months(d: date, months: int) -> date:
     """Adiciona um número específico de meses a uma data."""
@@ -97,15 +106,531 @@ def parse_date_yyyy_mm_dd(date_str):
     except:
         return None
 
-# Funções que dependem do utils (carregar_promocoes, norm_promocoes, etc. são importadas)
+@st.cache_data(show_spinner="Carregando promoções...")
+def carregar_promocoes():
+    COLUNAS_PROMO = ["ID", "IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"]
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PROMOCOES}"
+    df = load_csv_github(url_raw)
+    if df is None or df.empty:
+        df = pd.DataFrame(columns=COLUNAS_PROMO)
+    for col in COLUNAS_PROMO:
+        if col not in df.columns:
+            df[col] = "" 
+    return df[[col for col in COLUNAS_PROMO if col in df.columns]]
+
+def norm_promocoes(df):
+    """Normaliza o DataFrame de promoções."""
+    if df.empty: return df
+    df = df.copy()
+    df["Desconto"] = pd.to_numeric(df["Desconto"], errors='coerce').fillna(0.0)
+    df["DataInicio"] = pd.to_datetime(df["DataInicio"], errors='coerce').dt.date
+    df["DataFim"] = pd.to_datetime(df["DataFim"], errors='coerce').dt.date
+    # Filtra promoções expiradas
+    df = df[df["DataFim"] >= date.today()] 
+    return df
+
+@st.cache_data(show_spinner="Carregando histórico de compras...")
+def carregar_historico_compras():
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_COMPRAS}"
+    df = load_csv_github(url_raw)
+    if df is None or df.empty:
+        df = pd.DataFrame(columns=COLUNAS_COMPRAS)
+    for col in COLUNAS_COMPRAS:
+        if col not in df.columns:
+            df[col] = "" 
+    return df[[col for col in COLUNAS_COMPRAS if col in df.columns]]
+
+def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
+    """Salva o histórico de compras. CORRIGIDO para usar o ARQ_COMPRAS."""
+    try:
+        from github import Github
+    except ImportError:
+        pass
+        
+    # 1. Backup local 
+    try:
+        df.to_csv(ARQ_LOCAL, index=False, encoding="utf-8-sig") 
+    except Exception:
+        pass
+
+    # 2. Envio para o GitHub (usando ARQ_COMPRAS)
+    df_temp = df.copy()
+    for col_date in ['Data']:
+        if col_date in df_temp.columns:
+            df_temp[col_date] = pd.to_datetime(df_temp[col_date], errors='coerce').apply(
+                lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
+            )
+
+    try:
+        g = Github(TOKEN)
+        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
+        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
+
+        try:
+            contents = repo.get_contents(ARQ_COMPRAS, ref=BRANCH)
+            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
+        except Exception:
+            repo.create_file(ARQ_COMPRAS, commit_message, csv_string, branch=BRANCH)
+
+        carregar_historico_compras.clear()
+        return True
+
+    except Exception as e:
+        return False
+
+@st.cache_data(show_spinner="Carregando dados...")
+def carregar_livro_caixa():
+    """Orquestra o carregamento do Livro Caixa."""
+    df = None
+    
+    # 1. Tenta carregar do GitHub (usando a URL raw com o PATH_DIVIDAS / CSV_PATH)
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{PATH_DIVIDAS}"
+    df = load_csv_github(url_raw)
+
+    if df is None or df.empty:
+        # 2. Fallback local/garantia de colunas
+        try:
+            df = pd.read_csv(ARQ_LOCAL, dtype=str)
+        except Exception:
+            df = pd.DataFrame(columns=COLUNAS_PADRAO)
+        
+    if df.empty:
+        df = pd.DataFrame(columns=COLUNAS_PADRAO)
+
+    # Garante que as colunas padrão existam
+    for col in COLUNAS_PADRAO:
+        if col not in df.columns:
+            df[col] = "Realizada" if col == "Status" else "" 
+            
+    # Adiciona RecorrenciaID, TransacaoPaiID se não existirem
+    for col in ["RecorrenciaID", "TransacaoPaiID"]:
+        if col not in df.columns:
+            df[col] = ''
+        
+    # Retorna apenas as colunas padrão na ordem correta
+    cols_to_return = COLUNAS_PADRAO_COMPLETO
+    return df[[col for col in cols_to_return if col in df.columns]]
+
+
+def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
+    """
+    Salva o DataFrame CSV do Livro Caixa no GitHub usando a API e também localmente (backup).
+    Essa função garante a persistência de dados para o Streamlit.
+    """
+    
+    # 1. Backup local (Tenta salvar, ignora se falhar)
+    try:
+        df.to_csv(ARQ_LOCAL, index=False, encoding="utf-8-sig") 
+    except Exception:
+        pass
+
+    # 2. Prepara DataFrame para envio ao GitHub
+    df_temp = df.copy()
+    
+    # Prepara os dados de data para serem salvos como string no formato YYYY-MM-DD
+    for col_date in ['Data', 'Data Pagamento']:
+        if col_date in df_temp.columns:
+            df_temp[col_date] = pd.to_datetime(df_temp[col_date], errors='coerce').apply(
+                lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
+            )
+
+    try:
+        g = Github(TOKEN)
+        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
+        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
+
+        try:
+            # Tenta obter o SHA do conteúdo atual
+            contents = repo.get_contents(PATH_DIVIDAS, ref=BRANCH)
+            # Atualiza o arquivo
+            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
+            st.success("📁 Livro Caixa salvo (atualizado) no GitHub!")
+        except Exception:
+            # Cria o arquivo (se não existir)
+            repo.create_file(PATH_DIVIDAS, commit_message, csv_string, branch=BRANCH)
+            st.success("📁 Livro Caixa salvo (criado) no GitHub!")
+
+        # IMPORTANTE: Limpa o cache após o salvamento bem-sucedido
+        carregar_livro_caixa.clear()
+        
+        return True
+
+    except Exception as e:
+        st.error(f"❌ Erro ao salvar no GitHub: {e}")
+        st.error("Verifique se seu 'GITHUB_TOKEN' tem permissões e se o repositório existe.")
+        return False
+
+
+@st.cache_data(show_spinner=False)
+def processar_dataframe(df):
+    for col in COLUNAS_PADRAO:
+        if col not in df.columns: df[col] = ""
+    for col in ["RecorrenciaID", "TransacaoPaiID"]:
+        if col not in df.columns: df[col] = ''
+
+    if df.empty: return pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
+    df_proc = df.copy()
+    df_proc["Valor"] = pd.to_numeric(df_proc["Valor"], errors="coerce").fillna(0.0)
+    df_proc["Data"] = pd.to_datetime(df_proc["Data"], errors='coerce').dt.date
+    
+    # --- INÍCIO DA CORREÇÃO ---
+    # 1. Converte a coluna 'Data' para datetime
+    df_proc["Data_dt"] = pd.to_datetime(df_proc["Data"], errors='coerce')
+    
+    # 2. Remove a linha que estava descartando os registros (dropna)
+    # df_proc.dropna(subset=['Data_dt'], inplace=True) 
+    
+    # 3. Substitui os valores de data inválidos (NaT) por uma data muito antiga para permitir a ordenação.
+    # Usamos o fillna no Data_dt para evitar erros de ordenação.
+    df_proc["Data_dt"] = df_proc["Data_dt"].fillna(datetime(1900, 1, 1))
+
+    # --- FIM DA CORREÇÃO ---
+    
+    df_proc["Data Pagamento"] = pd.to_datetime(df_proc["Data Pagamento"], errors='coerce').dt.date
+    
+    df_proc = df_proc.reset_index(drop=False)
+    df_proc.rename(columns={'index': 'original_index'}, inplace=True)
+    df_proc['Saldo Acumulado'] = 0.0
+    
+    # A lógica do saldo permanece a mesma, usando apenas 'Realizada' para o cálculo.
+    df_realizadas = df_proc[df_proc['Status'] == 'Realizada'].copy()
+    if not df_realizadas.empty:
+        df_realizadas_sorted_asc = df_realizadas.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]).reset_index(drop=True)
+        df_realizadas_sorted_asc['TEMP_SALDO'] = df_realizadas_sorted_asc['Valor'].cumsum()
+        df_proc = pd.merge(df_proc, df_realizadas_sorted_asc[['original_index', 'TEMP_SALDO']], on='original_index', how='left')
+        df_proc['Saldo Acumulado'] = df_proc['TEMP_SALDO'].fillna(method='ffill').fillna(0)
+        df_proc.drop(columns=['TEMP_SALDO'], inplace=True, errors='ignore')
+        
+    df_proc = df_proc.sort_values(by="Data_dt", ascending=False).reset_index(drop=True)
+    df_proc.insert(0, 'ID Visível', df_proc.index + 1)
+    df_proc['Cor_Valor'] = df_proc.apply(lambda row: 'green' if row['Tipo'] == 'Entrada' and row['Valor'] >= 0 else 'red', axis=1)
+    
+    # Adiciona TransacaoPaiID para processamento
+    if 'TransacaoPaiID' not in df_proc.columns:
+        df_proc['TransacaoPaiID'] = ''
+        
+    return df_proc
+
+def calcular_resumo(df):
+    df_realizada = df[df['Status'] == 'Realizada']
+    if df_realizada.empty: return 0.0, 0.0, 0.0
+    total_entradas = df_realizada[df_realizada["Tipo"] == "Entrada"]["Valor"].sum()
+    total_saidas = abs(df_realizada[df_realizada["Tipo"] == "Saída"]["Valor"].sum()) 
+    saldo = df_realizada["Valor"].sum()
+    return total_entradas, total_saidas, saldo
+
+def calcular_valor_em_aberto(linha):
+    """Calcula o valor absoluto e arredondado para 2 casas decimais de uma linha do DataFrame."""
+    try:
+        if isinstance(linha, pd.DataFrame) and not linha.empty:
+            valor_raw = pd.to_numeric(linha['Valor'].iloc[0], errors='coerce')
+        elif isinstance(linha, pd.Series):
+            valor_raw = pd.to_numeric(linha['Valor'], errors='coerce')
+        else:
+            return 0.0
+            
+        valor_float = float(valor_raw) if pd.notna(valor_raw) and not isinstance(valor_raw, pd.Series) else 0.0
+        return round(abs(valor_float), 2)
+    except Exception:
+        return 0.0
+
+
+def format_produtos_resumo(produtos_json):
+    if pd.isna(produtos_json) or produtos_json == "": return ""
+    if produtos_json:
+        try:
+            try:
+                produtos = json.loads(produtos_json)
+            except json.JSONDecodeError:
+                produtos = ast.literal_eval(produtos_json)
+            if not isinstance(produtos, list) or not all(isinstance(p, dict) for p in produtos): return "Dados inválidos"
+            count = len(produtos)
+            if count > 0:
+                primeiro = produtos[0].get('Produto', 'Produto Desconhecido')
+                total_custo = 0.0
+                total_venda = 0.0
+                for p in produtos:
+                    try:
+                        qtd = float(p.get('Quantidade', 0))
+                        preco_unitario = float(p.get('Preço Unitário', 0))
+                        custo_unitario = float(p.get('Custo Unitário', 0))
+                        total_custo += custo_unitario * qtd
+                        total_venda += preco_unitario * qtd
+                    except ValueError: continue
+                lucro = total_venda - total_custo
+                lucro_str = f"| Lucro R$ {lucro:,.2f}" if lucro != 0 else ""
+                return f"{count} item(s): {primeiro}... {lucro_str}"
+        except:
+            return "Erro na formatação/JSON InváLido"
+    return ""
 
 def highlight_value(row):
     color = row['Cor_Valor']
     return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
 
+@st.cache_data(show_spinner="Carregando produtos do estoque...")
+def inicializar_produtos():
+    COLUNAS_PRODUTOS = [
+        "ID", "Nome", "Marca", "Categoria", "Quantidade", "PrecoCusto", 
+        "PrecoVista", "PrecoCartao", "Validade", "FotoURL", "CodigoBarras", "PaiID"
+    ]
+    if "produtos" not in st.session_state:
+        url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}"
+        df_carregado = load_csv_github(url_raw)
+        if df_carregado is None or df_carregado.empty:
+            df_base = pd.DataFrame(columns=COLUNAS_PRODUTOS)
+        else:
+            df_base = df_carregado
+        for col in COLUNAS_PRODUTOS:
+            if col not in df_base.columns: df_base[col] = ''
+        df_base["Quantidade"] = pd.to_numeric(df_base["Quantidade"], errors='coerce').fillna(0).astype(int)
+        df_base["PrecoCusto"] = pd.to_numeric(df_base["PrecoCusto"], errors='coerce').fillna(0.0)
+        df_base["PrecoVista"] = pd.to_numeric(df_base["PrecoVista"], errors='coerce').fillna(0.0)
+        df_base["PrecoCartao"] = pd.to_numeric(df_base["PrecoCartao"], errors='coerce').fillna(0.0)
+        
+        # Converte validade para Date para facilitar a lógica de promoções
+        df_base["Validade"] = pd.to_datetime(df_base["Validade"], errors='coerce').dt.date
+        
+        st.session_state.produtos = df_base
+    return st.session_state.produtos
+
+def ajustar_estoque(id_produto, quantidade, operacao="debitar"):
+    produtos_df = st.session_state.produtos
+    idx_produto = produtos_df[produtos_df["ID"] == id_produto].index
+    if not idx_produto.empty:
+        idx = idx_produto[0]
+        qtd_atual = produtos_df.loc[idx, "Quantidade"]
+        if operacao == "debitar":
+            nova_qtd = qtd_atual - quantidade
+            produtos_df.loc[idx, "Quantidade"] = max(0, nova_qtd)
+            return True
+        elif operacao == "creditar":
+            nova_qtd = qtd_atual + quantidade
+            produtos_df.loc[idx, "Quantidade"] = nova_qtd
+            return True
+    return False
+
+def salvar_produtos_no_github(dataframe, commit_message):
+    return True
+
+def save_data_github_produtos(df, path, commit_message):
+    return False 
+
+def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria, qtd, preco_custo, preco_vista, validade, foto_url, codigo_barras, variações):
+    if not nome:
+        st.error("O nome do produto é obrigatório.")
+        return False
+        
+    def add_product_row(df, p_id, p_nome, p_marca, p_categoria, p_qtd, p_custo, p_vista, p_cartao, p_validade, p_foto, p_cb, p_pai_id=None):
+        novo_id = prox_id(df, "ID")
+        
+        novo = {
+            "ID": novo_id,
+            "Nome": p_nome.strip(),
+            "Marca": p_marca.strip(),
+            "Categoria": p_categoria.strip(),
+            "Quantidade": int(p_qtd),
+            "PrecoCusto": to_float(p_custo),
+            "PrecoVista": to_float(p_vista),
+            "PrecoCartao": to_float(p_cartao),
+            "Validade": str(p_validade),
+            "FotoURL": p_foto.strip(),
+            "CodigoBarras": str(p_cb).strip(),
+            "PaiID": str(p_pai_id).strip() if p_pai_id else ""
+        }
+        return pd.concat([df, pd.DataFrame([novo])], ignore_index=True), novo_id
+    
+    # Placeholder para save_csv_github (deve ser ajustado conforme a implementação real de persistência de produtos)
+    def save_csv_github(df, path, message):
+        return True
+
+    if tipo_produto == "Produto simples":
+        produtos, new_id = add_product_row(
+            produtos,
+            None,
+            nome, marca, categoria,
+            qtd, preco_custo, preco_vista, 
+            round(to_float(preco_vista) / FATOR_CARTAO, 2) if to_float(preco_vista) > 0 else 0.0,
+            validade, foto_url, codigo_barras
+        )
+        if save_csv_github(produtos, ARQ_PRODUTOS, f"Novo produto simples: {nome} (ID {new_id})"):
+            st.session_state.produtos = produtos
+            inicializar_produtos.clear()
+            st.success(f"Produto '{nome}' cadastrado com sucesso!")
+            # Limpa campos do formulário simples
+            st.session_state.cad_nome = ""
+            st.session_state.cad_marca = ""
+            st.session_state.cad_categoria = ""
+            st.session_state.cad_qtd = 0
+            st.session_state.cad_preco_custo = "0,00"
+            st.session_state.cad_preco_vista = "0,00"
+            st.session_state.cad_validade = date.today()
+            st.session_state.cad_foto_url = ""
+            if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
+            return True
+        return False
+    
+    elif tipo_produto == "Produto com variações (grade)":
+        
+        # 1. Cria o Produto Pai (sem estoque)
+        produtos, pai_id = add_product_row(
+            produtos,
+            None,
+            nome, marca, categoria,
+            0, 0.0, 0.0, 0.0,
+            validade, foto_url, codigo_barras,
+            p_pai_id=None # Este é o pai
+        )
+        
+        # 2. Cria as Variações (Filhos)
+        cont_variacoes = 0
+        for var in variações:
+            if var["Nome"] and var["Quantidade"] > 0:
+                produtos, _ = add_product_row(
+                    produtos,
+                    None,
+                    f"{nome} ({var['Nome']})", marca, categoria,
+                    var["Quantidade"], var["PrecoCusto"], var["PrecoVista"], var["PrecoCartao"],
+                    validade, foto_url, var["CodigoBarras"],
+                    p_pai_id=pai_id # Referência ao Pai
+                )
+                cont_variacoes += 1
+                
+        if cont_variacoes > 0:
+            if save_csv_github(produtos, ARQ_PRODUTOS, f"Novo produto com grade: {nome} ({cont_variacoes} variações)"):
+                st.session_state.produtos = produtos
+                inicializar_produtos.clear()
+                st.success(f"Produto '{nome}' com {cont_variacoes} variações cadastrado com sucesso!")
+                # Limpa campos do formulário complexo
+                st.session_state.cad_nome = ""
+                st.session_state.cad_marca = ""
+                st.session_state.cad_categoria = ""
+                st.session_state.cad_validade = date.today()
+                st.session_state.cad_foto_url = ""
+                if "codigo_barras" in st.session_state: del st.session_state["codigo_barras"]
+                st.session_state.cb_grade_lidos = {}
+                return True
+            return False
+        else:
+            # Se não adicionou variações, exclui o pai criado (or avisa)
+            produtos = produtos[produtos["ID"] != pai_id]
+            st.session_state.produtos = produtos
+            st.error("Nenhuma variação válida foi fornecida. O produto principal não foi salvo.")
+            return False
+    return False
+
+def callback_adicionar_manual(nome, qtd, preco, custo):
+    if nome and qtd > 0:
+        st.session_state.lista_produtos.append({
+            "Produto_ID": "", 
+            "Produto": nome,
+            "Quantidade": qtd,
+            "Preço Unitário": preco,
+            "Custo Unitário": custo 
+        })
+        st.session_state.input_nome_prod_manual = ""
+        st.session_state.input_qtd_prod_manual = 1.0
+        st.session_state.input_preco_prod_manual = 0.01
+        st.session_state.input_custo_prod_manual = 0.00
+        st.session_state.input_produto_selecionado = "" 
+        
+def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_disp):
+    
+    # É importante carregar as promoções aqui, pois é onde o desconto é aplicado
+    promocoes = norm_promocoes(carregar_promocoes())
+    hoje = date.today()
+    
+    # Verifica se o produto tem promoção ativa hoje
+    promocao_ativa = promocoes[
+        (promocoes["IDProduto"] == prod_id) & 
+        (promocoes["DataInicio"] <= hoje) & 
+        (promocoes["DataFim"] >= hoje)
+    ]
+    
+    # Se houver promoção, aplica o desconto
+    preco_unitario_final = preco
+    desconto_aplicado = 0.0
+    if not promocao_ativa.empty:
+        desconto_aplicado = promocao_ativa.iloc[0]["Desconto"] / 100.0
+        preco_unitario_final = preco * (1 - desconto_aplicado)
+        st.toast(f"🏷️ Promoção de {promocao_ativa.iloc[0]['Desconto']:.0f}% aplicada a {prod_nome}!")
+
+    if qtd > 0 and qtd <= estoque_disp:
+        st.session_state.lista_produtos.append({
+            "Produto_ID": prod_id, 
+            "Produto": prod_nome,
+            "Quantidade": qtd,
+            # Usa o preço com desconto, se houver
+            "Preço Unitário": round(float(preco_unitario_final), 2), 
+            "Custo Unitário": custo 
+        })
+        st.session_state.input_produto_selecionado = ""
+    else:
+        st.warning("A quantidade excede o estoque ou é inválida.")
 
 # ==============================================================================
-# 1. PÁGINA DE APRESENTAÇÃO (HOMEPAGE)
+# FUNÇÕES AUXILIARES PARA HOME E ANÁLISE DE PRODUTOS
+# ==============================================================================
+
+@st.cache_data(show_spinner="Calculando mais vendidos...")
+def get_most_sold_products(df_movimentacoes):
+    """
+    Calcula os produtos mais vendidos (por quantidade de itens vendidos).
+    CORRIGIDO: Tratamento de erro robusto para garantir a chave 'Produto_ID'.
+    """
+    
+    # 1. Filtra apenas as transações de Entrada (vendas) que foram Realizadas
+    df_vendas = df_movimentacoes[
+        (df_movimentacoes["Tipo"] == "Entrada") & 
+        (df_movimentacoes["Status"] == "Realizada") &
+        (df_movimentacoes["Produtos Vendidos"].notna()) &
+        (df_movimentacoes["Produtos Vendidos"] != "")
+    ].copy()
+
+    if df_vendas.empty:
+        # Garante que o DataFrame de saída tenha as colunas esperadas para o merge
+        return pd.DataFrame(columns=["Produto_ID", "Quantidade Total Vendida"])
+
+    vendas_list = []
+    
+    # 2. Desempacota o JSON de Produtos Vendidos
+    for produtos_json in df_vendas["Produtos Vendidos"]:
+        try:
+            # Tenta usar json.loads, mas usa ast.literal_eval como fallback
+            try:
+                produtos = json.loads(produtos_json)
+            except (json.JSONDecodeError, TypeError):
+                produtos = ast.literal_eval(produtos_json)
+            
+            if isinstance(produtos, list):
+                for item in produtos:
+                    # CORREÇÃO: Garante que 'Produto_ID' existe antes de tentar acessá-lo.
+                    # Se não existir (dados antigos), pula o item.
+                    produto_id = str(item.get("Produto_ID"))
+                    if produto_id and produto_id != "None":
+                         vendas_list.append({
+                            "Produto_ID": produto_id,
+                            "Quantidade": to_float(item.get("Quantidade", 0))
+                        })
+        except Exception:
+            # Ignora linhas com JSON de produto totalmente malformado
+            continue
+            
+    df_vendas_detalhada = pd.DataFrame(vendas_list)
+    
+    if df_vendas_detalhada.empty:
+        # Garante a coluna Produto_ID mesmo que vazia para o merge na homepage
+        return pd.DataFrame(columns=["Produto_ID", "Quantidade Total Vendida"])
+
+    # 3. Soma as quantidades por Produto_ID
+    df_mais_vendidos = df_vendas_detalhada.groupby("Produto_ID")["Quantidade"].sum().reset_index()
+    df_mais_vendidos.rename(columns={"Quantidade": "Quantidade Total Vendida"}, inplace=True)
+    df_mais_vendidos.sort_values(by="Quantidade Total Vendida", ascending=False, inplace=True)
+    
+    return df_mais_vendidos
+
+# ==============================================================================
+# 1. PÁGINA DE APRESENTAÇÃO (HOMEPAGE) (Mantida)
 # ==============================================================================
 
 def homepage():
@@ -259,7 +784,7 @@ def homepage():
             <div class="carousel-outer-container">
                 <div class="product-wrapper">
                     {''.join(html_cards_novidades)}
-                
+               
             </div>
         """, unsafe_allow_html=True)
 
@@ -442,7 +967,7 @@ def gestao_promocoes():
     st.markdown("---")
     
     # 2. Sugestão de Produtos Perto da Validade
-    st.markdown(f"#### ⏳ Produtos Próximos da Validade")
+    st.markdown("#### ⏳ Produtos Próximos da Validade")
     
     dias_validade_limite = st.number_input(
         "Considerar perto da validade (dias restantes)",
@@ -674,7 +1199,7 @@ def relatorio_produtos():
     else:
         st.warning(f"🚨 **{len(df_vencimento)}** produto(s) vencendo em breve (até {dias_validade_alerta} dias)!")
         st.dataframe(
-            df_vencimento[["ID", "Nome", "Quantidade", "Validade", "Dias Restantes"]],
+            df_vencimento[["ID", "Nome", "Marca", "Quantidade", "Validade", "Dias Restantes"]],
             use_container_width=True, hide_index=True
         )
 
@@ -949,7 +1474,7 @@ def gestao_produtos():
             # CORREÇÃO CRÍTICA: Filtra apenas os produtos que NÃO são variações (PaiID é nulo ou vazio/NaN)
             # Produtos que têm PaiID preenchido são listados *dentro* do expander do produto Pai.
             produtos_pai = produtos_filtrados[produtos_filtrados["PaiID"].isnull() | (produtos_filtrados["PaiID"] == '')]
-            produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull() | (produtos_filtrados["PaiID"] != '')]
+            produtos_filho = produtos_filtrados[produtos_filtrados["PaiID"].notnull() & (produtos_filtrados["PaiID"] != '')]
             
             st.markdown("""
                 <style>
@@ -1198,13 +1723,13 @@ def historico_compras():
     df_exibicao.rename(columns={'index': 'original_index'}, inplace=True)
     df_exibicao.insert(0, 'ID', df_exibicao.index + 1)
     
-    hoje = pd.Timestamp.today().normalize()  # garante tipo datetime64[ns]
+    hoje = date.today()
     primeiro_dia_mes = hoje.replace(day=1)
     if hoje.month == 12:
         proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
     else:
         proximo_mes = hoje.replace(month=hoje.month + 1, day=1)
-    ultimo_dia_mes = proximo_mes - pd.Timedelta(days=1)
+    ultimo_dia_mes = proximo_mes - timedelta(days=1)
     
     df_mes_atual = df_exibicao[
         (df_exibicao["Data"].apply(lambda x: pd.notna(x) and x >= primeiro_dia_mes and x <= ultimo_dia_mes)) &
@@ -1227,7 +1752,7 @@ def historico_compras():
         st.header("📈 Análise de Gastos com Compras")
         
         if df_exibicao.empty:
-            st.info("Nenhuma dado de compra registrado para gerar o dashboard.")
+            st.info("Nenhum dado de compra registrado para gerar o dashboard.")
         else:
             df_gasto_por_produto = df_exibicao.groupby('Produto')['Valor Total'].sum().reset_index()
             df_gasto_por_produto = df_gasto_por_produto.sort_values(by='Valor Total', ascending=False)
@@ -1259,7 +1784,7 @@ def historico_compras():
                 df_temp_data['Data_dt'] = pd.to_datetime(df_temp_data['Data'])
                 df_temp_data['MesAno'] = df_temp_data['Data_dt'].dt.strftime('%Y-%m')
                 
-                df_gasto_mensal = df_temp_data.groupby('Produto')['Valor Total'].sum().reset_index()
+                df_gasto_mensal = df_temp_data.groupby('MesAno')['Valor Total'].sum().reset_index()
                 df_gasto_mensal = df_gasto_mensal.sort_values(by='MesAno')
 
                 fig_mensal = px.line(
@@ -1364,7 +1889,7 @@ def historico_compras():
                         st.session_state.df_compras = pd.concat([df_original, pd.DataFrame([nova_linha])], ignore_index=True)
                         commit_msg = f"Nova compra registrada: {nome_produto}"
 
-                    if salvar_historico_compras_no_github(st.session_state.df_compras, commit_msg):
+                    if salvar_historico_no_github(st.session_state.df_compras, commit_msg):
                         st.session_state.edit_compra_idx = None
                         carregar_historico_compras.clear()
                         st.rerun()
@@ -1432,6 +1957,7 @@ def historico_compras():
             styled_df = df_styling.style.apply(highlight_color_compras, axis=1)
             styled_df = styled_df.hide(subset=['Cor', 'original_index'], axis=1)
 
+            st.markdown("##### Tabela de Itens Comprados")
             st.dataframe(
                 styled_df,
                 use_container_width=True,
@@ -1476,7 +2002,7 @@ def historico_compras():
                 if col_delete.button(f"🗑️ Excluir: {item_selecionado_str}", type="primary", use_container_width=True):
                     st.session_state.df_compras = st.session_state.df_compras.drop(original_idx_selecionado, errors='ignore')
                     
-                    if salvar_historico_compras_no_github(st.session_state.df_compras, f"Exclusão da compra {item_selecionado_str}"):
+                    if salvar_historico_no_github(st.session_state.df_compras, f"Exclusão da compra {item_selecionado_str}"):
                         carregar_historico_compras.clear()
                         st.rerun()
             else:
@@ -1488,9 +2014,8 @@ def livro_caixa():
 
     produtos = inicializar_produtos() 
 
-    # ==================== ESTADOS E CARREGAMENTO ====================
-    # Inicialização de estados
     if "df" not in st.session_state: st.session_state.df = carregar_livro_caixa()
+    # Garante que todas as colunas de controle existam
     for col in ['RecorrenciaID', 'TransacaoPaiID']:
         if col not in st.session_state.df.columns: st.session_state.df[col] = ''
         
@@ -1502,58 +2027,18 @@ def livro_caixa():
     if "edit_id_loaded" not in st.session_state: st.session_state.edit_id_loaded = None
     if "cliente_selecionado_divida" not in st.session_state: st.session_state.cliente_selecionado_divida = None
     if "divida_parcial_id" not in st.session_state: st.session_state.divida_parcial_id = None
+    # NOVA CHAVE: Para controlar a quitação rápida na aba Nova Movimentação
     if "divida_a_quitar" not in st.session_state: st.session_state.divida_a_quitar = None 
+    
+    # CORREÇÃO CRÍTICA: Inicializa a aba ativa com um valor padrão válido
+    abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
+    
+    # Adiciona garantia de que a chave existe e tem um valor válido
+    if "aba_ativa_livro_caixa" not in st.session_state or str(st.session_state.aba_ativa_livro_caixa) not in abas_validas: 
+        st.session_state.aba_ativa_livro_caixa = abas_validas[0]
 
-    # === NOVOS ESTADOS DE SESSÃO PARA CASHBACK ===
-    if "cashback_cliente_id" not in st.session_state: st.session_state.cashback_cliente_id = None
-    if "cashback_cliente_nome" not in st.session_state: st.session_state.cashback_cliente_nome = None
-
-    # Carregamento dos DataFrames
-    df_produtos = st.session_state.produtos
-    # CORREÇÃO DA CHAMA DE PROMOÇÕES (Simplificado, assumindo cache no utils)
-    df_promocoes_bruto = carregar_promocoes() 
-    df_promocoes = norm_promocoes(df_promocoes_bruto) 
-    df_cashback = carregar_cashback() 
-
-    # ==================== FUNÇÕES AUXILIARES DE ESCOPO ====================
-    # Funções de reset
-    def reset_cashback_state():
-        st.session_state.cashback_cliente_id = None
-        st.session_state.cashback_cliente_nome = None
-        
-    # Esta função será chamada no on_change do input do cliente
-    def reset_all_states_on_client_change():
-        st.session_state.cliente_selecionado_divida = None
-        st.session_state.edit_id = None
-        st.session_state.divida_a_quitar = None
-        st.session_state.cashback_cliente_id = None
-        st.session_state.cashback_cliente_nome = None
-
-    # ==================== LÓGICA DO DATAFRAME ====================
     df_dividas = st.session_state.df
     df_exibicao = processar_dataframe(df_dividas)
-
-    # CORREÇÃO CRÍTICA 1: GARANTIR ÍNDICE ÚNICO
-    if not df_exibicao.empty:
-        df_exibicao = df_exibicao.reset_index(drop=True)
-    
-    # CORREÇÃO CRÍTICA 2: GARANTIR TIPO DE DADOS PARA COMPARAÇÃO
-    # Converte explicitamente a coluna 'Data' para datetime64[ns] para compatibilidade com 'primeiro_dia_mes'
-    if not df_exibicao.empty and "Data" in df_exibicao.columns:
-        # AQUI COMEÇA O BLOCO CORRIGIDO COM RECUO DE 4 ESPAÇOS
-        
-        # 1. Converte explicitamente todos os elementos da Série para string...
-    # Usando verificação de nulidade escalar (x is not None) para evitar o ValueError ambíguo.
-    df_exibicao["Data"] = df_exibicao["Data"].apply(
-        lambda x: str(x) if x is not None and x is not pd.NaT else None
-    )
-
-    # 2. Executa a conversão para datetime com o formato forçado.
-    df_exibicao["Data"] = pd.to_datetime(
-        df_exibicao["Data"], 
-        format='%Y-%m-%d',         
-        errors='coerce'
-    ).dt.normalize()
 
     produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()].copy()
     opcoes_produtos = [""] + produtos_para_venda.apply(
@@ -1639,9 +2124,6 @@ def livro_caixa():
                 
                 st.session_state.edit_id_loaded = original_idx_to_edit # Marca como carregado
                 st.session_state.cb_lido_livro_caixa = "" # Limpa CB lido
-                
-                # Reseta estado de cashback ao carregar uma edição
-                reset_cashback_state()
             
             st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
             
@@ -1663,19 +2145,16 @@ def livro_caixa():
 
 
     # --- CRIAÇÃO DAS NOVAS ABAS ---
-    abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
-    
-    # Adiciona garantia de que a chave existe e tem um valor válido
-    if "aba_ativa_livro_caixa" not in st.session_state or str(st.session_state.aba_ativa_livro_caixa) not in abas_validas: 
-        st.session_state.aba_ativa_livro_caixa = abas_validas[0]
-
+    # CORREÇÃO DO TypeError: Removido default_index para compatibilidade
     tab_nova_mov, tab_mov, tab_rel = st.tabs(abas_validas)
+
 
 
     # ==============================================================================================
     # NOVA ABA: NOVA MOVIMENTAÇÃO (Substitui a Sidebar)
     # ==============================================================================================
     with tab_nova_mov:
+        # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📝 Nova Movimentação"
         
         st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
 
@@ -1686,18 +2165,28 @@ def livro_caixa():
             
             # --- VERIFICAÇÃO DE SEGURANÇA ADICIONAL ---
             try:
+                # Tenta acessar o registro. Isso deve retornar uma Series do Pandas.
                 divida_para_quitar = st.session_state.df.loc[idx_quitar].copy()
             except KeyError:
+                # Se a chave não existir mais (já foi excluída/quitada totalmente)
                 st.session_state.divida_a_quitar = None
                 st.error("Erro: A dívida selecionada não foi encontrada no registro principal. Tente novamente ou cancele.")
                 st.rerun()
+                # O stop é alcançado pelo rerun
                 
             except Exception as e:
+                # Captura outros erros de acesso inesperados
                 st.session_state.divida_a_quitar = None
                 st.error(f"Erro inesperado ao carregar dívida: {e}. Cancelando quitação.")
                 st.rerun()
+                # O stop é alcançado pelo rerun
 
+
+            # FIM DA VERIFICAÇÃO DE SEGURANÇA
+            
+            # >> USO DA NOVA FUNÇÃO PARA GARANTIR VALOR CORRETO E ARREDONDADO <<
             valor_em_aberto = calcular_valor_em_aberto(divida_para_quitar)
+            # << FIM DO USO DA NOVA FUNÇÃO >>
             
             if valor_em_aberto <= 0.01:
                 st.session_state.divida_a_quitar = None
@@ -1796,8 +2285,7 @@ def livro_caixa():
                         st.rerun()
 
             # Não exibe o restante do formulário "Nova Movimentação" se estiver no modo quitação
-            if 'divida_a_quitar' in st.session_state and st.session_state.divida_a_quitar is not None:
-                st.stop()
+            st.stop()
         
         # O layout principal do formulário agora vai aqui, sem o `st.sidebar`
         
@@ -1820,133 +2308,54 @@ def livro_caixa():
         # --- Seção de Entrada (Venda/Produtos) ---
         if tipo == "Entrada":
             
-            # [O bloco with col_principal_1: DA ENTRADA deve estar aqui]
-            with col_principal_1:
-                # Exemplo de campos que iriam aqui: Loja e Data
-                loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_form_entrada")
-                data_input = st.date_input("Data da Transação (Lançamento)", value=default_data, key="input_data_form_entrada")
-
-            
-            # A linha 'with col_principal_2:' está agora alinhada corretamente
+            # Campo de Cliente (precisa ser definido antes para a lógica de dívida)
             with col_principal_2:
-                
-                st.markdown("##### 👤 Cliente & Cashback")
-                
-                cliente_input_key = "input_cliente_form" 
-                if edit_mode: cliente_input_key = "input_cliente_form_edit"
-                
-                # Função de callback para resetar o estado de cashback e dívida (Centralizada)
-                # ATENÇÃO: Esta função precisa estar definida no escopo de livro_caixa()
-                def reset_all_states_on_client_change():
-                    st.session_state.cliente_selecionado_divida = None
-                    st.session_state.edit_id = None
-                    st.session_state.divida_a_quitar = None
-                    st.session_state.cashback_cliente_id = None
-                    st.session_state.cashback_cliente_nome = None
-
                 cliente = st.text_input("Nome do Cliente (ou Descrição)", 
                                         value=default_cliente, 
-                                        key=cliente_input_key,
-                                        # Gatilho de busca/reset: Chama a função que reseta TUDO
-                                        on_change=reset_all_states_on_client_change, 
+                                        key="input_cliente_form",
+                                        on_change=lambda: st.session_state.update(cliente_selecionado_divida="CHECKED", edit_id=None, divida_a_quitar=None), # Gatilho de busca
                                         disabled=edit_mode)
                 
-                # --- LÓGICA DE BUSCA/CRIAÇÃO DE CASHBACK ---
-                if cliente.strip() and not edit_mode:
-                    
-                    # 1. Busca por clientes existentes
-                    df_cb_filtrado = df_cashback[
-                        df_cashback["Nome"].astype(str).str.lower().str.contains(cliente.strip().lower(), na=False)
-                    ].copy()
-                    
-                    # Só mostra a busca se um cliente ainda não foi selecionado
-                    if st.session_state.cashback_cliente_id is None:
-                        
-                        if not df_cb_filtrado.empty:
-                            
-                            st.warning(f"Clientes de Cashback Encontrados ({len(df_cb_filtrado)}):")
-                            
-                            # Prepara as opções para o Selectbox
-                            opcoes_cb = df_cb_filtrado.apply(
-                                lambda row: f"ID: {row['ID']} | {row['Nome']} | Nível: {row['Nivel']}", axis=1
-                            ).tolist()
-                            opcoes_cb.insert(0, "Selecione o cliente de Cashback...")
-                            opcoes_cb.append("Criar novo cadastro de Cashback para este nome")
-                            
-                            cb_selecionado_str = st.selectbox(
-                                "Escolha uma opção de Cashback:",
-                                options=opcoes_cb,
-                                key="cb_select_cliente"
-                            )
-                            
-                            if cb_selecionado_str.startswith("ID:"):
-                                cb_id_selecionado = cb_selecionado_str.split(" | ")[0].replace("ID: ", "")
-                                st.session_state.cashback_cliente_id = cb_id_selecionado
-                                st.session_state.cashback_cliente_nome = cb_selecionado_str.split(" | ")[1].strip()
-                                st.rerun() 
-                                
-                            elif cb_selecionado_str == "Criar novo cadastro de Cashback para este nome":
-                                st.session_state.cashback_cliente_id = "NOVO_CLIENTE" 
-                                st.session_state.cashback_cliente_nome = cliente.strip()
-                                st.rerun()
-                                
-                        else:
-                            # Cliente não encontrado, sugere a criação
-                            if st.button(f"➕ Criar Cadastro Cashback para '{cliente}'", key="btn_cb_novo"):
-                                st.session_state.cashback_cliente_id = "NOVO_CLIENTE"
-                                st.session_state.cashback_cliente_nome = cliente.strip()
-                                st.rerun() # Rerun para que o status de "NOVO_CLIENTE" apareça
-                    
-                    # --- EXIBIÇÃO DO STATUS DE CASHBACK SELECIONADO ---
-                    if st.session_state.cashback_cliente_id:
-                        
-                        if st.session_state.cashback_cliente_id == "NOVO_CLIENTE":
-                            st.success(f"Cadastro de Cashback será **CRIADO** para: **{st.session_state.cashback_cliente_nome}**")
-                        else:
-                            # Exibe os dados atuais do cliente
-                            cliente_data = df_cashback[df_cashback["ID"] == st.session_state.cashback_cliente_id].iloc[0]
-                            st.success(f"Cliente Selecionado: **{cliente_data['Nome']}**")
-                            st.info(f"Nível: **{cliente_data['Nivel']}** | Saldo Atual: **R$ {cliente_data['Saldo_Cashback']:,.2f}**")
-                            
-                            # Opção de desvincular
-                            if st.button("Desvincular Cliente de Cashback", key="btn_cb_desvincular"):
-                                st.session_state.cashback_cliente_id = None
-                                st.session_state.cashback_cliente_nome = None
-                                st.rerun()
-                    
-                # --- LÓGICA DE ALERTA INTELIGENTE DE DÍVIDA (BLOCO ORIGINAL) ---
+                # NOVO: Lógica de Alerta Inteligente de Dívida
                 if cliente.strip() and not edit_mode:
                     
                     df_dividas_cliente = df_exibicao[
+                        # DEPOIS (CORRETO):
                         (df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente.strip().lower())) &
+                        
                         (df_exibicao["Status"] == "Pendente") &
                         (df_exibicao["Tipo"] == "Entrada")
                     ].sort_values(by="Data Pagamento", ascending=True).copy()
 
                     if not df_dividas_cliente.empty:
                         
+                        # CORREÇÃO: Arredonda o valor antes de somar para evitar erros de float
                         total_divida = df_dividas_cliente["Valor"].abs().round(2).sum() 
                         num_dividas = df_dividas_cliente.shape[0]
                         divida_mais_antiga = df_dividas_cliente.iloc[0]
                         
+                        # Extrai o valor da dívida mais antiga (a que será editada/quitada) usando a nova função
                         valor_divida_antiga = calcular_valor_em_aberto(divida_mais_antiga)
                         
                         original_idx_divida = divida_mais_antiga['original_index']
                         vencimento_str = divida_mais_antiga['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(divida_mais_antiga['Data Pagamento']) else "S/ Data"
 
-                        st.session_state.cliente_selecionado_divida = divida_mais_antiga.name 
+                        st.session_state.cliente_selecionado_divida = divida_mais_antiga.name # Salva o índice original
 
+                        # Sua linha de alerta corrigida (agora com o valor que é usado para quitação)
                         st.warning(f"💰 Dívida em Aberto para {cliente}: R$ {valor_divida_antiga:,.2f}") 
                         
+                        # ALERTA DE INFORMAÇÃO sobre o total
                         st.info(f"Total Pendente: **R$ {total_divida:,.2f}**. Mais antiga venceu/vence: **{vencimento_str}**")
 
                         col_btn_add, col_btn_conc, col_btn_canc = st.columns(3)
 
                         if col_btn_add.button("➕ Adicionar Mais Produtos à Dívida", key="btn_add_produtos", use_container_width=True, type="secondary"):
                             st.session_state.edit_id = original_idx_divida
-                            st.session_state.edit_id_loaded = None 
+                            st.session_state.edit_id_loaded = None # Força o recarregamento dos dados na próxima execução
                             st.rerun()
 
+                        # ALTERADO: Este botão agora define a nova chave de estado para abrir o formulário de quitação rápida
                         if col_btn_conc.button("✅ Concluir/Pagar Dívida", key="btn_concluir_divida", use_container_width=True, type="primary"):
                             st.session_state.divida_a_quitar = divida_mais_antiga['original_index']
                             st.session_state.edit_id = None 
@@ -1955,7 +2364,7 @@ def livro_caixa():
                             st.rerun()
 
                         if col_btn_canc.button("🗑️ Cancelar Dívida", key="btn_cancelar_divida", use_container_width=True):
-                            
+                            # Lógica simplificada de exclusão (cancelamento)
                             df_to_delete = df_dividas_cliente.copy()
                             for idx in df_to_delete['original_index'].tolist():
                                 st.session_state.df = st.session_state.df.drop(idx, errors='ignore')
@@ -1967,7 +2376,7 @@ def livro_caixa():
                                 st.success(f"{num_dividas} dívida(s) de {cliente.strip()} cancelada(s) com sucesso!")
                                 st.rerun()
                     else:
-                        st.session_state.cliente_selecionado_divida = None 
+                        st.session_state.cliente_selecionado_divida = None # Limpa a chave se não houver dívida
 
                 st.markdown("#### 🛍️ Detalhes dos Produtos")
                 
@@ -2078,7 +2487,7 @@ def livro_caixa():
                                 preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=float(preco_sugerido), key="input_preco_prod_edit")
                                 st.caption(f"Custo Unitário: R$ {custo_unit:,.2f}")
 
-                            if st.button("Adicionar Item", key="adicionar_item_manual_button", use_container_width=True,
+                            if st.button("Adicionar Item", key="adicionar_item_button", use_container_width=True,
                                 on_click=callback_adicionar_estoque,
                                 args=(produto_id_selecionado, nome_produto, quantidade_input, preco_unitario_input, custo_unit, estoque_disp)): st.rerun()
 
@@ -2422,14 +2831,12 @@ def livro_caixa():
     with tab_mov:
         # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📋 Movimentações e Resumo"
         
-        hoje = pd.Timestamp.today().normalize()  # datetime64[ns]
+        hoje = date.today()
         primeiro_dia_mes = hoje.replace(day=1)
-        if hoje.month == 12:
-            proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1) # <-- Corrigido
-        else:
-            proximo_mes = hoje.replace(month=hoje.month + 1, day=1)
-        ultimo_dia_mes = proximo_mes - pd.Timedelta(days=1) # Corrigido
-        
+        if hoje.month == 12: proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
+        else: proximo_mes = hoje.replace(month=hoje.month + 1, day=1)
+        ultimo_dia_mes = proximo_mes - timedelta(days=1)
+
         df_mes_atual_realizado = df_exibicao[
             (df_exibicao["Data"] >= primeiro_dia_mes) &
             (df_exibicao["Data"] <= ultimo_dia_mes) &
@@ -2960,38 +3367,6 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
