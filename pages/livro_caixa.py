@@ -19,9 +19,19 @@ from constants_and_css import * # Linha 2 (CORRETA - Importa as funções espec�
 # Estas constantes são cruciais para o funcionamento do código.
 # Caso o código falhe, verifique se foram definidas corretamente.
 # ==============================================================================
-OWNER = "seu_usuario_github"
-REPO_NAME = "seu_repositorio"
-BRANCH = "main"
+# ================================================================
+# 🔑 CREDENCIAIS E CONFIGURAÇÕES DO REPOSITÓRIO (carregadas do secrets)
+# ================================================================
+import streamlit as st
+
+# Lê credenciais do Streamlit Secrets
+OWNER = st.secrets.get("REPO_OWNER", "ribeiromendes5014-design")
+REPO_NAME = st.secrets.get("REPO_NAME", "fluxo")
+BRANCH = st.secrets.get("BRANCH", "main")
+TOKEN = st.secrets.get("GITHUB_TOKEN", None)
+
+# Caminho para o CSV de clientes
+ARQ_CLIENTES_CASH = "clientes_cash.csv"
 TOKEN = "seu_github_token" # Token com permissão 'repo'
 ARQ_LOCAL = "livro_caixa_data.csv"
 PATH_DIVIDAS = "data/livro_caixa.csv"
@@ -3587,6 +3597,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
