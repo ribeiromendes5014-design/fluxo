@@ -722,6 +722,20 @@ def inicializar_produtos():
         st.session_state.produtos = carregar_produtos()
     return st.session_state.produtos
 
+@st.cache_data
+def carregar_promocoes():
+    url = URL_PROMOCOES_CSV  # defina essa constante no constants_and_css.py
+    try:
+        df = pd.read_csv(url, dtype=str)
+        if df.empty or len(df.columns) < 2:
+            return pd.DataFrame(columns=["ID", "IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"])
+        return df
+    except Exception as e:
+        st.warning(f"Não foi possível carregar promoções: {e}")
+        return pd.DataFrame(columns=["ID", "IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"])
+
+
+
 # ==================== FUNÇÕES DE LÓGICA DE NEGÓCIO (PRODUTOS/ESTOQUE) ====================
 def ajustar_estoque(id_produto, quantidade, operacao="debitar"):
     if "produtos" not in st.session_state:
@@ -993,6 +1007,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
