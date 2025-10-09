@@ -2132,6 +2132,8 @@ def livro_caixa():
     if "divida_parcial_id" not in st.session_state: st.session_state.divida_parcial_id = None
     # NOVA CHAVE: Para controlar a quitação rápida na aba Nova Movimentação
     if "divida_a_quitar" not in st.session_state: st.session_state.divida_a_quitar = None 
+    # NOVO: Chave para forçar o re-run na busca de cliente
+    if "search_trigger" not in st.session_state: st.session_state.search_trigger = ""
     
     # CORREÇÃO CRÍTICA: Inicializa a aba ativa com um valor padrão válido
     abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
@@ -2417,15 +2419,26 @@ def livro_caixa():
                 cliente = st.text_input("Nome do Cliente (ou Descrição)", 
                                         value=default_cliente, 
                                         key="input_cliente_form",
-                                        on_change=lambda: st.session_state.update(cliente_selecionado_divida="CHECKED", edit_id=None, divida_a_quitar=None), # Gatilho de busca
+                                        # Alteração: Adiciona st.session_state.search_trigger para forçar re-run na mudança de foco/Enter
+                                        on_change=lambda: st.session_state.update(cliente_selecionado_divida="CHECKED", edit_id=None, divida_a_quitar=None, search_trigger=datetime.now().isoformat()),
                                         disabled=edit_mode)
+                
+                # ADIÇÃO: Instrução para o usuário
+                st.caption("Aperte ENTER ou clique fora do campo para buscar o cliente.")
                 
                 # NOVO: Lógica de Alerta Inteligente de Dívida
                 # NOVO: Lógica de Cashback e Nível
-                cliente_df = df_clientes[df_clientes["Nome"].astype(str).str.strip().str.lower() == cliente.strip().lower()]
+                cliente_normalizado = cliente.strip().lower()
+                
+                # Filtro usando a normalização. Cria uma coluna temporária no df_clientes para busca
+                df_clientes_normalizado = st.session_state.df_clientes.copy()
+                df_clientes_normalizado["Nome_Norm"] = df_clientes_normalizado["Nome"].astype(str).str.strip().str.lower()
+                
+                cliente_df = df_clientes_normalizado[df_clientes_normalizado["Nome_Norm"] == cliente_normalizado]
                 cliente_encontrado = not cliente_df.empty
                 
                 if cliente.strip() and not edit_mode: # Apenas para novas vendas, verifica se existe
+                    
                     if cliente_encontrado:
                         c_cashback = cliente_df.iloc[0]["Cashback"]
                         c_nivel = cliente_df.iloc[0]["Nivel"]
@@ -2939,7 +2952,13 @@ def livro_caixa():
                             
                             # 1. Verifica se o cliente já existe
                             df_clientes_to_update = st.session_state.df_clientes.copy()
-                            cliente_idx = df_clientes_to_update[df_clientes_to_update["Nome"].astype(str).str.strip().str.lower() == nome_cliente_norm.lower()].index
+                            # Utiliza a coluna temporária Nome_Norm para a busca, caso exista, ou a original normalizada
+                            
+                            # Garante que a coluna de normalização existe antes de tentar usá-la
+                            if "Nome_Norm" not in df_clientes_to_update.columns:
+                                df_clientes_to_update["Nome_Norm"] = df_clientes_to_update["Nome"].astype(str).str.strip().str.lower()
+                                
+                            cliente_idx = df_clientes_to_update[df_clientes_to_update["Nome_Norm"] == nome_cliente_norm.lower()].index
                             
                             if not cliente_idx.empty:
                                 # Atualiza cliente existente
@@ -2956,8 +2975,14 @@ def livro_caixa():
                                     "TotalGasto": valor_compra,
                                     "Nivel": calcular_nivel(valor_compra)
                                 }
+                                # Adiciona a coluna de normalização para evitar erro na próxima busca (caso não tenha salvado no GitHub ainda)
+                                novo_cliente["Nome_Norm"] = nome_cliente_norm.lower() 
+                                
                                 df_clientes_to_update = pd.concat([df_clientes_to_update, pd.DataFrame([novo_cliente])], ignore_index=True)
                             
+                            # Remove a coluna temporária antes de salvar no GitHub
+                            df_clientes_to_update.drop(columns=["Nome_Norm"], errors="ignore", inplace=True)
+                                
                             # Salva e atualiza o estado
                             if salvar_clientes_cash_github(df_clientes_to_update, f"Cashback para {nome_cliente_norm}. Ganho: R$ {cashback_ganho:,.2f}"):
                                 st.session_state.df_clientes = df_clientes_to_update # Atualiza o estado da sessão
@@ -3525,6 +3550,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
