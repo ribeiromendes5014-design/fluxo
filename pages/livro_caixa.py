@@ -14,6 +14,45 @@ import base64
 import calendar 
 
 from constants_and_css import * # Linha 2 (CORRETA - Importa as funções específicas de renderização que estavam misturadas)
+# ==============================================================================
+# PLACEHOLDER CONSTANTS (Assumed to be imported from constants_and_css)
+# Estas constantes são cruciais para o funcionamento do código.
+# Caso o código falhe, verifique se foram definidas corretamente.
+# ==============================================================================
+OWNER = "seu_usuario_github"
+REPO_NAME = "seu_repositorio"
+BRANCH = "main"
+TOKEN = "seu_github_token" # Token com permissão 'repo'
+ARQ_LOCAL = "livro_caixa_data.csv"
+PATH_DIVIDAS = "data/livro_caixa.csv"
+ARQ_PROMOCOES = "data/promocoes.csv"
+ARQ_COMPRAS = "data/historico_compras.csv"
+ARQ_PRODUTOS = "data/produtos.csv"
+
+# NOVO: Constante para o arquivo de clientes
+ARQ_CLIENTES_CASH = "data/clientes_cash.csv"
+COLUNAS_CLIENTES_CASH = ["Nome", "Cashback", "TotalGasto", "Nivel"]
+
+COLUNAS_COMPRAS = ["Data", "Produto", "Quantidade", "Valor Total", "Cor", "FotoURL"]
+COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo", "Produtos Vendidos", "Categoria", "Status", "Data Pagamento"]
+COLUNAS_PADRAO_COMPLETO = COLUNAS_PADRAO + ["RecorrenciaID", "TransacaoPaiID"]
+COLUNAS_COMPLETAS_PROCESSADAS = COLUNAS_PADRAO_COMPLETO + ["Data_dt", "original_index", "Saldo Acumulado", "ID Visível", "Cor_Valor"]
+FATOR_CARTAO = 0.95 # Ex: 5% de taxa de cartão
+
+CATEGORIAS_SAIDA = ["Aluguel", "Salários", "Fornecedores", "Marketing", "Impostos", "Manutenção", "Outro/Diversos"]
+LOJAS_DISPONIVEIS = ["Matriz", "Filial A", "Filial B"]
+FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Boleto", "Transferência", "Cheque"]
+
+COMMIT_MESSAGE = "Nova movimentação adicionada via Streamlit"
+COMMIT_MESSAGE_EDIT = "Movimentação editada via Streamlit"
+COMMIT_MESSAGE_DELETE = "Movimentação excluída via Streamlit"
+COMMIT_MESSAGE_PROD = "Atualização de produtos via Streamlit"
+
+# URLs de Imagens (Apenas placeholders)
+URL_MAIS_VENDIDOS = "https://via.placeholder.com/200x50.png?text=Mais+Vendidos"
+URL_OFERTAS = "https://via.placeholder.com/200x50.png?text=Nossas+Ofertas"
+
+# ==============================================================================
 from render_utils import render_global_config, render_custom_header
 
 # ==============================================================================
@@ -367,6 +406,66 @@ def format_produtos_resumo(produtos_json):
 def highlight_value(row):
     color = row['Cor_Valor']
     return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
+
+# ==============================================================================
+# FUNÇÕES CORE: CLIENTES E CASHBACK (NOVO)
+# ==============================================================================
+
+def calcular_nivel(total_gasto: float) -> str:
+    """Define o nível de fidelidade do cliente baseado no total gasto."""
+    if total_gasto >= 5000:
+        return "Diamante 💎"
+    elif total_gasto >= 2000:
+        return "Ouro 🥇"
+    elif total_gasto >= 500:
+        return "Prata 🥈"
+    else:
+        return "Bronze 🥉"
+
+@st.cache_data(show_spinner="Carregando clientes e cashback...")
+def carregar_clientes_cash():
+    """Carrega o histórico de clientes e cashback do GitHub."""
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CLIENTES_CASH}"
+    df = load_csv_github(url_raw)
+    if df is None or df.empty:
+        df = pd.DataFrame(columns=COLUNAS_CLIENTES_CASH)
+    for col in COLUNAS_CLIENTES_CASH:
+        if col not in df.columns:
+            df[col] = ""
+    
+    # Normalização de tipos
+    df["Cashback"] = pd.to_numeric(df["Cashback"], errors='coerce').fillna(0.0)
+    df["TotalGasto"] = pd.to_numeric(df["TotalGasto"], errors='coerce').fillna(0.0)
+    
+    return df[[col for col in COLUNAS_CLIENTES_CASH if col in df.columns]]
+
+def salvar_clientes_cash_github(df: pd.DataFrame, commit_message: str):
+    """Salva o DataFrame CSV de Clientes no GitHub (ARQ_CLIENTES_CASH)."""
+    try:
+        from github import Github
+    except ImportError:
+        pass # Apenas para ambiente de desenvolvimento sem a lib instalada
+        
+    df_temp = df.copy()
+    
+    # 1. Envio para o GitHub
+    try:
+        g = Github(TOKEN)
+        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
+        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
+        
+        try:
+            contents = repo.get_contents(ARQ_CLIENTES_CASH, ref=BRANCH)
+            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
+        except Exception:
+            repo.create_file(ARQ_CLIENTES_CASH, commit_message, csv_string, branch=BRANCH)
+        
+        carregar_clientes_cash.clear()
+        return True
+    
+    except Exception as e:
+        # Não usar st.error fora da função principal para evitar NameError
+        return False
 
 @st.cache_data(show_spinner="Carregando produtos do estoque...")
 def inicializar_produtos():
@@ -2015,6 +2114,10 @@ def livro_caixa():
     produtos = inicializar_produtos() 
 
     if "df" not in st.session_state: st.session_state.df = carregar_livro_caixa()
+    # NOVO: Inicialização de clientes e cashback
+    if "df_clientes" not in st.session_state: st.session_state.df_clientes = carregar_clientes_cash()
+    df_clientes = st.session_state.df_clientes # Referência para o DataFrame de clientes
+
     # Garante que todas as colunas de controle existam
     for col in ['RecorrenciaID', 'TransacaoPaiID']:
         if col not in st.session_state.df.columns: st.session_state.df[col] = ''
@@ -2278,6 +2381,44 @@ def livro_caixa():
                         commit_msg = f"Pagamento total de R$ {valor_pago:,.2f} da dívida."
                         
                     
+                                        # NOVO: Lógica de Cashback (Apenas para Entrada Realizada)
+                                        if tipo == "Entrada" and status_selecionado == "Realizada":
+                                            
+                                            # O valor_final_movimentacao é a soma dos produtos vendidos
+                                            valor_compra = valor_final_movimentacao
+                                            cashback_ganho = round(valor_compra * 0.03, 2)
+                                            nome_cliente_norm = cliente_final.strip()
+                                            
+                                            # 1. Verifica se o cliente já existe
+                                            df_clientes_to_update = st.session_state.df_clientes.copy()
+                                            cliente_idx = df_clientes_to_update[df_clientes_to_update["Nome"].astype(str).str.strip().str.lower() == nome_cliente_norm.lower()].index
+                                            
+                                            if not cliente_idx.empty:
+                                                # Atualiza cliente existente
+                                                idx = cliente_idx[0]
+                                                df_clientes_to_update.loc[idx, "Cashback"] += cashback_ganho
+                                                df_clientes_to_update.loc[idx, "TotalGasto"] += valor_compra
+                                                total_gasto_atualizado = df_clientes_to_update.loc[idx, "TotalGasto"]
+                                                df_clientes_to_update.loc[idx, "Nivel"] = calcular_nivel(total_gasto_atualizado)
+                                            else:
+                                                # Novo cliente (adiciona)
+                                                novo_cliente = {
+                                                    "Nome": nome_cliente_norm,
+                                                    "Cashback": cashback_ganho,
+                                                    "TotalGasto": valor_compra,
+                                                    "Nivel": calcular_nivel(valor_compra)
+                                                }
+                                                df_clientes_to_update = pd.concat([df_clientes_to_update, pd.DataFrame([novo_cliente])], ignore_index=True)
+                                            
+                                            # Salva e atualiza o estado
+                                            if salvar_clientes_cash_github(df_clientes_to_update, f"Cashback para {nome_cliente_norm}. Ganho: R$ {cashback_ganho:,.2f}"):
+                                                st.session_state.df_clientes = df_clientes_to_update # Atualiza o estado da sessão
+                                                carregar_clientes_cash.clear() # Limpa o cache
+                                                # st.success(f"💰 Cashback de R$ {cashback_ganho:,.2f} registrado para {nome_cliente_norm}!") # Use toast or remove, as success message will be overridden
+                                                st.toast(f"💰 Cashback de R$ {cashback_ganho:,.2f} registrado para {nome_cliente_norm}!")
+                                            else:
+                                                st.error("❌ Falha ao salvar os dados de cashback no GitHub.")
+                                        
                     if salvar_dados_no_github(st.session_state.df, commit_msg):
                         st.session_state.divida_a_quitar = None
                         st.session_state.cliente_selecionado_divida = None # Garante que o alerta do cliente suma
@@ -2317,6 +2458,20 @@ def livro_caixa():
                                         disabled=edit_mode)
                 
                 # NOVO: Lógica de Alerta Inteligente de Dívida
+                # NOVO: Lógica de Cashback e Nível
+                cliente_df = df_clientes[df_clientes["Nome"].astype(str).str.strip().str.lower() == cliente.strip().lower()]
+                cliente_encontrado = not cliente_df.empty
+                
+                if cliente.strip() and not edit_mode: # Apenas para novas vendas, verifica se existe
+                    if cliente_encontrado:
+                        c_cashback = cliente_df.iloc[0]["Cashback"]
+                        c_nivel = cliente_df.iloc[0]["Nivel"]
+                        st.info(f"🎉 **Cliente Fidelidade:** Saldo Cashback: **R$ {c_cashback:,.2f}** | Nível: **{c_nivel}**")
+                    else:
+                        st.info("✨ Cliente novo ou não encontrado na fidelidade. Será cadastrado após a venda!")
+                
+                # FIM NOVO: Lógica de Cashback
+
                 if cliente.strip() and not edit_mode:
                     
                     df_dividas_cliente = df_exibicao[
@@ -3367,6 +3522,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
