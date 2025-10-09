@@ -2499,6 +2499,19 @@ def livro_caixa():
                         c_cashback = cliente_df.iloc[0]["Cashback"]
                         c_nivel = cliente_df.iloc[0]["Nivel"]
                         st.success(f"🎉 Cliente Fidelidade Encontrado! Saldo Cashback: R$ {c_cashback:,.2f} | Nível: {c_nivel}")
+                        
+                        # --- NOVO: Armazena os dados do cliente ativo na sessão ---
+                        st.session_state.cliente_fidelidade_ativo = {
+                            "nome": cliente.strip(),
+                            "cashback": c_cashback,
+                            "nivel": c_nivel
+                        }
+                    else:
+                        st.error("Ainda não encontrou. Veja acima o nome normalizado para comparar.")
+                        st.info("✨ Cliente novo ou não encontrado na fidelidade. Será cadastrado após a venda!")
+                        # --- NOVO: Limpa os dados se o cliente não for encontrado ---
+                        if "cliente_fidelidade_ativo" in st.session_state:
+                            del st.session_state.cliente_fidelidade_ativo
                         # ==============================================================================
 # NOVO BLOCO: LÓGICA PARA RESGATE DE CASHBACK (INÍCIO)
 # ==============================================================================
@@ -3644,6 +3657,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
