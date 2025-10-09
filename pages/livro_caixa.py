@@ -433,6 +433,11 @@ def carregar_clientes_cash():
             # 2️⃣ Fallback: tenta via GitHub
             url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CLIENTES_CASH}"
             df = load_csv_github(url_raw)
+
+        # ⚙️ Se ainda assim não conseguiu carregar nada, cria dataframe vazio
+        if df is None or df.empty:
+            df = pd.DataFrame(columns=["Nome", "Cashback", "TotalGasto", "Nivel"])
+
     except Exception as e:
         st.warning(f"⚠️ Falha ao carregar clientes: {e}")
         df = pd.DataFrame(columns=["Nome", "Cashback", "TotalGasto", "Nivel"])
