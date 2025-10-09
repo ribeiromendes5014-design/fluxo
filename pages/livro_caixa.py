@@ -2305,25 +2305,25 @@ def livro_caixa():
                         
                     
                     if salvar_dados_no_github(st.session_state.df, commit_msg):
-    st.session_state.divida_a_quitar = None
-    st.session_state.cliente_selecionado_divida = None # Garante que o alerta do cliente suma
-    st.cache_data.clear()
-    st.rerun()
+                    st.session_state.divida_a_quitar = None
+                    st.session_state.cliente_selecionado_divida = None # Garante que o alerta do cliente suma
+                    st.cache_data.clear()
+                    st.rerun()
 
-# --- FIM DA QUITAÇÃO DE DÍVIDAS ---
-# Não exibe o restante do formulário "Nova Movimentação" se estiver no modo quitação
-if 'divida_a_quitar' in st.session_state and st.session_state.divida_a_quitar is not None:
-    st.stop() 
-
-# O layout principal do formulário agora vai aqui, sem o `st.sidebar`
-
-# Categoria Principal
-col_principal_1, col_principal_2 = st.columns([1, 1])
-with col_principal_1:
-    tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1, key="input_tipo", disabled=edit_mode)
-
-# Variáveis de estado
-is_recorrente = False
+    # Não exibe o restante do formulário "Nova Movimentação" se estiver no modo quitação
+    if 'divida_a_quitar' in st.session_state and st.session_state.divida_a_quitar is not None:
+        st.stop()
+    # --- FIM DO BLOCO DE QUITAÇÃO RÁPIDA ---
+    
+    # O layout principal do formulário agora vai aqui, sem o `st.sidebar`
+    
+    # Categoria Principal
+    col_principal_1, col_principal_2 = st.columns([1, 1])
+    with col_principal_1:
+        tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1, key="input_tipo", disabled=edit_mode)
+    
+    # Variáveis de estado
+    is_recorrente = False
 status_selecionado = default_status
 data_primeira_parcela = date.today().replace(day=1) + timedelta(days=32)
 valor_parcela = default_valor
@@ -3475,6 +3475,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
