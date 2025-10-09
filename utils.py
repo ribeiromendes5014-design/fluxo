@@ -229,6 +229,8 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
 
 # utils.py - dentro de def processar_dataframe(df_movimentacoes: pd.DataFrame):
 
+# utils.py - dentro de def processar_dataframe(df_movimentacoes: pd.DataFrame):
+
 @st.cache_data(show_spinner=False)
 def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     """Processa o dataframe de movimentações para exibição e cálculo de saldo."""
@@ -248,15 +250,15 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     
     # --- Mapeamento de Colunas Críticas (para tratar a capitalização/underscores) ---
     
-    # Mapeia VALOR (Se não encontrar 'VALOR', tenta 'VALOR_TOTAL')
+    # Mapeia VALOR
     valor_col_name = 'VALOR'
     if valor_col_name not in df_proc.columns and 'VALOR_TOTAL' in df_proc.columns:
         valor_col_name = 'VALOR_TOTAL'
     elif valor_col_name not in df_proc.columns:
-        df_proc['VALOR'] = 0.0
+        df_proc['VALOR'] = 0.0 # Cria coluna default se não encontrou o valor principal
         valor_col_name = 'VALOR' 
         
-    # Mapeia DATA (Se não encontrar 'DATA', tenta alternativas. Se nada, cria vazia.)
+    # Mapeia DATA
     data_col_name = 'DATA'
     possible_date_cols = ['DATA_DE_LANCAMENTO', 'DATA_LANCAMENTO', 'DATA_DA_TRANSACAO']
     found_date_col = next((col for col in possible_date_cols if col in df_proc.columns), None)
@@ -266,13 +268,21 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     elif data_col_name not in df_proc.columns:
         df_proc['DATA'] = ''
         data_col_name = 'DATA'
-        
-    # Mapeia STATUS (Tenta STATUS, senão cria "REALIZADA" como default)
+
+    # Mapeia STATUS (CORREÇÃO DO KEYERROR: 'STATUS')
     status_col_name = 'STATUS'
-    if status_col_name not in df_proc.columns:
-        df_proc[status_col_name] = 'REALIZADA'
-        
-    # --- Conversão de Tipos ---
+    possible_status_cols = ['STATUS_DA_TRANSACAO', 'STATUS_TRANSACAO']
+    found_status_col = next((col for col in possible_status_cols if col in df_proc.columns), None)
+    
+    if status_col_name not in df_proc.columns and found_status_col:
+        # Renomeia a coluna encontrada para 'STATUS'
+        df_proc.rename(columns={found_status_col: 'STATUS'}, inplace=True)
+        status_col_name = 'STATUS' # Garante que usaremos 'STATUS'
+    elif status_col_name not in df_proc.columns:
+        # Se 'STATUS' ainda não existe, cria com o default 'REALIZADA'
+        df_proc['STATUS'] = 'REALIZADA'
+    
+    # Aplica conversão nos nomes mapeados:
     df_proc["VALOR"] = pd.to_numeric(df_proc[valor_col_name], errors='coerce').fillna(0.0) 
     df_proc["DATA"] = pd.to_datetime(df_proc[data_col_name], errors='coerce').dt.date 
     
@@ -293,7 +303,8 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
         df_proc['ID_VISÍVEL'] = range(1, len(df_proc) + 1)
         
     # 3. CÁLCULO DO SALDO (AGORA USANDO O NOME 'STATUS' GARANTIDO)
-    df_realizadas = df_proc[df_proc[status_col_name] == 'REALIZADA'].copy()
+    # Usa 'STATUS' diretamente, pois a lógica acima garantiu sua existência.
+    df_realizadas = df_proc[df_proc['STATUS'] == 'REALIZADA'].copy()
     
     # Ordena e calcula o saldo
     if 'original_index' in df_realizadas.columns:
@@ -301,7 +312,7 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
         df_realizadas['Saldo Acumulado'] = df_realizadas['VALOR'].cumsum() 
         df_proc = df_proc.merge(df_realizadas[['original_index', 'Saldo Acumulado']], on='original_index', how='left')
     else:
-        df_proc['Saldo Acumulado'] = pd.NA
+        df_proc['Saldo Acumulado'] = pd.NaT
         
     # 4. RENOMEAÇÃO FINAL (Para o formato de exibição)
     livro_caixa_map = {
@@ -312,7 +323,6 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     }
     df_proc.rename(columns=livro_caixa_map, inplace=True, errors='ignore')
     return df_proc
-
 def calcular_resumo(df_movimentacoes: pd.DataFrame):
     """Calcula o total de entradas, saídas e o saldo líquido de um DataFrame."""
     if df_movimentacoes is None or df_movimentacoes.empty:
@@ -983,6 +993,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
