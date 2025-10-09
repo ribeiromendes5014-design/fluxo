@@ -937,8 +937,8 @@ def render_processamento_pedidos():
                     
                     # 2. ATUALIZAR STATUS DO PEDIDO PARA FINALIZADO SOMENTE SE O LANÇAMENTO FOI BEM SUCEDIDO
                     if sucesso_lancamento:
-                        # Busca o índice do pedido no DF principal (st.session_state.pedidos)
-                        idx_a_atualizar = st.session_state.pedidos[st.session_state.pedidos['ID_PEDIDO'].astype(str) == pedido['ID_PEDIDO'].astype(str)].index
+                        # CORREÇÃO: Usa str() no valor individual para evitar AttributeError
+                        idx_a_atualizar = st.session_state.pedidos[st.session_state.pedidos['ID_PEDIDO'].astype(str) == str(pedido['ID_PEDIDO'])].index
                         
                         if not idx_a_atualizar.empty:
                              st.session_state.pedidos.loc[idx_a_atualizar, 'STATUS'] = 'FINALIZADO' 
@@ -950,7 +950,8 @@ def render_processamento_pedidos():
                         st.rerun()
                 
                 if st.button("Cancelar Pedido", key=f"cancelar_{pedido_id}", use_container_width=True):
-                    idx_a_atualizar = st.session_state.pedidos[st.session_state.pedidos['ID_PEDIDO'].astype(str) == pedido['ID_PEDIDO'].astype(str)].index
+                    # CORREÇÃO: Usa str() no valor individual para evitar AttributeError
+                    idx_a_atualizar = st.session_state.pedidos[st.session_state.pedidos['ID_PEDIDO'].astype(str) == str(pedido['ID_PEDIDO'])].index
                     
                     if not idx_a_atualizar.empty:
                         st.session_state.pedidos.loc[idx_a_atualizar, 'STATUS'] = 'CANCELADO'
@@ -1017,3 +1018,4 @@ def cashback_system():
         PAGINAS_INTERNAS["Processar Pedidos"]()
 
 # Nenhuma chamada de função deve estar aqui. O app.py chama cashback_system().
+
