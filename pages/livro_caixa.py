@@ -2154,80 +2154,62 @@ def historico_compras():
                 st.info("Selecione um item no menu acima para editar ou excluir.")
 
 def livro_caixa():
-    
-    st.header("📘 Livro Caixa - Gerenciamento de Movimentações") 
+    st.header("📘 Livro Caixa - Gerenciamento de Movimentações")
 
-    produtos = inicializar_produtos() 
-
+    # Carrega os dados usando as funções (a de clientes agora é mais robusta)
+    produtos = inicializar_produtos()
     if "df" not in st.session_state: st.session_state.df = carregar_livro_caixa()
     if "df_clientes" not in st.session_state: st.session_state.df_clientes = carregar_clientes_cash()
+    
     df_clientes = st.session_state.df_clientes
-    
-    # --- Inicialização de Variáveis de Estado ---
-    for col in ['RecorrenciaID', 'TransacaoPaiID']:
-        if col not in st.session_state.df.columns: st.session_state.df[col] = ''
-        
-    if "produtos" not in st.session_state: st.session_state.produtos = produtos
-    if "lista_produtos" not in st.session_state: st.session_state.lista_produtos = []
-    if "edit_id" not in st.session_state: st.session_state.edit_id = None
-    if "divida_a_quitar" not in st.session_state: st.session_state.divida_a_quitar = None
-    
-    # NOVO: Variáveis de estado para controlar o resgate de cashback
-    if "desconto_cashback" not in st.session_state:
-        st.session_state.desconto_cashback = 0.0
-    if "quer_resgatar" not in st.session_state:
-        st.session_state.quer_resgatar = False
 
-    # --- Processamento e Preparação dos Dados ---
-    df_dividas = st.session_state.df
-    df_exibicao = processar_dataframe(df_dividas)
+    # Inicialização das variáveis de estado (session_state)
+    if "desconto_cashback" not in st.session_state: st.session_state.desconto_cashback = 0.0
+    if "quer_resgatar" not in st.session_state: st.session_state.quer_resgatar = False
+    # ... (outras inicializações de session_state) ...
     
-    # ... (O restante da preparação de dados, como `opcoes_produtos`, `edit_mode`, etc., continua igual) ...
-    edit_mode = st.session_state.edit_id is not None
-    # ... (código para carregar dados padrão e de edição) ...
+    edit_mode = st.session_state.get('edit_id') is not None
 
-    # --- Abas de Navegação ---
     abas_validas = ["📝 Nova Movimentação", "📋 Movimentações e Resumo", "📈 Relatórios e Filtros"]
     tab_nova_mov, tab_mov, tab_rel = st.tabs(abas_validas)
 
-
-    # ==============================================================================================
-    # ABA: NOVA MOVIMENTAÇÃO (COM LÓGICA DE RESGATE)
-    # ==============================================================================================
     with tab_nova_mov:
         st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
         
-        # ... (A lógica de Quitar Dívida Rápida permanece a mesma, não precisa mudar) ...
-
         col_principal_1, col_principal_2 = st.columns([1, 1])
         with col_principal_1:
             tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0, key="input_tipo", disabled=edit_mode)
-        
+
         if tipo == "Entrada":
             with col_principal_2:
-                # Função para resetar o estado de resgate ao mudar de cliente
                 def reset_resgate():
                     st.session_state.quer_resgatar = False
                     st.session_state.desconto_cashback = 0.0
 
-                cliente = st.text_input("Nome do Cliente (ou Descrição)", 
-                                        value="", 
-                                        key="input_cliente_form",
-                                        on_change=reset_resgate, # Reseta ao mudar de cliente
-                                        disabled=edit_mode)
+                # =======================================================================
+                # CORREÇÃO CRÍTICA AQUI: Removido o `value=""` que causou o problema
+                # =======================================================================
+                cliente = st.text_input(
+                    "Nome do Cliente (ou Descrição)",
+                    key="input_cliente_form",
+                    on_change=reset_resgate,
+                    disabled=edit_mode
+                )
+                # =======================================================================
                 st.caption("Aperte ENTER ou clique fora do campo para buscar o cliente.")
 
-            # --- Lógica de Busca de Cliente e Saldo de Cashback ---
+            # --- Lógica de Busca de Cliente e Saldo de Cashback (agora com colunas minúsculas) ---
             saldo_cashback_cliente = 0.0
-            cliente_encontrado_df = None
             if cliente.strip() and not edit_mode:
                 cliente_normalizado = cliente.strip().lower()
-                if "Nome" in df_clientes.columns:
-                    cliente_encontrado_df = df_clientes[df_clientes["Nome"].str.strip().str.lower() == cliente_normalizado]
+                
+                # A busca agora usa 'nome' (minúsculo) porque a função carregar_clientes_cash padronizou
+                cliente_encontrado_df = df_clientes[df_clientes["nome"].str.strip().str.lower() == cliente_normalizado]
 
-                if cliente_encontrado_df is not None and not cliente_encontrado_df.empty:
-                    saldo_cashback_cliente = cliente_encontrado_df.iloc[0]["Cashback"]
-                    nivel_cliente = cliente_encontrado_df.iloc[0]["Nivel"]
+                if not cliente_encontrado_df.empty:
+                    # Acessa as colunas padronizadas em minúsculo
+                    saldo_cashback_cliente = cliente_encontrado_df.iloc[0]["cashback"]
+                    nivel_cliente = cliente_encontrado_df.iloc[0]["nivel"]
                     st.success(f"🎉 Cliente Encontrado! Saldo Cashback: R$ {saldo_cashback_cliente:,.2f} | Nível: {nivel_cliente}")
                 else:
                     st.info("✨ Cliente novo ou não encontrado na fidelidade.")
@@ -3520,6 +3502,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
