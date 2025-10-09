@@ -115,7 +115,7 @@ def salvar_dados_no_github(df: pd.DataFrame, file_path: str, commit_message: str
             st.toast(f"✅ Arquivo {file_path} criado no GitHub.")
         return True
     except Exception as e:
-        st.error(f"❌ ERRO CRÍTICO ao salvar '{file_path}' no GitHub.")
+        st.error(f"❌ ERRO CRÍTICO ao salvar '{file_path}' no GitHub. Verifique as permissões 'repo' do seu GITHUB_TOKEN.")
         error_message = str(e)
         if hasattr(e, 'data') and 'message' in e.data: error_message = f"{e.status} - {e.data['message']}"
         st.error(f"Detalhes: {error_message}")
@@ -283,13 +283,13 @@ def cadastrar_cliente(nome, apelido, telefone, indicado_por=''):
     st.session_state.clientes = pd.concat([st.session_state.clientes, novo_cliente], ignore_index=True)
     salvar_dados()
     st.toast(f"Cliente '{nome}' cadastrado com sucesso!", icon='👤')
-    # O rerund é feito na função chamadora
+    return True
 
 # --- FUNÇÃO LANCAR VENDA ADAPTADA PARA O FLUXO DO CATÁLOGO ---
-def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_turbo_selecionada: bool, contato_cliente: str = ''):
+def lancar_venda(cliente_nome, valor_venda, valor_cashback_manual, data_venda, venda_turbo_selecionada: bool, contato_cliente: str = ''):
     """
     Lança uma venda, cadastra o cliente se necessário, e credita cashback/bônus.
-    O parâmetro contato_cliente é usado para o fluxo do Catálogo/Admin.
+    O valor_cashback_manual é usado apenas no lançamento manual, mas no Admin é recalculado.
     """
     
     # 1. Limpa o contato para a busca
@@ -312,8 +312,10 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
     if idx_cliente.empty: 
         if contato_cliente_limpo and cliente_nome:
             # Chama a função de cadastro (não usa st.rerun dentro)
-            cadastrar_cliente(cliente_nome, '', contato_cliente_limpo, '') 
-            # Busca o índice do cliente recém-cadastrado
+            if not cadastrar_cliente(cliente_nome, '', contato_cliente_limpo, ''):
+                 st.error("Falha ao cadastrar cliente automático.")
+                 return False
+            # Busca o índice do cliente recém-cadastrado (agora garantido)
             idx_cliente = st.session_state.clientes[st.session_state.clientes['Nome'] == cliente_nome].index
         else:
             st.error(f"Erro: Cliente '{cliente_nome}' não encontrado e dados insuficientes para cadastro automático.")
@@ -322,29 +324,34 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
     # Se ainda estiver vazio (erro de cadastro), interrompe
     if idx_cliente.empty: st.error(f"Erro Crítico ao localizar ou cadastrar cliente: {cliente_nome}."); return False
     
-    # Recalcula o cashback se ele veio como 0 (do Catálogo)
+    # ----------------------------------------------------------------------
+    # RECALCULA O CASHBACK BASEADO NO FLUXO ADMIN (OU USA O MANUAL)
+    # ----------------------------------------------------------------------
+    
     cliente_data_antes = st.session_state.clientes.loc[idx_cliente].iloc[0].copy()
     nivel_atual, cb_normal_rate, cb_turbo_rate = calcular_nivel_e_beneficios(cliente_data_antes['Gasto Acumulado'])
     
-    # Define a taxa:
-    taxa_final = cb_normal_rate 
-    
-    # Lógica de Primeira Compra e Indicação (taxa especial 5%)
     era_primeira_compra = not cliente_data_antes['Primeira Compra Feita']
-    if era_primeira_compra and cliente_data_antes['Indicado Por']:
-        taxa_final = CASHBACK_INDICADO_PRIMEIRA_COMPRA
-        st.toast("🎁 Aplicando taxa de primeira compra de indicação.", icon='🌟')
-
-    valor_cashback = valor_venda * taxa_final
-    st.info(f"Cashback calculado para **{cliente_nome}** ({nivel_atual}): R$ {valor_cashback:.2f} ({int(taxa_final*100)}%).")
+    
+    # Se a chamada veio do Admin/Catálogo, recalculamos a taxa. Se veio do Lançamento manual, usamos o valor calculado (valor_cashback_manual).
+    if contato_cliente:
+        # Fluxo Admin: Recalcula a taxa baseada nas regras atuais.
+        taxa_final = cb_normal_rate 
+        if era_primeira_compra and cliente_data_antes['Indicado Por']:
+            taxa_final = CASHBACK_INDICADO_PRIMEIRA_COMPRA
+        valor_cashback = valor_venda * taxa_final
+    else:
+        # Fluxo Lançamento Manual: Usa o valor calculado na interface de lançamento.
+        valor_cashback = valor_cashback_manual
+    
+    if contato_cliente: # Mostra o cálculo apenas no Admin
+        st.info(f"Cashback calculado para **{cliente_nome}** ({nivel_atual}): R$ {valor_cashback:.2f} ({int(taxa_final*100)}%).")
     
     # ----------------------------------------------------------------------
     # O RESTANTE DA LÓGICA DE NEGÓCIO (CÁLCULO E CRÉDITO)
     # ----------------------------------------------------------------------
     nivel_antigo = cliente_data_antes['Nivel Atual']
-    # A data da venda é a data do processamento do Admin (hoje)
-    data_venda = date.today() 
-    venda_turbo_selecionada = False # Assumindo FALSE no Admin (você pode ajustar manualmente no pedido avulso, mas não no Catálogo)
+    data_venda = data_venda if data_venda else date.today()
 
     # Lógica de Atualização de Saldos e Níveis
     st.session_state.clientes.loc[idx_cliente, 'Cashback Disponível'] += valor_cashback
@@ -354,7 +361,7 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
     novo_nivel, _, _ = calcular_nivel_e_beneficios(novo_gasto_acumulado)
     st.session_state.clientes.loc[idx_cliente, 'Nivel Atual'] = novo_nivel
     
-    # Lógica de Bônus de Indicação
+    # Lógica de Bônus de Indicação (só na primeira compra)
     if era_primeira_compra and cliente_data_antes['Indicado Por']:
         indicador_nome = cliente_data_antes['Indicado Por']
         idx_indicador = st.session_state.clientes[st.session_state.clientes['Nome'] == indicador_nome].index
@@ -414,8 +421,8 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
 
     st.session_state.clientes.loc[idx_cliente, 'Primeira Compra Feita'] = True
     salvar_dados()
+    st.success(f"Venda de R$ {valor_venda:.2f} lançada para {cliente_nome} ({novo_nivel}).")
     return True # Retorna True em caso de sucesso
-# ------------------------------------------------------------------------------
 
 def resgatar_cashback(cliente_nome, valor_resgate, valor_venda_atual, data_resgate, saldo_disponivel):
     max_resgate = valor_venda_atual * 0.50
@@ -551,7 +558,7 @@ def render_lancamento():
                 else: 
                     # Lançamento Manual (não precisa de contato)
                     lancar_venda(cliente_selecionado, valor_venda, cashback_calculado, data_venda, venda_turbo_selecionada)
-                    st.rerun() # Rerun no caso de sucesso manual
+                    st.rerun()
 
     elif operacao == "Resgatar Cashback":
         st.subheader("Resgate de Cashback")
@@ -876,7 +883,7 @@ def render_processamento_pedidos():
     df_pedidos = st.session_state.pedidos
     
     if df_pedidos.empty or 'STATUS' not in df_pedidos.columns:
-        st.warning("Nenhum pedido do Catálogo encontrado ou arquivo mal formatado.")
+        st.warning("Nenhum pedido do Catálogo encontrado ou arquivo mal formatado. Certifique-se que o arquivo 'pedidos.csv' existe no seu repositório.")
         return
 
     # Filtra pedidos PENDENTES
@@ -929,7 +936,7 @@ def render_processamento_pedidos():
                     sucesso_lancamento = lancar_venda(
                         cliente_nome=pedido['NOME_CLIENTE'],
                         valor_venda=pedido['VALOR_TOTAL'],
-                        valor_cashback=0, # Será recalculado dentro da função lancar_venda
+                        valor_cashback_manual=0, # Será recalculado dentro da função lancar_venda
                         data_venda=pedido['DATA_HORA'].date() if pd.notna(pedido['DATA_HORA']) else date.today(),
                         venda_turbo_selecionada=False,
                         contato_cliente=pedido['CONTATO_CLIENTE'] # Contato limpo
@@ -937,7 +944,8 @@ def render_processamento_pedidos():
                     
                     # 2. ATUALIZAR STATUS DO PEDIDO PARA FINALIZADO SOMENTE SE O LANÇAMENTO FOI BEM SUCEDIDO
                     if sucesso_lancamento:
-                        # CORREÇÃO: Usa str() no valor individual para evitar AttributeError
+                        # Busca o índice do pedido no DF principal (st.session_state.pedidos)
+                        # CORREÇÃO APLICADA: Usa str() no valor individual para evitar AttributeError
                         idx_a_atualizar = st.session_state.pedidos[st.session_state.pedidos['ID_PEDIDO'].astype(str) == str(pedido['ID_PEDIDO'])].index
                         
                         if not idx_a_atualizar.empty:
@@ -950,7 +958,7 @@ def render_processamento_pedidos():
                         st.rerun()
                 
                 if st.button("Cancelar Pedido", key=f"cancelar_{pedido_id}", use_container_width=True):
-                    # CORREÇÃO: Usa str() no valor individual para evitar AttributeError
+                    # CORREÇÃO APLICADA: Usa str() no valor individual para evitar AttributeError
                     idx_a_atualizar = st.session_state.pedidos[st.session_state.pedidos['ID_PEDIDO'].astype(str) == str(pedido['ID_PEDIDO'])].index
                     
                     if not idx_a_atualizar.empty:
@@ -1018,4 +1026,3 @@ def cashback_system():
         PAGINAS_INTERNAS["Processar Pedidos"]()
 
 # Nenhuma chamada de função deve estar aqui. O app.py chama cashback_system().
-
