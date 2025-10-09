@@ -242,6 +242,15 @@ def processar_dataframe(df_movimentacoes: pd.DataFrame) -> pd.DataFrame:
     df_proc = df_proc.reset_index() # <-- CRIA A COLUNA 'original_index'
 
     # 2. CONVERSÃO DE TIPOS E CRIAÇÃO DE COLUNAS AUXILIARES
+    
+    # CORREÇÃO CRÍTICA: Se 'VALOR' não for encontrado (KeyError), tenta usar a coluna 'VALOR_TOTAL', 
+    # ou garante que a coluna exista antes de usá-la.
+    if 'VALOR' not in df_proc.columns and 'VALOR_TOTAL' in df_proc.columns:
+        df_proc['VALOR'] = df_proc['VALOR_TOTAL']
+    elif 'VALOR' not in df_proc.columns:
+        # Se nenhuma coluna de valor principal for encontrada, crie 'VALOR' como 0.0 para evitar a KeyError
+        df_proc['VALOR'] = 0.0
+        
     df_proc["VALOR"] = pd.to_numeric(df_proc["VALOR"], errors='coerce').fillna(0.0) 
     df_proc["DATA"] = pd.to_datetime(df_proc["DATA"], errors='coerce').dt.date 
     df_proc["DATA_PAGAMENTO"] = pd.to_datetime(df_proc["DATA_PAGAMENTO"], errors='coerce').dt.date 
@@ -946,3 +955,4 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
