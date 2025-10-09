@@ -9,6 +9,7 @@ from io import StringIO
 import io, os
 import base64
 import pytz
+import json # NOVO: Necessário para desserializar o ITENS_JSON dos pedidos
 
 # Tenta importar PyGithub para persistência.
 try:
@@ -26,6 +27,7 @@ except ImportError:
 CLIENTES_CSV = 'clientes_cash.csv'
 LANÇAMENTOS_CSV = 'lancamentos.csv'
 PRODUTOS_TURBO_CSV = 'produtos_turbo.csv'
+PEDIDOS_CATALOGO_CSV = 'pedidos.csv' # NOVO: Nome do arquivo de pedidos do Catálogo
 BONUS_INDICACAO_PERCENTUAL = 0.03 # 3% para o indicador
 CASHBACK_INDICADO_PRIMEIRA_COMPRA = 0.05 # 5% para o indicado (na primeira compra)
 
@@ -130,6 +132,40 @@ def salvar_dados():
         st.session_state.lancamentos.to_csv(LANÇAMENTOS_CSV, index=False)
         st.session_state.produtos_turbo.to_csv(PRODUTOS_TURBO_CSV, index=False)
     st.cache_data.clear()
+
+def carregar_dados_pedidos():
+    """Carrega os pedidos do Catálogo para processamento no painel Admin."""
+    
+    PEDIDOS_COLS = ['ID_PEDIDO', 'DATA_HORA', 'NOME_CLIENTE', 'CONTATO_CLIENTE', 'ITENS_PEDIDO', 'VALOR_TOTAL', 'STATUS', 'ITENS_JSON']
+    
+    df_pedidos = pd.DataFrame(columns=PEDIDOS_COLS)
+    
+    if PERSISTENCE_MODE == "GITHUB":
+        url_raw = f"{URL_BASE_REPOS}{PEDIDOS_CATALOGO_CSV}" 
+        df_carregado = load_csv_github(url_raw)
+
+        if df_carregado is not None and not df_carregado.empty:
+            # Garante que as colunas sejam todas maiúsculas
+            df_carregado.columns = [col.upper().replace(' ', '_') for col in df_carregado.columns]
+            
+            # Converte o valor e data
+            for col in ['VALOR_TOTAL']:
+                if col in df_carregado.columns:
+                    df_carregado[col] = pd.to_numeric(df_carregado[col], errors='coerce').fillna(0.0)
+            
+            if 'DATA_HORA' in df_carregado.columns:
+                 df_carregado['DATA_HORA'] = pd.to_datetime(df_carregado['DATA_HORA'], errors='coerce')
+            
+            # Tenta pegar apenas as colunas necessárias 
+            df_pedidos = df_carregado.reindex(columns=PEDIDOS_COLS)
+
+    # Assumindo que a coluna ID_PEDIDO é a chave. Se não for, resetamos o índice para garantir.
+    if 'ID_PEDIDO' not in df_pedidos.columns:
+        df_pedidos.reset_index(inplace=True)
+        df_pedidos.rename(columns={'index': 'ID_PEDIDO'}, inplace=True)
+    
+    return df_pedidos.sort_values(by='DATA_HORA', ascending=False, ignore_index=True)
+
 
 @st.cache_data(show_spinner="Carregando dados dos arquivos...")
 def carregar_dados():
@@ -246,17 +282,71 @@ def cadastrar_cliente(nome, apelido, telefone, indicado_por=''):
                                   'Indicado Por': indicado_por, 'Primeira Compra Feita': False}])
     st.session_state.clientes = pd.concat([st.session_state.clientes, novo_cliente], ignore_index=True)
     salvar_dados()
-    st.success(f"Cliente '{nome}' cadastrado com sucesso!")
-    st.rerun()
+    st.toast(f"Cliente '{nome}' cadastrado com sucesso!", icon='👤')
+    # O rerund é feito na função chamadora
 
-def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_turbo_selecionada: bool):
+# --- FUNÇÃO LANCAR VENDA ADAPTADA PARA O FLUXO DO CATÁLOGO ---
+def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_turbo_selecionada: bool, contato_cliente: str = ''):
+    """
+    Lança uma venda, cadastra o cliente se necessário, e credita cashback/bônus.
+    O parâmetro contato_cliente é usado para o fluxo do Catálogo/Admin.
+    """
+    
+    # 1. Limpa o contato para a busca
+    contato_cliente_limpo = contato_cliente.replace('(', '').replace(')', '').replace('-', '').replace(' ', '').strip()
+    
+    # 2. Tenta encontrar o cliente pelo NOME ou TELEFONE (contato)
     idx_cliente = st.session_state.clientes[st.session_state.clientes['Nome'] == cliente_nome].index
-    if idx_cliente.empty: st.error(f"Erro: Cliente '{cliente_nome}' não encontrado."); return
     
+    # Se não encontrou pelo nome, tenta encontrar pelo telefone
+    if idx_cliente.empty and contato_cliente_limpo:
+        df_clientes_clean = st.session_state.clientes.copy()
+        df_clientes_clean['Telefone_Limpo'] = df_clientes_clean['Telefone'].astype(str).str.replace(r'\D', '', regex=True).str.strip()
+        idx_cliente = df_clientes_clean[df_clientes_clean['Telefone_Limpo'] == contato_cliente_limpo].index
+        
+        if not idx_cliente.empty:
+            cliente_nome = st.session_state.clientes.loc[idx_cliente, 'Nome'].iloc[0] # Usa o nome do cadastro original
+            st.toast(f"Cliente encontrado pelo telefone: {cliente_nome}.", icon='🔍')
+
+    # 3. SE AINDA NÃO ENCONTROU, CADASTRA O CLIENTE NOVO DO CATÁLOGO
+    if idx_cliente.empty: 
+        if contato_cliente_limpo and cliente_nome:
+            # Chama a função de cadastro (não usa st.rerun dentro)
+            cadastrar_cliente(cliente_nome, '', contato_cliente_limpo, '') 
+            # Busca o índice do cliente recém-cadastrado
+            idx_cliente = st.session_state.clientes[st.session_state.clientes['Nome'] == cliente_nome].index
+        else:
+            st.error(f"Erro: Cliente '{cliente_nome}' não encontrado e dados insuficientes para cadastro automático.")
+            return False # Retorna Falso se falhar no cadastro
+
+    # Se ainda estiver vazio (erro de cadastro), interrompe
+    if idx_cliente.empty: st.error(f"Erro Crítico ao localizar ou cadastrar cliente: {cliente_nome}."); return False
+    
+    # Recalcula o cashback se ele veio como 0 (do Catálogo)
     cliente_data_antes = st.session_state.clientes.loc[idx_cliente].iloc[0].copy()
-    nivel_antigo = cliente_data_antes['Nivel Atual']
-    era_primeira_compra = not cliente_data_antes['Primeira Compra Feita']
+    nivel_atual, cb_normal_rate, cb_turbo_rate = calcular_nivel_e_beneficios(cliente_data_antes['Gasto Acumulado'])
     
+    # Define a taxa:
+    taxa_final = cb_normal_rate 
+    
+    # Lógica de Primeira Compra e Indicação (taxa especial 5%)
+    era_primeira_compra = not cliente_data_antes['Primeira Compra Feita']
+    if era_primeira_compra and cliente_data_antes['Indicado Por']:
+        taxa_final = CASHBACK_INDICADO_PRIMEIRA_COMPRA
+        st.toast("🎁 Aplicando taxa de primeira compra de indicação.", icon='🌟')
+
+    valor_cashback = valor_venda * taxa_final
+    st.info(f"Cashback calculado para **{cliente_nome}** ({nivel_atual}): R$ {valor_cashback:.2f} ({int(taxa_final*100)}%).")
+    
+    # ----------------------------------------------------------------------
+    # O RESTANTE DA LÓGICA DE NEGÓCIO (CÁLCULO E CRÉDITO)
+    # ----------------------------------------------------------------------
+    nivel_antigo = cliente_data_antes['Nivel Atual']
+    # A data da venda é a data do processamento do Admin (hoje)
+    data_venda = date.today() 
+    venda_turbo_selecionada = False # Assumindo FALSE no Admin (você pode ajustar manualmente no pedido avulso, mas não no Catálogo)
+
+    # Lógica de Atualização de Saldos e Níveis
     st.session_state.clientes.loc[idx_cliente, 'Cashback Disponível'] += valor_cashback
     st.session_state.clientes.loc[idx_cliente, 'Gasto Acumulado'] += valor_venda
     
@@ -264,6 +354,7 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
     novo_nivel, _, _ = calcular_nivel_e_beneficios(novo_gasto_acumulado)
     st.session_state.clientes.loc[idx_cliente, 'Nivel Atual'] = novo_nivel
     
+    # Lógica de Bônus de Indicação
     if era_primeira_compra and cliente_data_antes['Indicado Por']:
         indicador_nome = cliente_data_antes['Indicado Por']
         idx_indicador = st.session_state.clientes[st.session_state.clientes['Nome'] == indicador_nome].index
@@ -273,33 +364,28 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
             bonus_lanc = pd.DataFrame([{'Data': data_venda, 'Cliente': indicador_nome, 'Tipo': 'Bônus Indicação', 'Valor Venda/Resgate': valor_venda, 'Valor Cashback': bonus, 'Venda Turbo': 'Não'}])
             st.session_state.lancamentos = pd.concat([st.session_state.lancamentos, bonus_lanc], ignore_index=True)
             st.success(f"🎁 Bônus de R$ {bonus:.2f} creditado para {indicador_nome}!")
-
             if TELEGRAM_ENABLED:
                 nivel_indicador = st.session_state.clientes.loc[idx_indicador, 'Nivel Atual'].iloc[0]
                 bonus_str = f"R$ {bonus:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                
                 mensagem_indicador = (
-                    f"Oi, {indicador_nome}! Tudo bem?\n\n"
-                    f"Agradecemos demais a sua indicação da {cliente_nome}! Ter você como nossa cliente e parceira nos enche de orgulho. ✨\n\n"
-                    f"Graças à sua indicação, você acaba de ganhar *{bonus_str}* extras em seu Programa de Fidelidade Doce&Bella! Isso te ajuda a chegar ainda mais rápido ao próximo nível. 🚀\n\n"
-                    f"Seu nível atual é: *{nivel_indicador}*.\n\n"
-                    "Até a próxima, com carinho,\n"
-                    "Doce&Bella"
+                    f"Oi, {indicador_nome}! Agradecemos demais a sua indicação da {cliente_nome}! "
+                    f"Você acaba de ganhar *{bonus_str}* extras! Seu nível atual é: *{nivel_indicador}*."
                 )
                 enviar_mensagem_telegram(mensagem_indicador)
 
+
+    # Lançamento do Histórico da Venda
     novo_lancamento = pd.DataFrame([{'Data': data_venda, 'Cliente': cliente_nome, 'Tipo': 'Venda', 'Valor Venda/Resgate': valor_venda, 'Valor Cashback': valor_cashback, 'Venda Turbo': 'Sim' if venda_turbo_selecionada else 'Não'}])
     st.session_state.lancamentos = pd.concat([st.session_state.lancamentos, novo_lancamento], ignore_index=True)
 
+    # Chamada ao Telegram para o cliente
     if TELEGRAM_ENABLED:
         saldo_atualizado = st.session_state.clientes.loc[idx_cliente, 'Cashback Disponível'].iloc[0]
         fuso_horario_brasil = pytz.timezone('America/Sao_Paulo')
         agora_brasil = datetime.now(fuso_horario_brasil)
         data_hora_lancamento = agora_brasil.strftime('%d/%m/%Y às %H:%M')
-        
         cashback_ganho_str = f"R$ {valor_cashback:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         saldo_atual_str = f"R$ {saldo_atualizado:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        
         mensagem_header = (
             "✨ *Novidade imperdível na Doce&Bella! a partir desse mes de outubro* ✨\n\n"
             "Agora você pode aproveitar ainda mais as suas compras favoritas com o nosso Programa de Fidelidade 🛍💖\n\n"
@@ -328,8 +414,8 @@ def lancar_venda(cliente_nome, valor_venda, valor_cashback, data_venda, venda_tu
 
     st.session_state.clientes.loc[idx_cliente, 'Primeira Compra Feita'] = True
     salvar_dados()
-    st.success(f"Venda de R$ {valor_venda:.2f} lançada para {cliente_nome} ({novo_nivel}).")
-    st.rerun()
+    return True # Retorna True em caso de sucesso
+# ------------------------------------------------------------------------------
 
 def resgatar_cashback(cliente_nome, valor_resgate, valor_venda_atual, data_resgate, saldo_disponivel):
     max_resgate = valor_venda_atual * 0.50
@@ -463,7 +549,9 @@ def render_lancamento():
                 if not cliente_selecionado: st.error("Por favor, selecione uma cliente.")
                 elif valor_venda <= 0: st.error("O valor da venda deve ser maior que R$ 0,00.")
                 else: 
+                    # Lançamento Manual (não precisa de contato)
                     lancar_venda(cliente_selecionado, valor_venda, cashback_calculado, data_venda, venda_turbo_selecionada)
+                    st.rerun() # Rerun no caso de sucesso manual
 
     elif operacao == "Resgatar Cashback":
         st.subheader("Resgate de Cashback")
@@ -778,6 +866,99 @@ def render_home():
         st.session_state.cashback_tab_atual = "Relatórios"
         st.rerun()
 
+def render_processamento_pedidos():
+    st.header("✅ Processamento de Pedidos Pendentes do Catálogo")
+    st.markdown("---")
+    
+    # Recarrega os pedidos a cada vez que a página é acessada
+    st.session_state.pedidos = carregar_dados_pedidos() 
+
+    df_pedidos = st.session_state.pedidos
+    
+    if df_pedidos.empty or 'STATUS' not in df_pedidos.columns:
+        st.warning("Nenhum pedido do Catálogo encontrado ou arquivo mal formatado.")
+        return
+
+    # Filtra pedidos PENDENTES
+    pedidos_pendentes = df_pedidos[df_pedidos['STATUS'] == 'PENDENTE'].copy()
+    
+    if pedidos_pendentes.empty:
+        st.info("✅ Não há pedidos pendentes para processar no momento.")
+        return
+
+    st.subheader(f"Pedidos Pendentes: {len(pedidos_pendentes)}")
+    
+    for index, pedido in pedidos_pendentes.iterrows():
+        try:
+            # O ID_PEDIDO é o valor do timestamp que salva o pedido
+            pedido_id = pedido['ID_PEDIDO']
+            detalhes_pedido = json.loads(pedido['ITENS_JSON'])
+        except Exception:
+            detalhes_pedido = {}
+            pedido_id = index # Usa o índice como fallback se o ID_PEDIDO for inválido
+
+        data_hora = pedido['DATA_HORA'].strftime('%d/%m/%Y às %H:%M') if pd.notna(pedido['DATA_HORA']) else 'Data Inválida'
+        
+        with st.container(border=True):
+            col_info, col_acao = st.columns([3, 1])
+
+            with col_info:
+                st.markdown(f"**Cliente:** **{pedido['NOME_CLIENTE']}** (Contato: {pedido['CONTATO_CLIENTE']})")
+                st.markdown(f"**Data do Pedido:** {data_hora}")
+                st.markdown(f"**Valor Total:** R$ {pedido['VALOR_TOTAL']:.2f}")
+                
+                # Exibe o nível/saldo que o cliente VIU no catálogo
+                nivel_catalogo = detalhes_pedido.get('cliente_nivel_atual', 'N/A')
+                saldo_catalogo = detalhes_pedido.get('cliente_saldo_cashback', 0.00)
+
+                st.markdown(f"💎 Nível (Visto pelo cliente): **{nivel_catalogo}** | Saldo: R$ {saldo_catalogo:.2f}")
+                
+                with st.expander("Ver Itens do Pedido"):
+                    if 'itens' in detalhes_pedido:
+                        itens_resumo = "\n".join([f"- {i['quantidade']}x {i['nome']} (R$ {i['preco']:.2f} un.)" for i in detalhes_pedido['itens']])
+                        st.markdown(itens_resumo)
+                    else:
+                        st.text(pedido['ITENS_PEDIDO'])
+
+            with col_acao:
+                st.markdown("---", unsafe_allow_html=True)
+                
+                if st.button("Finalizar e Creditar Cashback", key=f"finalizar_{pedido_id}", type='primary', use_container_width=True):
+                    
+                    # 1. LANÇAR VENDA E CRÉDITO DE CASHBACK
+                    sucesso_lancamento = lancar_venda(
+                        cliente_nome=pedido['NOME_CLIENTE'],
+                        valor_venda=pedido['VALOR_TOTAL'],
+                        valor_cashback=0, # Será recalculado dentro da função lancar_venda
+                        data_venda=pedido['DATA_HORA'].date() if pd.notna(pedido['DATA_HORA']) else date.today(),
+                        venda_turbo_selecionada=False,
+                        contato_cliente=pedido['CONTATO_CLIENTE'] # Contato limpo
+                    )
+                    
+                    # 2. ATUALIZAR STATUS DO PEDIDO PARA FINALIZADO SOMENTE SE O LANÇAMENTO FOI BEM SUCEDIDO
+                    if sucesso_lancamento:
+                        # Busca o índice do pedido no DF principal (st.session_state.pedidos)
+                        idx_a_atualizar = st.session_state.pedidos[st.session_state.pedidos['ID_PEDIDO'].astype(str) == pedido['ID_PEDIDO'].astype(str)].index
+                        
+                        if not idx_a_atualizar.empty:
+                             st.session_state.pedidos.loc[idx_a_atualizar, 'STATUS'] = 'FINALIZADO' 
+                             salvar_dados_no_github(st.session_state.pedidos, PEDIDOS_CATALOGO_CSV, f"PEDIDO {pedido['ID_PEDIDO']} FINALIZADO (Processado Admin)") 
+                             st.success(f"Pedido {pedido['ID_PEDIDO']} de {pedido['NOME_CLIENTE']} finalizado. Cashback creditado.")
+                        else:
+                             st.warning("Status de pedido não pôde ser atualizado no CSV.")
+                        
+                        st.rerun()
+                
+                if st.button("Cancelar Pedido", key=f"cancelar_{pedido_id}", use_container_width=True):
+                    idx_a_atualizar = st.session_state.pedidos[st.session_state.pedidos['ID_PEDIDO'].astype(str) == pedido['ID_PEDIDO'].astype(str)].index
+                    
+                    if not idx_a_atualizar.empty:
+                        st.session_state.pedidos.loc[idx_a_atualizar, 'STATUS'] = 'CANCELADO'
+                        salvar_dados_no_github(st.session_state.pedidos, PEDIDOS_CATALOGO_CSV, f"PEDIDO {pedido['ID_PEDIDO']} CANCELADO (Processado Admin)")
+                        st.warning(f"Pedido {pedido['ID_PEDIDO']} CANCELADO. Nenhum cashback creditado.")
+                        st.rerun()
+
+
 # ==============================================================================
 # FUNÇÃO CASHBACK PRINCIPAL (ISOLADA)
 # ==============================================================================
@@ -801,20 +982,27 @@ def cashback_system():
     if 'deleting_client' not in st.session_state: st.session_state.deleting_client = False
     if 'valor_venda' not in st.session_state: st.session_state.valor_venda = 0.00
     if 'data_version' not in st.session_state: st.session_state.data_version = 0
+    
+    # Carregamento de todos os DFs
     if 'clientes' not in st.session_state or 'cashback_tab_atual' not in st.session_state:
         st.session_state.clientes, st.session_state.lancamentos, st.session_state.produtos_turbo = carregar_dados()
+        st.session_state.pedidos = carregar_dados_pedidos() 
         st.session_state.cashback_tab_atual = "Home"
 
     PAGINAS_INTERNAS = {
-        "Home": render_home, "Lançamento": render_lancamento, "Cadastro": render_cadastro,
-        "Produtos Turbo": render_produtos_turbo, "Relatórios": render_relatorios
+        "Home": render_home, 
+        "Lançamento": render_lancamento, 
+        "Cadastro": render_cadastro,
+        "Produtos Turbo": render_produtos_turbo, 
+        "Relatórios": render_relatorios,
+        "Processar Pedidos": render_processamento_pedidos # NOVO
     }
     
-    tab_list = ["Home", "Lançamento", "Cadastro", "Produtos Turbo", "Relatórios"]
+    tab_list = ["Home", "Lançamento", "Cadastro", "Produtos Turbo", "Relatórios", "Processar Pedidos"] # NOVO
     
     tabs = st.tabs(tab_list)
 
-    # A maneira padrão e recomendada de usar st.tabs
+    # Adicionando a nova aba e as páginas originais
     with tabs[0]:
         PAGINAS_INTERNAS["Home"]()
     with tabs[1]:
@@ -825,5 +1013,7 @@ def cashback_system():
         PAGINAS_INTERNAS["Produtos Turbo"]()
     with tabs[4]:
         PAGINAS_INTERNAS["Relatórios"]()
+    with tabs[5]: # Se for a 6ª aba (índice 5)
+        PAGINAS_INTERNAS["Processar Pedidos"]()
 
 # Nenhuma chamada de função deve estar aqui. O app.py chama cashback_system().
