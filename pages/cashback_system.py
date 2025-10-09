@@ -622,7 +622,7 @@ def render_produtos_turbo():
         df_display['Data Início'] = pd.to_datetime(df_display['Data Início']) 
         df_display['Data Fim'] = pd.to_datetime(df_display['Data Fim'])
         
-        df_display['Status'] = df_display.apply(lambda row: 'ATIVO' if (pd.notna(row['Data Início']) and pd.notna(row['Data Fim']) and row['Data Início'].date() <= hoje and row['Data Fim'].date() >= hoje) else 'INATIVO', axis=1)
+        df_display['Status'] = df_display.apply(lambda row: 'ATIVO' if (pd.notna(row['Data Início']) and pd.notna(row['Data Fim']) and row['Data Início'].dt.date <= hoje and row['Data Fim'].dt.date >= hoje) else 'INATIVO', axis=1)
         st.dataframe(df_display[['Nome Produto', 'Data Início', 'Data Fim', 'Status']], use_container_width=True, hide_index=True)
         st.subheader("Excluir Produto")
         produto_selecionado = st.selectbox("Selecione o Produto para Excluir:", options=[''] + df_display['Nome Produto'].tolist())
@@ -944,16 +944,20 @@ def render_processamento_pedidos():
                     
                     # 2. ATUALIZAR STATUS DO PEDIDO PARA FINALIZADO SOMENTE SE O LANÇAMENTO FOI BEM SUCEDIDO
                     if sucesso_lancamento:
-                        # Busca o índice do pedido no DF principal (st.session_state.pedidos)
                         # CORREÇÃO APLICADA: Usa str() no valor individual para evitar AttributeError
                         idx_a_atualizar = st.session_state.pedidos[st.session_state.pedidos['ID_PEDIDO'].astype(str) == str(pedido['ID_PEDIDO'])].index
                         
                         if not idx_a_atualizar.empty:
                              st.session_state.pedidos.loc[idx_a_atualizar, 'STATUS'] = 'FINALIZADO' 
-                             salvar_dados_no_github(st.session_state.pedidos, PEDIDOS_CATALOGO_CSV, f"PEDIDO {pedido['ID_PEDIDO']} FINALIZADO (Processado Admin)") 
-                             st.success(f"Pedido {pedido['ID_PEDIDO']} de {pedido['NOME_CLIENTE']} finalizado. Cashback creditado.")
+                             sucesso_salvamento = salvar_dados_no_github(st.session_state.pedidos, PEDIDOS_CATALOGO_CSV, f"PEDIDO {pedido['ID_PEDIDO']} FINALIZADO (Processado Admin)") 
+                             
+                             if sucesso_salvamento:
+                                 st.success(f"Pedido {pedido['ID_PEDIDO']} de {pedido['NOME_CLIENTE']} finalizado. Cashback creditado.")
+                             else:
+                                 st.error("Cashback creditado, mas FALHA ao salvar o status no GitHub. Verifique as permissões do Token.")
+
                         else:
-                             st.warning("Status de pedido não pôde ser atualizado no CSV.")
+                             st.warning("Cashback creditado, mas status de pedido não pôde ser atualizado no CSV.")
                         
                         st.rerun()
                 
@@ -963,8 +967,12 @@ def render_processamento_pedidos():
                     
                     if not idx_a_atualizar.empty:
                         st.session_state.pedidos.loc[idx_a_atualizar, 'STATUS'] = 'CANCELADO'
-                        salvar_dados_no_github(st.session_state.pedidos, PEDIDOS_CATALOGO_CSV, f"PEDIDO {pedido['ID_PEDIDO']} CANCELADO (Processado Admin)")
-                        st.warning(f"Pedido {pedido['ID_PEDIDO']} CANCELADO. Nenhum cashback creditado.")
+                        sucesso_salvamento = salvar_dados_no_github(st.session_state.pedidos, PEDIDOS_CATALOGO_CSV, f"PEDIDO {pedido['ID_PEDIDO']} CANCELADO (Processado Admin)")
+                        
+                        if sucesso_salvamento:
+                            st.warning(f"Pedido {pedido['ID_PEDIDO']} CANCELADO. Nenhum cashback creditado.")
+                        else:
+                            st.error("Pedido cancelado na memória, mas FALHA ao salvar o status no GitHub. Verifique as permissões do Token.")
                         st.rerun()
 
 
