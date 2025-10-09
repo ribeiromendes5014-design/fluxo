@@ -1513,7 +1513,8 @@ def livro_caixa():
 
     # Carregamento dos DataFrames
     df_produtos = st.session_state.produtos
-    df_promocoes = norm_promocoes(st.cache_data(show_spinner=False)(lambda: carregar_promocoes())())
+    df_promocoes_bruto = carregar_promocoes()
+    df_promocoes = norm_promocoes(df_promocoes_bruto) 
     df_cashback = carregar_cashback() # <-- CARREGA O DATAFRAME DE CASHBACK
 
     # ==================== FUNÇÕES AUXILIARES DE ESCOPO ====================
@@ -1531,120 +1532,118 @@ def livro_caixa():
         st.session_state.cashback_cliente_nome = None
 
     # ==================== LÓGICA DO DATAFRAME ====================
-df_dividas = st.session_state.df
-df_exibicao = processar_dataframe(df_dividas)
+    df_dividas = st.session_state.df
+    df_exibicao = processar_dataframe(df_dividas)
 
-# ==================== CORREÇÃO CRÍTICA DO VALUERROR: GARANTIR ÍNDICE ÚNICO ====================
-# Força a redefinição do índice se ele não for único, o que resolve a maioria dos problemas de filtro no Pandas/Streamlit
-if not df_exibicao.empty and not df_exibicao.index.is_unique:
-    df_exibicao = df_exibicao.reset_index(drop=True)
-# ==============================================================================================
+    # CORREÇÃO CRÍTICA DO VALUERROR: GARANTIR ÍNDICE ÚNICO
+    if not df_exibicao.empty and not df_exibicao.index.is_unique:
+        df_exibicao = df_exibicao.reset_index(drop=True)
 
-produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()].copy()
-opcoes_produtos = [""] + produtos_para_venda.apply(
-    lambda row: f"{row.ID} | {row.Nome} ({row.Marca}) | Estoque: {row.Quantidade}", axis=1
-).tolist()
-OPCAO_MANUAL = "Adicionar Item Manual (Sem Controle de Estoque)"
-opcoes_produtos.append(OPCAO_MANUAL)
+    produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()].copy()
+    opcoes_produtos = [""] + produtos_para_venda.apply(
+        lambda row: f"{row.ID} | {row.Nome} ({row.Marca}) | Estoque: {row.Quantidade}", axis=1
+    ).tolist()
+    OPCAO_MANUAL = "Adicionar Item Manual (Sem Controle de Estoque)"
+    opcoes_produtos.append(OPCAO_MANUAL)
 
-def extrair_id_do_nome(opcoes_str):
-    if ' | ' in opcoes_str: return opcoes_str.split(' | ')[0]
-    return None
+    def extrair_id_do_nome(opcoes_str):
+        if ' | ' in opcoes_str: return opcoes_str.split(' | ')[0]
+        return None
     
-def encontrar_opcao_por_cb(codigo_barras, produtos_df, opcoes_produtos_list):
-    if not codigo_barras: return None
-    
-    produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
-    
-    if not produto_encontrado.empty:
-        produto_id = produto_encontrado.iloc[0]["ID"]
+    def encontrar_opcao_por_cb(codigo_barras, produtos_df, opcoes_produtos_list):
+        if not codigo_barras: return None
         
-        for opcao in opcoes_produtos_list:
-            if opcao.startswith(f"{produto_id} |"):
-                return opcao
-    return None
-    
-if "input_nome_prod_manual" not in st.session_state: st.session_state.input_nome_prod_manual = ""
-if "input_qtd_prod_manual" not in st.session_state: st.session_state.input_qtd_prod_manual = 1.0
-if "input_preco_prod_manual" not in st.session_state: st.session_state.input_preco_prod_manual = 0.01
-if "input_custo_prod_manual" not in st.session_state: st.session_state.input_custo_prod_manual = 0.00
-if "input_produto_selecionado" not in st.session_state: st.session_state.input_produto_selecionado = ""
-
-edit_mode = st.session_state.edit_id is not None
-movimentacao_para_editar = None
-
-default_loja = LOJAS_DISPONIVEIS[0]
-default_data = datetime.now().date()
-default_cliente = ""
-default_valor = 0.01
-default_forma = "Dinheiro"
-default_tipo = "Entrada"
-default_produtos_json = ""
-default_categoria = CATEGORIAS_SAIDA[0]
-default_status = "Realizada" 
-default_data_pagamento = None 
-
-if edit_mode:
-    original_idx_to_edit = st.session_state.edit_id
-    linha_df_exibicao = df_exibicao[df_exibicao['original_index'] == original_idx_to_edit]
-
-    if not linha_df_exibicao.empty:
-        movimentacao_para_editar = linha_df_exibicao.iloc[0]
-        default_loja = movimentacao_para_editar['Loja']
-        default_data = movimentacao_para_editar['Data'] if pd.notna(movimentacao_para_editar['Data']) else datetime.now().date()
-        default_cliente = movimentacao_para_editar['Cliente']
-        default_valor = abs(movimentacao_para_editar['Valor']) if movimentacao_para_editar['Valor'] != 0 else 0.01 
-        default_forma = movimentacao_para_editar['Forma de Pagamento']
-        default_tipo = movimentacao_para_editar['Tipo']
-        default_produtos_json = movimentacao_para_editar['Produtos Vendidos'] if pd.notna(movimentacao_para_editar['Produtos Vendidos']) else ""
-        default_categoria = movimentacao_para_editar['Categoria']
-        default_status = movimentacao_para_editar['Status'] 
-        default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None) 
+        produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
         
-        # CORREÇÃO: Carrega a lista de produtos APENAS se o item for diferente do último carregado
-        if st.session_state.edit_id_loaded != original_idx_to_edit:
-            if default_tipo == "Entrada" and default_produtos_json:
-                try:
+        if not produto_encontrado.empty:
+            produto_id = produto_encontrado.iloc[0]["ID"]
+            
+            for opcao in opcoes_produtos_list:
+                if opcao.startswith(f"{produto_id} |"):
+                    return opcao
+        return None
+        
+    if "input_nome_prod_manual" not in st.session_state: st.session_state.input_nome_prod_manual = ""
+    if "input_qtd_prod_manual" not in st.session_state: st.session_state.input_qtd_prod_manual = 1.0
+    if "input_preco_prod_manual" not in st.session_state: st.session_state.input_preco_prod_manual = 0.01
+    if "input_custo_prod_manual" not in st.session_state: st.session_state.input_custo_prod_manual = 0.00
+    if "input_produto_selecionado" not in st.session_state: st.session_state.input_produto_selecionado = ""
+
+    edit_mode = st.session_state.edit_id is not None
+    movimentacao_para_editar = None
+
+    default_loja = LOJAS_DISPONIVEIS[0]
+    default_data = datetime.now().date()
+    default_cliente = ""
+    default_valor = 0.01
+    default_forma = "Dinheiro"
+    default_tipo = "Entrada"
+    default_produtos_json = ""
+    default_categoria = CATEGORIAS_SAIDA[0]
+    default_status = "Realizada" 
+    default_data_pagamento = None 
+
+    if edit_mode:
+        original_idx_to_edit = st.session_state.edit_id
+        linha_df_exibicao = df_exibicao[df_exibicao['original_index'] == original_idx_to_edit]
+
+        if not linha_df_exibicao.empty:
+            movimentacao_para_editar = linha_df_exibicao.iloc[0]
+            default_loja = movimentacao_para_editar['Loja']
+            default_data = movimentacao_para_editar['Data'] if pd.notna(movimentacao_para_editar['Data']) else datetime.now().date()
+            default_cliente = movimentacao_para_editar['Cliente']
+            default_valor = abs(movimentacao_para_editar['Valor']) if movimentacao_para_editar['Valor'] != 0 else 0.01 
+            default_forma = movimentacao_para_editar['Forma de Pagamento']
+            default_tipo = movimentacao_para_editar['Tipo']
+            default_produtos_json = movimentacao_para_editar['Produtos Vendidos'] if pd.notna(movimentacao_para_editar['Produtos Vendidos']) else ""
+            default_categoria = movimentacao_para_editar['Categoria']
+            default_status = movimentacao_para_editar['Status'] 
+            default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None) 
+            
+            # CORREÇÃO: Carrega a lista de produtos APENAS se o item for diferente do último carregado
+            if st.session_state.edit_id_loaded != original_idx_to_edit:
+                if default_tipo == "Entrada" and default_produtos_json:
                     try:
-                        produtos_list = json.loads(default_produtos_json)
-                    except json.JSONDecodeError:
-                        produtos_list = ast.literal_eval(default_produtos_json)
+                        try:
+                            produtos_list = json.loads(default_produtos_json)
+                        except json.JSONDecodeError:
+                            produtos_list = ast.literal_eval(default_produtos_json)
 
-                    for p in produtos_list:
-                        p['Quantidade'] = float(p.get('Quantidade', 0))
-                        p['Preço Unitário'] = float(p.get('Preço Unitário', 0))
-                        p['Custo Unitário'] = float(p.get('Custo Unitário', 0))
-                        p['Produto_ID'] = str(p.get('Produto_ID', ''))
-                        
-                    st.session_state.lista_produtos = [p for p in produtos_list if p['Quantidade'] > 0] 
-                except:
+                        for p in produtos_list:
+                            p['Quantidade'] = float(p.get('Quantidade', 0))
+                            p['Preço Unitário'] = float(p.get('Preço Unitário', 0))
+                            p['Custo Unitário'] = float(p.get('Custo Unitário', 0))
+                            p['Produto_ID'] = str(p.get('Produto_ID', ''))
+                            
+                        st.session_state.lista_produtos = [p for p in produtos_list if p['Quantidade'] > 0] 
+                    except:
+                        st.session_state.lista_produtos = []
+                else: # Tipo Saída ou sem produtos, limpa a lista.
                     st.session_state.lista_produtos = []
-            else: # Tipo Saída ou sem produtos, limpa a lista.
-                st.session_state.lista_produtos = []
+                
+                st.session_state.edit_id_loaded = original_idx_to_edit # Marca como carregado
+                st.session_state.cb_lido_livro_caixa = "" # Limpa CB lido
+                
+                # Reseta estado de cashback ao carregar uma edição
+                reset_cashback_state()
             
-            st.session_state.edit_id_loaded = original_idx_to_edit # Marca como carregado
-            st.session_state.cb_lido_livro_caixa = "" # Limpa CB lido
+            st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
             
-            # Reseta estado de cashback ao carregar uma edição
-            reset_cashback_state()
-        
-        st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
-        
+        else:
+            st.session_state.edit_id = None
+            st.session_state.edit_id_loaded = None # Limpa a chave de controle
+            st.session_state.lista_produtos = [] # Limpeza adicional
+            edit_mode = False
+            st.info("Movimentação não encontrada, saindo do modo de edição.")
+            st.rerun() 
     else:
-        st.session_state.edit_id = None
-        st.session_state.edit_id_loaded = None # Limpa a chave de controle
-        st.session_state.lista_produtos = [] # Limpeza adicional
-        edit_mode = False
-        st.info("Movimentação não encontrada, saindo do modo de edição.")
-        st.rerun() 
-else:
-    # NOVO: Se não está no modo edição, garante que a lista esteja vazia e a flag limpa
-    if st.session_state.edit_id_loaded is not None:
-         st.session_state.edit_id_loaded = None
-         st.session_state.lista_produtos = []
-    # NOVO: Limpa o alerta de dívida, exceto se houver um re-run imediato
-    if st.session_state.cliente_selecionado_divida and st.session_state.cliente_selecionado_divida != "CHECKED":
-         st.session_state.cliente_selecionado_divida = None
+        # NOVO: Se não está no modo edição, garante que a lista esteja vazia e a flag limpa
+        if st.session_state.edit_id_loaded is not None:
+             st.session_state.edit_id_loaded = None
+             st.session_state.lista_produtos = []
+        # NOVO: Limpa o alerta de dívida, exceto se houver um re-run imediato
+        if st.session_state.cliente_selecionado_divida and st.session_state.cliente_selecionado_divida != "CHECKED":
+             st.session_state.cliente_selecionado_divida = None
 
 
     # --- CRIAÇÃO DAS NOVAS ABAS ---
@@ -2943,6 +2942,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
