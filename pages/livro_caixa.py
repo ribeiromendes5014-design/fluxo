@@ -559,6 +559,53 @@ def salvar_clientes_cash_github(df: pd.DataFrame, commit_message: str):
     except Exception as e:
         return False
 
+    # ===================================================================
+    # CORREÇÃO PRINCIPAL: Renomeia as colunas do app para o padrão do CSV antes de salvar
+    # ===================================================================
+    mapa_colunas_reverso = {
+        "Nome": "NOME",
+        "Cashback": "CASHBACK_DISPONIVEL",
+        "TotalGasto": "GASTO_ACUMULADO",
+        "Nivel": "NIVEL_ATUAL"
+    }
+    df_temp.rename(columns=mapa_colunas_reverso, inplace=True)
+    # ===================================================================
+    
+    # Garante que TODAS as colunas do seu CSV original existam no DataFrame a ser salvo.
+    # Preenche com valores vazios se alguma coluna estiver faltando (ex: em um cliente novo).
+    colunas_finais_csv = [
+        "NOME", "APELIDO/DESCRIÇÃO", "CONTATO", "CASHBACK_DISPONIVEL", 
+        "GASTO_ACUMULADO", "NIVEL_ATUAL", "INDICADO_POR", 
+        "PRIMEIRA_COMPRA_FEITA", "CONTATO_LIMPO"
+    ]
+    for col in colunas_finais_csv:
+        if col not in df_temp.columns:
+            # Define um valor padrão apropriado para colunas que podem ser numéricas
+            if col in ["CASHBACK_DISPONIVEL", "GASTO_ACUMULADO"]:
+                df_temp[col] = 0.0
+            else:
+                df_temp[col] = ""
+
+    # Reordena o DataFrame para manter o padrão exato do seu arquivo
+    df_temp = df_temp[colunas_finais_csv]
+
+    try:
+        g = Github(TOKEN)
+        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
+        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
+        
+        try:
+            contents = repo.get_contents(ARQ_CLIENTES_CASH, ref=BRANCH)
+            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
+        except Exception:
+            repo.create_file(ARQ_CLIENTES_CASH, commit_message, csv_string, branch=BRANCH)
+        
+        carregar_clientes_cash.clear()
+        return True
+    
+    except Exception as e:
+        return False
+
 @st.cache_data(show_spinner="Carregando produtos do estoque...")
 def inicializar_produtos():
     COLUNAS_PRODUTOS = [
@@ -3249,6 +3296,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
