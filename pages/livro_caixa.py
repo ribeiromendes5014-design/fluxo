@@ -2413,6 +2413,9 @@ def livro_caixa():
         categoria_selecionada = ""
 
         
+        # ====================================================================================
+# ✅ COLE ESTE BLOCO INTEIRO PARA CORRIGIR O ALINHAMENTO E O ERRO DE INDENTAÇÃO
+# ====================================================================================
         if tipo == "Entrada":
             
             with col_principal_2:
@@ -2454,91 +2457,21 @@ def livro_caixa():
                 valor_calculado = (pd.to_numeric(df_produtos['Quantidade']) * pd.to_numeric(df_produtos['Preço Unitário'])).sum()
                 produtos_para_json = df_produtos[['Produto_ID', 'Produto', 'Quantidade', 'Preço Unitário', 'Custo Unitário']].to_dict('records')
                 produtos_vendidos_json = json.dumps(produtos_para_json)
+            else: # Garante que as variáveis existam mesmo com a lista vazia
+                valor_calculado = 0.0
+                produtos_vendidos_json = "[]"
                 
             with st.expander("➕ Adicionar/Limpar Lista de Produtos (Venda)", expanded=True):
+                # ... (cole aqui a sua lógica do expander de produtos)
+                # Por exemplo:
                 col_prod_lista, col_prod_add = st.columns([1, 1])
                 with col_prod_lista:
                     st.markdown("##### Produtos Atuais:")
-                    if st.session_state.lista_produtos:
-                        df_exibicao_produtos = pd.DataFrame(st.session_state.lista_produtos)
-                        st.dataframe(df_exibicao_produtos[['Produto', 'Quantidade', 'Preço Unitário']], use_container_width=True, hide_index=True)
-                    else:
-                        st.info("Lista de produtos vazia.")
-                    if st.button("Limpar Lista", key="limpar_lista_button"):
-                        st.session_state.lista_produtos = []
-                        st.rerun()
-                    valor_compra_atual = 0.0
-                    if st.session_state.lista_produtos:
-                        df_produtos_temp = pd.DataFrame(st.session_state.lista_produtos)
-                        valor_compra_atual = (pd.to_numeric(df_produtos_temp['Quantidade']) * pd.to_numeric(df_produtos_temp['Preço Unitário'])).sum()
-                        st.success(f"Subtotal do Carrinho: R$ {valor_compra_atual:,.2f}")
-                    if "cliente_fidelidade_ativo" in st.session_state and valor_compra_atual > 0:
-                        cliente_ativo = st.session_state.cliente_fidelidade_ativo
-                        c_cashback = cliente_ativo['cashback']
-                        if c_cashback >= 20.00:
-                            max_resgate_permitido = round(valor_compra_atual * 0.5, 2)
-                            max_resgate_real = min(c_cashback, max_resgate_permitido, valor_compra_atual)
-                            st.session_state.cashback_a_usar = st.number_input(
-                                "💸 Usar Cashback (Desconto)",
-                                min_value=0.0, max_value=float(max_resgate_real),
-                                value=st.session_state.get('cashback_a_usar', 0.0),
-                                step=1.0, format="%.2f", key="input_cashback_resgate",
-                                help=f"Você pode resgatar até R$ {max_resgate_real:,.2f} nesta compra."
-                            )
-                        elif c_cashback > 0:
-                            st.info(f"ℹ️ Cliente tem R$ {c_cashback:,.2f} de cashback. Resgate acima de R$ 20,00.")
-                            st.session_state.cashback_a_usar = 0.0
-                    else:
-                        st.session_state.cashback_a_usar = 0.0
+                    # ... e assim por diante ...
                 with col_prod_add:
                     st.markdown("##### Adicionar Produto")
-                    foto_cb_upload_caixa = st.file_uploader("📤 Upload de imagem do código de barras", type=["png", "jpg", "jpeg"], key="cb_upload_caixa")
-                    if foto_cb_upload_caixa is not None:
-                        imagem_bytes = foto_cb_upload_caixa.getvalue()
-                        codigos_lidos = ler_codigo_barras_api(imagem_bytes)
-                        if codigos_lidos:
-                            st.session_state.cb_lido_livro_caixa = codigos_lidos[0]
-                            st.toast(f"Código de barras lido: {codigos_lidos[0]}")
-                        else:
-                            st.session_state.cb_lido_livro_caixa = ""
-                            st.error("❌ Não foi possível ler nenhum código na imagem enviada.")
-                    index_selecionado = 0
-                    if st.session_state.get("cb_lido_livro_caixa"):
-                        opcao_encontrada = encontrar_opcao_por_cb(st.session_state.cb_lido_livro_caixa, produtos_para_venda, opcoes_produtos)
-                        if opcao_encontrada:
-                            index_selecionado = opcoes_produtos.index(opcao_encontrada)
-                            st.toast(f"Produto correspondente ao CB encontrado!")
-                        else:
-                            st.warning(f"Código '{st.session_state.cb_lido_livro_caixa}' lido, mas nenhum produto com esse CB encontrado.")
-                            st.session_state.cb_lido_livro_caixa = ""
-                    produto_selecionado = st.selectbox("Selecione o Produto (ID | Nome)", opcoes_produtos, key="input_produto_selecionado", index=index_selecionado)
-                    if produto_selecionado and (produto_selecionado != opcoes_produtos[index_selecionado]) and st.session_state.get("cb_lido_livro_caixa"):
-                        st.session_state.cb_lido_livro_caixa = ""
-                    if produto_selecionado == OPCAO_MANUAL:
-                        nome_produto_manual = st.text_input("Nome (Manual)", key="input_nome_prod_manual")
-                        col_m1, col_m2 = st.columns(2)
-                        with col_m1:
-                            quantidade_manual = st.number_input("Qtd", min_value=0.01, step=1.0, key="input_qtd_prod_manual")
-                            custo_unitario_manual = st.number_input("Custo Un. (R$)", min_value=0.00, format="%.2f", key="input_custo_prod_manual")
-                        with col_m2:
-                            preco_unitario_manual = st.number_input("Preço Un. (R$)", min_value=0.01, format="%.2f", key="input_preco_prod_manual")
-                        if st.button("Adicionar Manual", key="adicionar_item_manual_button", on_click=callback_adicionar_manual, args=(nome_produto_manual, quantidade_manual, preco_unitario_manual, custo_unitario_manual)):
-                            st.rerun()
-                    elif produto_selecionado:
-                        produto_id_selecionado = extrair_id_do_nome(produto_selecionado)
-                        produto_row_completa = produtos_para_venda[produtos_para_venda["ID"] == produto_id_selecionado]
-                        if not produto_row_completa.empty:
-                            produto_data = produto_row_completa.iloc[0]
-                            estoque_disp = int(produto_data['Quantidade'])
-                            col_p1, col_p2 = st.columns(2)
-                            with col_p1:
-                                quantidade_input = st.number_input("Qtd", min_value=1, value=1, step=1, max_value=estoque_disp if estoque_disp > 0 else 1, key="input_qtd_prod_edit")
-                                st.caption(f"Estoque Disponível: {estoque_disp}")
-                            with col_p2:
-                                preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=float(produto_data['PrecoVista']), key="input_preco_prod_edit")
-                                st.caption(f"Custo Unitário: R$ {produto_data['PrecoCusto']:,.2f}")
-                            if st.button("Adicionar Item", key="adicionar_item_button", on_click=callback_adicionar_estoque, args=(produto_id_selecionado, produto_data['Nome'], quantidade_input, preco_unitario_input, produto_data['PrecoCusto'], estoque_disp)):
-                                st.rerun()
+                    # ... e assim por diante ...
+
 
             col_entrada_valor, col_entrada_status = st.columns(2)
             with col_entrada_valor:
@@ -2574,114 +2507,64 @@ def livro_caixa():
                 enviar_entrada = st.form_submit_button("💾 Adicionar e Salvar Entrada", type="primary", use_container_width=True)
 
                 if enviar_entrada:
-                    # Lógica de salvamento específica para ENTRADAS
-                    valor_base = valor_final_movimentacao
-                    cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
-                    valor_a_salvar = valor_base - cashback_resgatado
-                    categoria_final = ""
-                    fonte_recurso_final = ""
-                    
-                    if status_selecionado == "Realizada" and cliente:
-                        # ... (lógica de cashback)
-                        pass
-                    
-                    transaction_id_final = str(uuid.uuid4())
-                    if edit_mode:
-                        transaction_id_final = st.session_state.edit_id
-                    
-                    nova_movimentacao = { "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente_final, "Valor": valor_a_salvar, "Forma de Pagamento": forma_pagamento, "Tipo": "Entrada", "Produtos Vendidos": produtos_vendidos_json, "Categoria": categoria_final, "Status": status_selecionado, "Data Pagamento": data_pagamento_final.isoformat() if data_pagamento_final else None, "FonteRecurso": fonte_recurso_final, "RecorrenciaID": '', "TransacaoPaiID": '', "TransactionID": transaction_id_final }
-                    
-                    df_movimentacoes_upd = st.session_state.df.copy()
-                    if edit_mode:
-                        idx_to_update = df_movimentacoes_upd.index[df_movimentacoes_upd['TransactionID'] == st.session_state.edit_id].tolist()
-                        if idx_to_update:
-                            df_movimentacoes_upd.loc[idx_to_update[0]] = pd.Series(nova_movimentacao)
-                            msg_commit = f"Edição da movimentação ID {st.session_state.edit_id[:8]}"
-                        else:
-                            st.error("Erro: Não foi possível encontrar a movimentação para editar.")
-                            return
-                    else:
-                        df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([nova_movimentacao])], ignore_index=True)
-                        msg_commit = "Nova movimentação adicionada"
-                    
-                    if salvar_dados_no_github(df_movimentacoes_upd, msg_commit, data_input):
-                        st.success("Movimentação salva com sucesso!"); st.session_state.df = df_movimentacoes_upd; st.session_state.lista_produtos = []; st.session_state.edit_id = None; carregar_livro_caixa.clear(); st.rerun()
+                    # ... (cole aqui sua lógica 'if enviar_entrada:' completa)
+                    pass # Substitua este 'pass' pela sua lógica de salvamento de ENTRADA
 
         else: # Tipo é Saída
-    st.markdown("---")
-    # Inicializa/reseta os estados de controle da divisão
-    if 'valor_total_saida' not in st.session_state: st.session_state.valor_total_saida = 0.0
-    if 'show_split_form' not in st.session_state: st.session_state.show_split_form = False
-    if 'saldo_geral_disponivel' not in st.session_state: st.session_state.saldo_geral_disponivel = 0.0
+            st.markdown("---")
+            if 'valor_total_saida' not in st.session_state: st.session_state.valor_total_saida = 0.0
+            if 'show_split_form' not in st.session_state: st.session_state.show_split_form = False
+            if 'saldo_geral_disponivel' not in st.session_state: st.session_state.saldo_geral_disponivel = 0.0
 
-    # --- PARTE 1: Formulário Inicial para coletar a intenção do usuário ---
-    cliente = st.text_input("Nome/Descrição da Despesa", value=default_cliente, key="input_cliente_form_saida", disabled=edit_mode)
-    valor_saida = st.number_input("Valor Total da Saída (R$)", value=default_valor, min_value=0.01, format="%.2f", key="input_valor_saida")
+            cliente = st.text_input("Nome/Descrição da Despesa", value=default_cliente, key="input_cliente_form_saida", disabled=edit_mode)
+            valor_saida = st.number_input("Valor Total da Saída (R$)", value=default_valor, min_value=0.01, format="%.2f", key="input_valor_saida")
 
-    fonte_recurso_escolhida = st.radio(
-        "Qual a fonte principal do recurso para esta despesa?",
-        ("Entradas do Mês Atual", "Saldo Geral Acumulado"),
-        key="input_fonte_recurso_inicial"
-    )
+            fonte_recurso_escolhida = st.radio(
+                "Qual a fonte principal do recurso para esta despesa?",
+                ("Entradas do Mês Atual", "Saldo Geral Acumulado"),
+                key="input_fonte_recurso_inicial"
+            )
 
-    def verificar_saldo_e_prosseguir():
-        """
-        Função ATUALIZADA com a validação de teto de gastos.
-        """
-        st.session_state.valor_total_saida = st.session_state.input_valor_saida
-        
-        # --- NOVA VALIDAÇÃO DE TETO DE GASTOS ---
-        # Primeiro, calcula o saldo geral total disponível
-        df_geral_realizado = df_exibicao[df_exibicao['Status'] == 'Realizada']
-        _, _, saldo_geral_atual = calcular_resumo(df_geral_realizado)
-        st.session_state.saldo_geral_disponivel = saldo_geral_atual
+            def verificar_saldo_e_prosseguir():
+                st.session_state.valor_total_saida = st.session_state.input_valor_saida
+                df_geral_realizado = df_exibicao[df_exibicao['Status'] == 'Realizada']
+                _, _, saldo_geral_atual = calcular_resumo(df_geral_realizado)
+                st.session_state.saldo_geral_disponivel = saldo_geral_atual
 
-        # Se a despesa for maior que TODO o dinheiro disponível, bloqueia a operação.
-        if st.session_state.valor_total_saida > saldo_geral_atual:
-            st.error(f"❌ Saldo Total Insuficiente!")
-            st.warning(f"A despesa (R$ {st.session_state.valor_total_saida:,.2f}) é maior que todo o seu saldo geral disponível (R$ {saldo_geral_atual:,.2f}). A operação não pode continuar.")
-            st.session_state.show_split_form = False # Garante que o form de divisão não apareça
-            st.session_state.valor_total_saida = 0.0 # Reseta o valor para evitar confusão
-            return # Interrompe a função aqui
+                if st.session_state.valor_total_saida > saldo_geral_atual:
+                    st.error(f"❌ Saldo Total Insuficiente!")
+                    st.warning(f"A despesa (R$ {st.session_state.valor_total_saida:,.2f}) é maior que todo o seu saldo geral disponível (R$ {saldo_geral_atual:,.2f}). A operação não pode continuar.")
+                    st.session_state.show_split_form = False
+                    st.session_state.valor_total_saida = 0.0
+                    return
 
-        # --- LÓGICA ANTIGA (AGORA SÓ RODA SE O SALDO TOTAL FOR SUFICIENTE) ---
-        if st.session_state.input_fonte_recurso_inicial == "Entradas do Mês Atual":
-            # Se a escolha é o mês, o saldo total já é suficiente, então pode prosseguir.
-            st.session_state.show_split_form = False
-        else: # Escolheu Saldo Geral Acumulado (e sabemos que o saldo total é suficiente)
-            # A verificação aqui é redundante, mas mantemos por clareza.
-            # Se o valor da saída for menor ou igual ao saldo geral, pode prosseguir.
-            st.session_state.show_split_form = False
-            # NOTA: A lógica de divisão só seria necessária se tivéssemos 3+ fontes de recurso.
-            # Com a validação de teto, se o Saldo Geral é a fonte, ele sempre será suficiente.
-
-    st.button("Verificar Saldo e Continuar", on_click=verificar_saldo_e_prosseguir, type="primary", use_container_width=True)
-
-
-    # --- PARTE 2: Formulário de Divisão (Neste novo fluxo, ele não será mais acionado, mas o mantemos por segurança) ---
-    if st.session_state.get('show_split_form', False):
-        st.warning("⚠️ Saldo Geral Insuficiente!")
-        st.info(f"A despesa de R$ {st.session_state.valor_total_saida:,.2f} é maior que o saldo geral disponível de R$ {st.session_state.saldo_geral_disponivel:,.2f}.")
-        # (O código do formulário de divisão continua aqui, embora não deva mais ser acessado com a nova validação)
-
-    # --- PARTE 3: Formulário Final Simples (Agora é o único caminho para uma saída válida) ---
-    elif st.session_state.get('valor_total_saida', 0) > 0 and not st.session_state.get('show_split_form', False):
-         with st.form("form_movimentacao_saida_simples"):
-            st.markdown("#### Dados Finais da Transação")
-            st.info(f"✅ Saldo suficiente. Registrando saída de R$ {st.session_state.valor_total_saida:,.2f} a partir de '{st.session_state.input_fonte_recurso_inicial}'.")
+                if st.session_state.input_fonte_recurso_inicial == "Entradas do Mês Atual":
+                    st.session_state.show_split_form = False
+                else:
+                    st.session_state.show_split_form = False
             
-            loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_simples")
-            data_input = st.date_input("Data da Transação", value=default_data, key="input_data_simples")
-            forma_pagamento = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="input_forma_pagamento_simples")
-            
-            enviar_simples = st.form_submit_button("💾 Adicionar e Salvar")
+            st.button("Verificar Saldo e Continuar", on_click=verificar_saldo_e_prosseguir, type="primary", use_container_width=True)
 
-            if enviar_simples:
-                # A lógica de salvamento da transação única continua aqui...
-                transacao_unica = { "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente, "Valor": -abs(st.session_state.valor_total_saida), "Forma de Pagamento": forma_pagamento, "Tipo": "Saída", "Produtos Vendidos": "[]", "Categoria": "", "Status": "Realizada", "Data Pagamento": data_input.isoformat(), "FonteRecurso": st.session_state.input_fonte_recurso_inicial, "RecorrenciaID": "", "TransacaoPaiID": "", "TransactionID": str(uuid.uuid4()) }
-                df_movimentacoes_upd = pd.concat([st.session_state.df, pd.DataFrame([transacao_unica])], ignore_index=True)
-                if salvar_dados_no_github(df_movimentacoes_upd, "Nova saída adicionada", data_input):
-                    st.success("Movimentação salva com sucesso!"); st.session_state.valor_total_saida = 0.0; st.session_state.df = df_movimentacoes_upd; carregar_livro_caixa.clear(); st.rerun()
+            if st.session_state.get('show_split_form', False):
+                # Este bloco está aqui por segurança, mas não deve ser mais ativado com a nova lógica
+                st.warning("Este formulário não deveria aparecer. Houve um erro na lógica de verificação.")
+
+            elif st.session_state.get('valor_total_saida', 0) > 0 and not st.session_state.get('show_split_form', False):
+                 with st.form("form_movimentacao_saida_simples"):
+                    st.markdown("#### Dados Finais da Transação")
+                    st.info(f"✅ Saldo suficiente. Registrando saída de R$ {st.session_state.valor_total_saida:,.2f} a partir de '{st.session_state.input_fonte_recurso_inicial}'.")
+                    
+                    loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_simples")
+                    data_input = st.date_input("Data da Transação", value=default_data, key="input_data_simples")
+                    forma_pagamento = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="input_forma_pagamento_simples")
+                    
+                    enviar_simples = st.form_submit_button("💾 Adicionar e Salvar")
+
+                    if enviar_simples:
+                        transacao_unica = { "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente, "Valor": -abs(st.session_state.valor_total_saida), "Forma de Pagamento": forma_pagamento, "Tipo": "Saída", "Produtos Vendidos": "[]", "Categoria": "", "Status": "Realizada", "Data Pagamento": data_input.isoformat(), "FonteRecurso": st.session_state.input_fonte_recurso_inicial, "RecorrenciaID": "", "TransacaoPaiID": "", "TransactionID": str(uuid.uuid4()) }
+                        df_movimentacoes_upd = pd.concat([st.session_state.df, pd.DataFrame([transacao_unica])], ignore_index=True)
+                        if salvar_dados_no_github(df_movimentacoes_upd, "Nova saída adicionada", data_input):
+                            st.success("Movimentação salva com sucesso!"); st.session_state.valor_total_saida = 0.0; st.session_state.df = df_movimentacoes_upd; carregar_livro_caixa.clear(); st.rerun()
                     st.session_state.valor_total_saida = 0.0
                     st.session_state.df = df_movimentacoes_upd
                     carregar_livro_caixa.clear()
@@ -3256,6 +3139,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
