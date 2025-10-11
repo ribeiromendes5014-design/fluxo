@@ -228,7 +228,7 @@ def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
     except Exception as e:
         return False
 
-@st.cache_data(show_spinner="Carregando dados...")
+
 @st.cache_data(show_spinner="Carregando dados...")
 def carregar_livro_caixa():
     """Orquestra o carregamento do Livro Caixa APENAS do GitHub."""
@@ -257,37 +257,21 @@ def carregar_livro_caixa():
 
 
 def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
-    """
-    Salva o DataFrame CSV do Livro Caixa no GitHub usando a API (APENAS).
-    """
-    
-    # 1. REMOVA O BLOCO DE SALVAMENTO LOCAL AQUI (se houver)
-    # Ex: REMOVA ESTE BLOCO:
-    # try:
-    #     df.to_csv(ARQ_LOCAL, index=False, encoding="utf-8-sig") 
-    # except Exception:
-    #     pass
+    # ... (restante do código) ...
 
-    # 2. Prepara DataFrame para envio ao GitHub
-    df_temp = df.copy()
-    
-    # Prepara os dados de data para serem salvos como string no formato YYYY-MM-DD
-    # ... (restante da lógica de formatação de data permanece) ...
+    if not TOKEN:
+        st.error("❌ Erro: GITHUB_TOKEN não carregado. Verifique o Streamlit Secrets.")
+        return False # <-- O código para aqui se o token estiver faltando
 
     try:
-        from github import Github # Garante o import
-        g = Github(TOKEN)
-        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
-
-        # ... (lógica de update/create no GitHub permanece) ...
+        from github import Github 
+        g = Github(TOKEN) 
+        # ...
         
-        carregar_livro_caixa.clear()
-        return True
-
     except Exception as e:
-        st.error(f"❌ Erro ao salvar no GitHub: {e}")
-        st.error("Verifique se seu 'GITHUB_TOKEN' tem permissões e se o repositório existe.")
+        # CERTIFIQUE-SE QUE ESSA LINHA EXISTE E ESTÁ FUNCIONANDO
+        st.error(f"❌ ERRO CRÍTICO NO GITHUB API: {e}")
+        st.error("Verifique se seu token tem permissão 'repo' e se o repositório existe.")
         return False
 
 
@@ -3130,6 +3114,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
