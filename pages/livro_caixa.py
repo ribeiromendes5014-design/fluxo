@@ -25,10 +25,12 @@ from constants_and_css import * # Linha 2 (CORRETA - Importa as funções espec�
 # ================================================================
 import streamlit as st
 
-OWNER = st.secrets.get("REPO_OWNER", "ribeiromendes5014-design")
-REPO_NAME = st.secrets.get("REPO_NAME", "fluxo")
-BRANCH = st.secrets.get("BRANCH", "main")
-TOKEN = st.secrets.get("GITHUB_TOKEN", None)
+OWNER = st.secrets["REPO_OWNER"]
+REPO_NAME = st.secrets["REPO_NAME"]
+BRANCH = st.secrets["BRANCH"]
+TOKEN = st.secrets["GITHUB_TOKEN"]
+PATH_DIVIDAS = "livro_caixa.csv"
+ARQ_LOCAL = "livro_caixa.csv"
 
 # ================================================================
 # 📂 Caminhos dos arquivos no repositório
@@ -197,11 +199,12 @@ def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
     except ImportError:
         pass
         
-    # 1. Backup local 
+    # 1. Backup github
     try:
-        df.to_csv(ARQ_LOCAL, index=False, encoding="utf-8-sig") 
-    except Exception:
-        pass
+    df.to_csv("livro_caixa.csv", index=False, encoding="utf-8-sig")
+    st.success("💾 Alteração salva localmente em livro_caixa.csv")
+except Exception as e:
+    st.error(f"❌ Falha ao salvar localmente: {e}")
 
     # 2. Envio para o GitHub (usando ARQ_COMPRAS)
     df_temp = df.copy()
@@ -3151,6 +3154,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
