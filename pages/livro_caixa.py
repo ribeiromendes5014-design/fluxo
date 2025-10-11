@@ -2640,55 +2640,70 @@ def livro_caixa():
                 enviar_entrada = st.form_submit_button("💾 Adicionar e Salvar Entrada", type="primary", use_container_width=True)
 
                 # ====================================================================================
-# ✅ SUBSTITUA SEU BLOCO "if enviar_entrada:" INTEIRO POR ESTE
+# ✅ NOVO BLOCO DE CÓDIGO PARA O "if enviar_entrada:"
 # ====================================================================================
                 if enviar_entrada:
-                    # --- LÓGICA DE SALVAMENTO PARA ENTRADAS (COM CASHBACK CORRIGIDO) ---
+                    # --- LÓGICA DE SALVAMENTO PARA ENTRADAS (COM CASHBACK DINÂMICO) ---
                     
                     valor_base = valor_final_movimentacao
                     cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
                     valor_a_salvar = valor_base - cashback_resgatado
-                    
-                    # 1. ATUALIZAÇÃO DE CASHBACK E FIDELIDADE (LÓGICA REINTEGRADA)
-                    # Este bloco só executa se a venda for Realizada e tiver um nome de cliente.
+
+                    # 1. ATUALIZAÇÃO DE CASHBACK E FIDELIDADE (LÓGICA DINÂMICA)
                     if status_selecionado == "Realizada" and cliente:
-                        # O valor base para cálculo de cashback/gasto é o valor da compra ANTES de descontar o cashback.
                         valor_base_compra = valor_base
-                        cashback_ganho = round(valor_base_compra * 0.03, 2) # Ex: 3% de cashback
-                        
-                        # Cria uma cópia segura do DataFrame de clientes para modificação
                         df_clientes_upd = st.session_state.df_clientes.copy()
                         
+                        # Função interna para obter a porcentagem de cashback correta
+                        def obter_percentual_cashback(nivel: str) -> float:
+                            if "Diamante" in nivel: return 0.08  # 8%
+                            if "Ouro" in nivel: return 0.05      # 5%
+                            return 0.03                          # 3% para Prata e novos clientes
+
+                        cliente_idx_list = []
                         if 'Nome' in df_clientes_upd.columns:
-                            # Procura pelo cliente (ignorando maiúsculas/minúsculas e espaços)
                             cliente_idx_list = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()
 
-                            if cliente_idx_list: # --- Se o cliente JÁ EXISTE ---
-                                idx = cliente_idx_list[0]
-                                df_clientes_upd.loc[idx, "Cashback"] -= cashback_resgatado
-                                df_clientes_upd.loc[idx, "Cashback"] += cashback_ganho
-                                df_clientes_upd.loc[idx, "TotalGasto"] += valor_base_compra
-                                df_clientes_upd.loc[idx, "Nivel"] = calcular_nivel(df_clientes_upd.loc[idx, "TotalGasto"])
-                                msg_cashback = f"Cashback para {cliente}: Resgate R${cashback_resgatado:,.2f}, Ganho R${cashback_ganho:,.2f}"
-                            else: # --- Se for um CLIENTE NOVO ---
-                                novo_cliente_data = {
-                                    "Nome": cliente.strip(), 
-                                    "Cashback": cashback_ganho, 
-                                    "TotalGasto": valor_base_compra, 
-                                    "Nivel": calcular_nivel(valor_base_compra)
-                                }
-                                df_clientes_upd = pd.concat([df_clientes_upd, pd.DataFrame([novo_cliente_data])], ignore_index=True)
-                                msg_cashback = f"Novo cliente {cliente} cadastrado! Ganho de R${cashback_ganho:,.2f} de cashback."
+                        if cliente_idx_list:  # --- Se o cliente JÁ EXISTE ---
+                            idx = cliente_idx_list[0]
+                            # Primeiro, atualiza o gasto total
+                            df_clientes_upd.loc[idx, "TotalGasto"] += valor_base_compra
+                            # Depois, recalcula o nível com base no novo gasto
+                            novo_nivel = calcular_nivel(df_clientes_upd.loc[idx, "TotalGasto"])
+                            df_clientes_upd.loc[idx, "Nivel"] = novo_nivel
+                            # Agora, calcula o cashback com base no novo nível
+                            percentual = obter_percentual_cashback(novo_nivel)
+                            cashback_ganho = round(valor_base_compra * percentual, 2)
                             
-                            # Tenta salvar o arquivo de clientes no GitHub
-                            if salvar_clientes_cash_github(df_clientes_upd, msg_cashback):
-                                st.toast(msg_cashback)
-                                # Atualiza o estado da sessão com os novos dados
-                                st.session_state.df_clientes = df_clientes_upd
-                            else:
-                                st.error("Falha ao salvar os dados de cashback no GitHub.")
+                            # Atualiza o saldo de cashback
+                            df_clientes_upd.loc[idx, "Cashback"] -= cashback_resgatado
+                            df_clientes_upd.loc[idx, "Cashback"] += cashback_ganho
+                            
+                            msg_cashback = f"Cashback para {cliente} (Nível {novo_nivel.split(' ')[0]}): Ganho de R${cashback_ganho:,.2f} ({percentual:.0%})"
+                        
+                        else:  # --- Se for um CLIENTE NOVO ---
+                            novo_gasto_total = valor_base_compra
+                            novo_nivel = calcular_nivel(novo_gasto_total)
+                            percentual = obter_percentual_cashback(novo_nivel)
+                            cashback_ganho = round(novo_gasto_total * percentual, 2)
+                            
+                            novo_cliente_data = {
+                                "Nome": cliente.strip(),
+                                "Cashback": cashback_ganho,
+                                "TotalGasto": novo_gasto_total,
+                                "Nivel": novo_nivel
+                            }
+                            df_clientes_upd = pd.concat([df_clientes_upd, pd.DataFrame([novo_cliente_data])], ignore_index=True)
+                            msg_cashback = f"Novo cliente {cliente} cadastrado! Ganho de R${cashback_ganho:,.2f} de cashback ({percentual:.0%})."
 
-                    # 2. PREPARAÇÃO DA MOVIMENTAÇÃO PRINCIPAL (LIVRO CAIXA)
+                        # Tenta salvar o arquivo de clientes no GitHub
+                        if salvar_clientes_cash_github(df_clientes_upd, msg_cashback):
+                            st.toast(msg_cashback)
+                            st.session_state.df_clientes = df_clientes_upd
+                        else:
+                            st.error("Falha ao salvar os dados de cashback no GitHub.")
+                    
+                    # 2. PREPARAÇÃO DA MOVIMENTAÇÃO PRINCIPAL (LIVRO CAIXA) - (código original mantido)
                     transaction_id_final = str(uuid.uuid4())
                     if edit_mode:
                         transaction_id_final = st.session_state.edit_id
@@ -3347,6 +3362,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
