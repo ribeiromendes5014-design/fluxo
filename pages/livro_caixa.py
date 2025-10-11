@@ -33,17 +33,12 @@ TOKEN = st.secrets.get("GITHUB_TOKEN", None)
 # ================================================================
 # 📂 Caminhos dos arquivos no repositório
 # ================================================================
-ARQ_CLIENTES_CASH = "clientes_cash.csv"       
-# O nome do arquivo principal (Livro Caixa) no GitHub e local
-PATH_DIVIDAS = "livro_caixa.csv"              
-# O ARQ_LOCAL deve ter o mesmo nome do PATH_DIVIDAS para consistência
-ARQ_LOCAL = PATH_DIVIDAS                      
-# Nome do arquivo de promoções
-ARQ_PROMOCOES = "promocoes.csv"               
-# Nome do arquivo de histórico de compras
-ARQ_COMPRAS = "historico_compras.csv"         
-# Nome do arquivo de produtos/estoque
-ARQ_PRODUTOS = "produtos_estoque.csv"     
+ARQ_CLIENTES_CASH = "clientes_cash.csv"       # ✅ Está correto
+ARQ_LOCAL = "livro_caixa.csv"                 # ok (backup local)
+PATH_DIVIDAS = "livro_caixa.csv"         # depende do seu repo
+ARQ_PROMOCOES = "promocoes.csv"
+ARQ_COMPRAS = "historico_compras.csv"
+ARQ_PRODUTOS = "produtos_estoque.csv"
 
 # NOVO: Constante para o arquivo de clientes
 
@@ -3155,12 +3150,6 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
-
-
-
-
-
-
 
 
 
