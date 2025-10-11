@@ -26,69 +26,67 @@ import io
 # --- FIM DO BLOCO DE IMPORTAÇÃO DO REPORTLAB ---
 
 def gerar_recibo_cashback_pdf(cliente_nome, cashback_ganho, saldo_atualizado, total_compras, nivel_cliente, lista_produtos_vendidos, subiu_de_nivel):
-    """Gera um PDF estilo recibo com as informações de cashback da venda."""
+    """Gera um PDF estilo recibo com as informações de cashback da venda, com formatação melhorada."""
     
     buffer = io.BytesIO()
-    page_size = (80*mm, 230*mm) # Aumentei um pouco a altura para caber tudo
+    page_size = (80*mm, 200*mm) # Altura ajustada
 
-    # Função para desenhar o fundo amarelo
     def draw_background(canvas, doc):
         canvas.setFillColor(HexColor("#FFF9C4")) # Amarelo claro
         canvas.rect(0, 0, page_size[0], page_size[1], fill=True, stroke=False)
 
-    doc = SimpleDocTemplate(buffer, pagesize=page_size, rightMargin=7, leftMargin=7, topMargin=7, bottomMargin=7)
+    doc = SimpleDocTemplate(buffer, pagesize=page_size, rightMargin=7*mm, leftMargin=7*mm, topMargin=7*mm, bottomMargin=7*mm)
 
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="NormalCenter", fontSize=9, alignment=1, spaceAfter=2))
-    styles.add(ParagraphStyle(name="BoldCenter", fontSize=11, alignment=1, spaceAfter=8, fontName='Helvetica-Bold'))
-    styles.add(ParagraphStyle(name="SmallText", fontSize=8, alignment=0, leading=10, spaceAfter=4))
-    styles.add(ParagraphStyle(name="SectionHeader", fontSize=9, alignment=1, spaceBefore=8, spaceAfter=4, fontName='Helvetica-Bold'))
+    styles.add(ParagraphStyle(name="NormalCenter", fontSize=9, alignment=1, spaceAfter=2, leading=12))
+    styles.add(ParagraphStyle(name="BoldCenter", fontSize=11, alignment=1, spaceAfter=6, fontName='Helvetica-Bold'))
+    styles.add(ParagraphStyle(name="SmallText", fontSize=8, alignment=0, leading=10, spaceAfter=2))
+    styles.add(ParagraphStyle(name="SectionHeader", fontSize=9, alignment=0, spaceBefore=6, spaceAfter=2, fontName='Helvetica-Bold'))
     
     story = []
 
     # --- Cabeçalho da Loja ---
-    story.append(Paragraph("✨ Doce&Bella Cosméticos ✨", styles["BoldCenter"]))
+    story.append(Paragraph("Doce&Bella Cosméticos", styles["BoldCenter"]))
     story.append(Paragraph("Seu Programa de Fidelidade", styles["NormalCenter"]))
-    story.append(Spacer(1, 4*mm))
+    story.append(Spacer(1, 5*mm))
 
     # --- Mensagem de Parabéns ---
-    story.append(Paragraph(f"🎉 PARABÉNS, {cliente_nome.upper()}! 🎉", styles["BoldCenter"]))
-    story.append(Paragraph(f"Você ganhou <b>R$ {cashback_ganho:,.2f}</b> em créditos!", styles["NormalCenter"]))
-    story.append(Spacer(1, 4*mm))
+    story.append(Paragraph(f"PARABÉNS, {cliente_nome.upper()}!", styles["BoldCenter"]))
+    story.append(Paragraph(f"Você ganhou <b>R$ {cashback_ganho:,.2f}</b> em novos créditos!", styles["NormalCenter"]))
+    story.append(Spacer(1, 5*mm))
     
     # --- Produtos Vendidos ---
     if lista_produtos_vendidos:
-        story.append(Paragraph("--- Itens da Sua Compra ---", styles["NormalCenter"]))
+        story.append(Paragraph("<u>Itens da Sua Compra:</u>", styles["SectionHeader"]))
         for item in lista_produtos_vendidos:
             nome = item.get('Produto', 'N/A')
             qtd = int(item.get('Quantidade', 0))
             story.append(Paragraph(f"- {qtd}x {nome}", styles["SmallText"]))
-        story.append(Spacer(1, 4*mm))
+        story.append(Spacer(1, 5*mm))
 
     # --- Saldo Atualizado ---
     data_hora_agora = datetime.now().strftime('%d/%m/%Y às %H:%M')
-    story.append(Paragraph("--- Seu Saldo Atualizado ---", styles["NormalCenter"]))
-    story.append(Paragraph(f"<b>🗓 Data/Hora:</b> {data_hora_agora}", styles["SmallText"]))
-    story.append(Paragraph(f"<b>💰 Saldo Atual:</b> R$ {saldo_atualizado:,.2f}", styles["SmallText"]))
-    story.append(Paragraph(f"<b>🛒 Total de Compras:</b> {total_compras}", styles["SmallText"]))
-    story.append(Spacer(1, 4*mm))
+    story.append(Paragraph("<u>Seu Saldo Atualizado:</u>", styles["SectionHeader"]))
+    story.append(Paragraph(f"<b>Data/Hora:</b> {data_hora_agora}", styles["SmallText"]))
+    story.append(Paragraph(f"<b>Saldo Atual:</b> R$ {saldo_atualizado:,.2f}", styles["SmallText"]))
+    story.append(Paragraph(f"<b>Total de Compras:</b> {total_compras}", styles["SmallText"]))
+    story.append(Spacer(1, 5*mm))
     
     # --- Mensagem de Subiu de Nível ---
     if subiu_de_nivel:
-        story.append(Paragraph(f"🎉 Parabéns! Você subiu para o nível <b>{nivel_cliente}</b>!", styles["NormalCenter"]))
-        story.append(Spacer(1, 4*mm))
+        story.append(Paragraph(f"Parabéns! Você subiu para o nível <b>{nivel_cliente.replace('💎', '').replace('🥇', '').replace('🥈', '').strip()}</b>!", styles["NormalCenter"]))
+        story.append(Spacer(1, 5*mm))
 
     # --- Regras do Programa ---
-    story.append(Paragraph("COMO USAR SEU CRÉDITO", styles["SectionHeader"]))
+    story.append(Paragraph("<u>COMO USAR SEU CRÉDITO:</u>", styles["SectionHeader"]))
     story.append(Paragraph("<b>1. Limite de Uso:</b> Você pode usar até 50% do valor da sua nova compra.", styles["SmallText"]))
     story.append(Paragraph("<b>2. Saldo Mínimo:</b> Para resgatar, seu saldo deve ser de, no mínimo, R$ 20,00.", styles["SmallText"]))
-    story.append(Spacer(1, 4*mm))
+    story.append(Spacer(1, 5*mm))
 
     # --- Contato ---
-    story.append(Paragraph("📞 PRECISA DE AJUDA?", styles["SectionHeader"]))
-    story.append(Paragraph("Basta chamar a Doce&Bella pelo ZAP! 💬", styles["NormalCenter"]))
+    story.append(Paragraph("<u>PRECISA DE AJUDA?</u>", styles["SectionHeader"]))
+    story.append(Paragraph("Basta chamar a Doce&Bella pelo ZAP!", styles["NormalCenter"]))
     
-    # Gera o PDF
     doc.build(story, onFirstPage=draw_background, onLaterPages=draw_background)
     
     pdf_bytes = buffer.getvalue()
@@ -3594,6 +3592,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
