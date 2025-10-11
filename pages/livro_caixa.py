@@ -13,6 +13,7 @@ import plotly.express as px
 import base64
 import uuid
 import calendar
+import pytz
 
 from constants_and_css import * # Linha 2 (CORRETA - Importa as funções específicas de renderização que estavam misturadas)
 # ==============================================================================
@@ -3428,6 +3429,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
