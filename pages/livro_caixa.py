@@ -2707,6 +2707,67 @@ def livro_caixa():
                             st.session_state.df_clientes = df_clientes_upd
                         else:
                             st.error("Falha ao salvar os dados de cashback no GitHub.")
+
+                        # ================================================================
+                        # 🚀 INÍCIO DA LÓGICA DE ENVIO DO TELEGRAM
+                        # ================================================================
+                        if TELEGRAM_ENABLED:
+                            idx_cliente_final = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()[0]
+                            saldo_atualizado = df_clientes_upd.loc[idx_cliente_final, "Cashback"]
+                            
+                            fuso_horario_brasil = pytz.timezone('America/Sao_Paulo')
+                            agora_brasil = datetime.now(fuso_horario_brasil)
+                            data_hora_lancamento = agora_brasil.strftime('%d/%m/%Y às %H:%M')
+
+                            cashback_ganho_str = f"R$ {total_cashback_ganho:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            saldo_atual_str = f"R$ {saldo_atualizado:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            
+                            mensagem_header = (
+                                "✨ *Novidade imperdível na Doce&Bella! a partir desse mes de outubro* ✨\n\n"
+                                "Agora você pode aproveitar ainda mais as suas compras favoritas com o nosso Programa de Fidelidade 🛍💖\n\n"
+                                "➡️ A cada compra, você acumula pontos.\n"
+                                "➡️ Quanto mais você compra, mais descontos exclusivos você ganha!\n"
+                                "---------------------------------\n\n"
+                            )
+                            mensagem_body = (
+                                f"Olá *{cliente}*, aqui é o programa de fidelidade da loja Doce&Bella!\n\n"
+                                f"Você ganhou *{cashback_ganho_str}* em créditos CASHBACK.\n"
+                                f"💖 Seu saldo em *{data_hora_lancamento}* é de *{saldo_atual_str}*.\n\n"
+                                f"⭐ Seu nível atual é: *{nivel_cliente}*"
+                            )
+                            if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
+                                mensagem_body += f"\n\n🎉 Parabéns! Você subiu para o nível *{nivel_cliente}*! Aproveite seus novos benefícios."
+                            
+                            mensagem_footer = (
+                                f"\n\n=================================\n\n"
+                                f"🟩 *REGRAS PARA RESGATAR SEUS CRÉDITOS*\n"
+                                f"- Resgate máximo: *50% sobre o valor da compra.*\n"
+                                f"- Saldo mínimo para resgate: *R$ 20,00*.\n"
+                                f" \n"
+                                f"💬 *Fale conosco para consultar seu saldo e resgatar!*\n\n"
+                                f"⚠️ Adicione este número na sua agenda para ficar por dentro das novidades."
+                            )
+                            enviar_mensagem_telegram(mensagem_header + mensagem_body + mensagem_footer)
+
+                            # Lógica de Bônus de Indicação (Requer 'Indicado Por' no seu CSV de clientes)
+                            if era_primeira_compra and cliente_data_antes is not None and 'Indicado Por' in cliente_data_antes and cliente_data_antes['Indicado Por']:
+                                indicador_nome = cliente_data_antes['Indicado Por']
+                                idx_indicador = df_clientes_upd.index[df_clientes_upd['Nome'] == indicador_nome].tolist()
+                                if idx_indicador:
+                                    bonus = valor_base * 0.03 # 3% de bônus
+                                    df_clientes_upd.loc[idx_indicador[0], 'Cashback'] += bonus
+                                    salvar_clientes_cash_github(df_clientes_upd, f"Bônus de indicação para {indicador_nome}")
+                                    
+                                    bonus_str = f"R$ {bonus:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    nivel_indicador = df_clientes_upd.loc[idx_indicador[0], 'Nivel']
+                                    mensagem_indicador = (
+                                        f"Oi, {indicador_nome}! Agradecemos demais a sua indicação da {cliente}! "
+                                        f"Você acaba de ganhar *{bonus_str}* extras! Seu nível atual é: *{nivel_indicador}*."
+                                    )
+                                    enviar_mensagem_telegram(mensagem_indicador)
+                        # ================================================================
+                        # 🚀 FIM DA LÓGICA DE ENVIO DO TELEGRAM
+                        # ================================================================
                     
                     # 2. PREPARAÇÃO DA MOVIMENTAÇÃO PRINCIPAL (LIVRO CAIXA) - (código original mantido)
                     transaction_id_final = str(uuid.uuid4())
@@ -3367,6 +3428,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
