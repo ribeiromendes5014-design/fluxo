@@ -454,24 +454,30 @@ def carregar_clientes_cash():
 
     # Caso 1: O ficheiro CSV não foi carregado ou está completamente vazio.
     if df is None or df.empty:
-        # Cria um DataFrame vazio com a estrutura correta para o resto da app.
-        df_final = pd.DataFrame(columns=colunas_internas_esperadas)
-        # Garante que as colunas numéricas tenham o tipo correto (float)
-        df_final["Cashback"] = pd.Series(dtype='float64')
-        df_final["TotalGasto"] = pd.Series(dtype='float64')
-        return df_final
+        # Tenta um fallback local se o GitHub falhar
+        try:
+            if os.path.exists(ARQ_CLIENTES_CASH):
+                df = pd.read_csv(ARQ_CLIENTES_CASH, dtype=str)
+        except Exception:
+            df = None # Garante que df seja None se o fallback também falhar
 
-    # Caso 2: O ficheiro foi carregado com sucesso.
+        # Se ainda assim não houver dados, cria um DataFrame vazio estruturado
+        if df is None or df.empty:
+            df_final = pd.DataFrame(columns=colunas_internas_esperadas)
+            df_final["Cashback"] = pd.Series(dtype='float64')
+            df_final["TotalGasto"] = pd.Series(dtype='float64')
+            return df_final
+
+    # Caso 2: O ficheiro foi carregado com sucesso (do GitHub ou local).
     # Renomeia as colunas do CSV para o padrão da app
     df.rename(columns=mapa_colunas_para_app, inplace=True)
 
     # Garante que todas as colunas esperadas existam no DataFrame carregado
     for col in colunas_internas_esperadas:
         if col not in df.columns:
-            # Se a coluna não existir, cria-a com um valor padrão apropriado
             df[col] = 0.0 if col in ["Cashback", "TotalGasto"] else ""
 
-    # Converte as colunas numéricas com segurança, tratando possíveis erros
+    # Converte as colunas numéricas com segurança
     df["Cashback"] = pd.to_numeric(df["Cashback"], errors='coerce').fillna(0.0)
     df["TotalGasto"] = pd.to_numeric(df["TotalGasto"], errors='coerce').fillna(0.0)
 
@@ -3151,6 +3157,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
