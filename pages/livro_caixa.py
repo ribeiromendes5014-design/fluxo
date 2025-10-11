@@ -2604,9 +2604,24 @@ def livro_caixa():
 
         else: # Tipo é Saída
             st.markdown("---")
-            # ... (Lógica de Saída, Categoria, Recorrência, etc.) ...
             cliente = st.text_input("Nome/Descrição da Despesa", value=default_cliente, key="input_cliente_form_saida", disabled=edit_mode)
             valor_final_movimentacao = st.number_input("Valor (R$)", value=default_valor, min_value=0.01, format="%.2f", key="input_valor_saida")
+            
+            # ==================================================================
+            # NOVA OPÇÃO ADICIONADA AQUI
+            # ==================================================================
+            fonte_recurso = st.radio(
+                "Deduzir esta saída de:",
+                ("Entradas do Mês Atual", "Saldo Geral Acumulado"),
+                key="input_fonte_recurso",
+                horizontal=True,
+                help="""
+                - **Entradas do Mês Atual:** Afeta o saldo do mês (Entradas - Saídas). Use para custos operacionais.
+                - **Saldo Geral Acumulado:** Não afeta o saldo do mês, apenas o caixa total. Use para investimentos ou despesas pagas com saldo anterior.
+                """
+            )
+            # ==================================================================
+            
             status_selecionado = st.radio("Status", ["Realizada", "Pendente"], index=0 if default_status == "Realizada" else 1, key="input_status_global_saida", disabled=edit_mode)
         
         data_pagamento_final = None 
@@ -3267,6 +3282,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
