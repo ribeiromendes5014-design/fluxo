@@ -20,3 +20,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-10-07,Doce&bella,mercadoria,-218.0,PIX,Saída,[],,Realizada,2025-10-07,,,,6feeb56f-0d03-4645-b739-14745deaa0e1
 2025-10-10,Doce&bella,mercadoria,-142.77,PIX,Saída,[],,Realizada,2025-10-10,,,,6853fe85-aa94-4ac8-b31d-58a5571bebd8
 2025-10-10,Doce&bella,mercadoria,-50.0,PIX,Saída,[],,Realizada,2025-10-10,,,,b90558d6-6f74-4da2-9f4e-88905cbb3fee
+2025-10-11,Doce&bella,Ana de Rafael ,60.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Venda"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 60.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-10-11,,,,a2a8af62-ce45-419c-b3af-17841c6f247c
