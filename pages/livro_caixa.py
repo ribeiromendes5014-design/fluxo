@@ -311,6 +311,7 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
         return False
 
 
+
 @st.cache_data(show_spinner=False)
 def processar_dataframe(df):
     for col in COLUNAS_PADRAO:
@@ -3150,6 +3151,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
