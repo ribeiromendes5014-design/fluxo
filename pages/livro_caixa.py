@@ -200,11 +200,11 @@ def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
         pass
         
     # 1. Backup github
-   try:
-       df.to_csv("livro_caixa.csv", index=False, encoding="utf-8-sig")
-       st.success("💾 Alteração salva localmente em livro_caixa.csv")
-   except Exception as e:
-       st.error(f"❌ Falha ao salvar localmente: {e}")
+try:
+    df.to_csv("livro_caixa.csv", index=False, encoding="utf-8-sig")
+    st.success("💾 Alteração salva localmente em livro_caixa.csv")
+except Exception as e:
+    st.error(f"❌ Falha ao salvar localmente: {e}")
 
     # 2. Envio para o GitHub (usando ARQ_COMPRAS)
     df_temp = df.copy()
@@ -3154,6 +3154,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
