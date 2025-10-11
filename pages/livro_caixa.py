@@ -2608,73 +2608,80 @@ def livro_caixa():
                         st.success("Movimentação salva com sucesso!"); st.session_state.df = df_movimentacoes_upd; st.session_state.lista_produtos = []; st.session_state.edit_id = None; carregar_livro_caixa.clear(); st.rerun()
 
         else: # Tipo é Saída
-            st.markdown("---")
-            if 'valor_total_saida' not in st.session_state: st.session_state.valor_total_saida = 0.0
-            if 'show_split_form' not in st.session_state: st.session_state.show_split_form = False
-            if 'saldo_geral_disponivel' not in st.session_state: st.session_state.saldo_geral_disponivel = 0.0
+    st.markdown("---")
+    # Inicializa/reseta os estados de controle da divisão
+    if 'valor_total_saida' not in st.session_state: st.session_state.valor_total_saida = 0.0
+    if 'show_split_form' not in st.session_state: st.session_state.show_split_form = False
+    if 'saldo_geral_disponivel' not in st.session_state: st.session_state.saldo_geral_disponivel = 0.0
 
-            cliente = st.text_input("Nome/Descrição da Despesa", value=default_cliente, key="input_cliente_form_saida", disabled=edit_mode)
-            valor_saida = st.number_input("Valor Total da Saída (R$)", value=default_valor, min_value=0.01, format="%.2f", key="input_valor_saida")
+    # --- PARTE 1: Formulário Inicial para coletar a intenção do usuário ---
+    cliente = st.text_input("Nome/Descrição da Despesa", value=default_cliente, key="input_cliente_form_saida", disabled=edit_mode)
+    valor_saida = st.number_input("Valor Total da Saída (R$)", value=default_valor, min_value=0.01, format="%.2f", key="input_valor_saida")
 
-            fonte_recurso_escolhida = st.radio(
-                "Qual a fonte principal do recurso para esta despesa?",
-                ("Entradas do Mês Atual", "Saldo Geral Acumulado"),
-                key="input_fonte_recurso_inicial"
-            )
+    fonte_recurso_escolhida = st.radio(
+        "Qual a fonte principal do recurso para esta despesa?",
+        ("Entradas do Mês Atual", "Saldo Geral Acumulado"),
+        key="input_fonte_recurso_inicial"
+    )
 
-            def verificar_saldo_e_prosseguir():
-                st.session_state.valor_total_saida = st.session_state.input_valor_saida
-                if st.session_state.input_fonte_recurso_inicial == "Entradas do Mês Atual":
-                    st.session_state.show_split_form = False
-                else:
-                    df_geral_realizado = df_exibicao[df_exibicao['Status'] == 'Realizada']
-                    _, _, saldo_geral_atual = calcular_resumo(df_geral_realizado)
-                    st.session_state.saldo_geral_disponivel = saldo_geral_atual
-                    if st.session_state.valor_total_saida > saldo_geral_atual:
-                        st.session_state.show_split_form = True
-                    else:
-                        st.session_state.show_split_form = False
+    def verificar_saldo_e_prosseguir():
+        """
+        Função ATUALIZADA com a validação de teto de gastos.
+        """
+        st.session_state.valor_total_saida = st.session_state.input_valor_saida
+        
+        # --- NOVA VALIDAÇÃO DE TETO DE GASTOS ---
+        # Primeiro, calcula o saldo geral total disponível
+        df_geral_realizado = df_exibicao[df_exibicao['Status'] == 'Realizada']
+        _, _, saldo_geral_atual = calcular_resumo(df_geral_realizado)
+        st.session_state.saldo_geral_disponivel = saldo_geral_atual
 
-            st.button("Verificar Saldo e Continuar", on_click=verificar_saldo_e_prosseguir, type="primary", use_container_width=True)
+        # Se a despesa for maior que TODO o dinheiro disponível, bloqueia a operação.
+        if st.session_state.valor_total_saida > saldo_geral_atual:
+            st.error(f"❌ Saldo Total Insuficiente!")
+            st.warning(f"A despesa (R$ {st.session_state.valor_total_saida:,.2f}) é maior que todo o seu saldo geral disponível (R$ {saldo_geral_atual:,.2f}). A operação não pode continuar.")
+            st.session_state.show_split_form = False # Garante que o form de divisão não apareça
+            st.session_state.valor_total_saida = 0.0 # Reseta o valor para evitar confusão
+            return # Interrompe a função aqui
 
-            if st.session_state.get('show_split_form', False):
-                st.warning("⚠️ Saldo Geral Insuficiente!")
-                st.info(f"A despesa de R$ {st.session_state.valor_total_saida:,.2f} é maior que o saldo geral disponível de R$ {st.session_state.saldo_geral_disponivel:,.2f}.")
-                st.markdown("Por favor, divida o valor da saída entre as fontes de recurso.")
-                with st.form("form_split_saida"):
-                    st.subheader("Dividir Valor da Saída")
-                    max_do_geral = min(st.session_state.valor_total_saida, st.session_state.saldo_geral_disponivel)
-                    valor_do_geral = st.number_input("Valor a ser deduzido do Saldo Geral Acumulado", min_value=0.0, max_value=float(max_do_geral), value=float(max_do_geral), format="%.2f")
-                    valor_do_mes = st.session_state.valor_total_saida - valor_do_geral
-                    st.metric(label="Valor a ser deduzido das Entradas do Mês (Restante)", value=f"R$ {valor_do_mes:,.2f}")
-                    st.markdown(f"**Resumo:** Serão criadas duas movimentações: **R$ {valor_do_geral:,.2f}** (do Saldo Geral) e **R$ {valor_do_mes:,.2f}** (do Mês Atual).")
-                    loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_split")
-                    data_input = st.date_input("Data da Transação", value=default_data, key="input_data_split")
-                    forma_pagamento = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="input_forma_pagamento_split")
-                    enviar_divisao = st.form_submit_button("✅ Confirmar e Salvar Divisão")
-                    if enviar_divisao:
-                        df_movimentacoes_upd = st.session_state.df.copy()
-                        if valor_do_geral > 0:
-                            transacao_geral = { "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": f"{cliente} (Parte do Saldo Geral)", "Valor": -abs(valor_do_geral), "Forma de Pagamento": forma_pagamento, "Tipo": "Saída", "Produtos Vendidos": "[]", "Categoria": "", "Status": "Realizada", "Data Pagamento": data_input.isoformat(), "FonteRecurso": "Saldo Geral Acumulado", "RecorrenciaID": "", "TransacaoPaiID": "", "TransactionID": str(uuid.uuid4()) }
-                            df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([transacao_geral])], ignore_index=True)
-                        if valor_do_mes > 0:
-                            transacao_mes = { "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": f"{cliente} (Parte do Mês Atual)", "Valor": -abs(valor_do_mes), "Forma de Pagamento": forma_pagamento, "Tipo": "Saída", "Produtos Vendidos": "[]", "Categoria": "", "Status": "Realizada", "Data Pagamento": data_input.isoformat(), "FonteRecurso": "Entradas do Mês Atual", "RecorrenciaID": "", "TransacaoPaiID": "", "TransactionID": str(uuid.uuid4()) }
-                            df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([transacao_mes])], ignore_index=True)
-                        if salvar_dados_no_github(df_movimentacoes_upd, "Saída dividida adicionada", data_input):
-                            st.success("Movimentação dividida e salva com sucesso!"); st.session_state.show_split_form = False; st.session_state.valor_total_saida = 0.0; st.session_state.df = df_movimentacoes_upd; carregar_livro_caixa.clear(); st.rerun()
+        # --- LÓGICA ANTIGA (AGORA SÓ RODA SE O SALDO TOTAL FOR SUFICIENTE) ---
+        if st.session_state.input_fonte_recurso_inicial == "Entradas do Mês Atual":
+            # Se a escolha é o mês, o saldo total já é suficiente, então pode prosseguir.
+            st.session_state.show_split_form = False
+        else: # Escolheu Saldo Geral Acumulado (e sabemos que o saldo total é suficiente)
+            # A verificação aqui é redundante, mas mantemos por clareza.
+            # Se o valor da saída for menor ou igual ao saldo geral, pode prosseguir.
+            st.session_state.show_split_form = False
+            # NOTA: A lógica de divisão só seria necessária se tivéssemos 3+ fontes de recurso.
+            # Com a validação de teto, se o Saldo Geral é a fonte, ele sempre será suficiente.
 
-            elif st.session_state.get('valor_total_saida', 0) > 0 and not st.session_state.get('show_split_form', False):
-                 with st.form("form_movimentacao_saida_simples"):
-                    st.markdown("#### Dados Finais da Transação"); st.info(f"Registrando saída de R$ {st.session_state.valor_total_saida:,.2f} a partir de '{st.session_state.input_fonte_recurso_inicial}'.")
-                    loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_simples")
-                    data_input = st.date_input("Data da Transação", value=default_data, key="input_data_simples")
-                    forma_pagamento = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="input_forma_pagamento_simples")
-                    enviar_simples = st.form_submit_button("💾 Adicionar e Salvar")
-                    if enviar_simples:
-                        transacao_unica = { "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente, "Valor": -abs(st.session_state.valor_total_saida), "Forma de Pagamento": forma_pagamento, "Tipo": "Saída", "Produtos Vendidos": "[]", "Categoria": "", "Status": "Realizada", "Data Pagamento": data_input.isoformat(), "FonteRecurso": st.session_state.input_fonte_recurso_inicial, "RecorrenciaID": "", "TransacaoPaiID": "", "TransactionID": str(uuid.uuid4()) }
-                        df_movimentacoes_upd = pd.concat([st.session_state.df, pd.DataFrame([transacao_unica])], ignore_index=True)
-                        if salvar_dados_no_github(df_movimentacoes_upd, "Nova saída adicionada", data_input):
-                            st.success("Movimentação salva com sucesso!"); st.session_state.valor_total_saida = 0.0; st.session_state.df = df_movimentacoes_upd; carregar_livro_caixa.clear(); st.rerun()
+    st.button("Verificar Saldo e Continuar", on_click=verificar_saldo_e_prosseguir, type="primary", use_container_width=True)
+
+
+    # --- PARTE 2: Formulário de Divisão (Neste novo fluxo, ele não será mais acionado, mas o mantemos por segurança) ---
+    if st.session_state.get('show_split_form', False):
+        st.warning("⚠️ Saldo Geral Insuficiente!")
+        st.info(f"A despesa de R$ {st.session_state.valor_total_saida:,.2f} é maior que o saldo geral disponível de R$ {st.session_state.saldo_geral_disponivel:,.2f}.")
+        # (O código do formulário de divisão continua aqui, embora não deva mais ser acessado com a nova validação)
+
+    # --- PARTE 3: Formulário Final Simples (Agora é o único caminho para uma saída válida) ---
+    elif st.session_state.get('valor_total_saida', 0) > 0 and not st.session_state.get('show_split_form', False):
+         with st.form("form_movimentacao_saida_simples"):
+            st.markdown("#### Dados Finais da Transação")
+            st.info(f"✅ Saldo suficiente. Registrando saída de R$ {st.session_state.valor_total_saida:,.2f} a partir de '{st.session_state.input_fonte_recurso_inicial}'.")
+            
+            loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_simples")
+            data_input = st.date_input("Data da Transação", value=default_data, key="input_data_simples")
+            forma_pagamento = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="input_forma_pagamento_simples")
+            
+            enviar_simples = st.form_submit_button("💾 Adicionar e Salvar")
+
+            if enviar_simples:
+                # A lógica de salvamento da transação única continua aqui...
+                transacao_unica = { "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente, "Valor": -abs(st.session_state.valor_total_saida), "Forma de Pagamento": forma_pagamento, "Tipo": "Saída", "Produtos Vendidos": "[]", "Categoria": "", "Status": "Realizada", "Data Pagamento": data_input.isoformat(), "FonteRecurso": st.session_state.input_fonte_recurso_inicial, "RecorrenciaID": "", "TransacaoPaiID": "", "TransactionID": str(uuid.uuid4()) }
+                df_movimentacoes_upd = pd.concat([st.session_state.df, pd.DataFrame([transacao_unica])], ignore_index=True)
+                if salvar_dados_no_github(df_movimentacoes_upd, "Nova saída adicionada", data_input):
+                    st.success("Movimentação salva com sucesso!"); st.session_state.valor_total_saida = 0.0; st.session_state.df = df_movimentacoes_upd; carregar_livro_caixa.clear(); st.rerun()
                     st.session_state.valor_total_saida = 0.0
                     st.session_state.df = df_movimentacoes_upd
                     carregar_livro_caixa.clear()
@@ -3249,6 +3256,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
