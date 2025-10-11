@@ -194,45 +194,48 @@ def carregar_historico_compras():
 
 def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
     """
-    Salva o DataFrame CSV do Livro Caixa no GitHub usando a API e também localmente (backup).
-    Essa função garante a persistência de dados para o Streamlit.
+    Salva o DataFrame CSV do Livro Caixa diretamente no GitHub (sem salvar localmente).
     """
-    # 1. Backup local (garante que grava o CSV mesmo sem GitHub)
-    try:
-        df.to_csv("livro_caixa.csv", index=False, encoding="utf-8-sig")
-        st.success("💾 Alteração salva localmente em livro_caixa.csv")
-    except Exception as e:
-        st.error(f"❌ Falha ao salvar localmente: {e}")
 
-    # 2. Prepara DataFrame para envio ao GitHub
+    # 1. Prepara o DataFrame
     df_temp = df.copy()
+
+    # Garante que datas estejam no formato YYYY-MM-DD
     for col_date in ['Data', 'Data Pagamento']:
         if col_date in df_temp.columns:
             df_temp[col_date] = pd.to_datetime(df_temp[col_date], errors='coerce').apply(
                 lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
             )
 
-    # 3. Tenta salvar no GitHub
+    # 2. Converte para CSV (em memória)
+    csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
+
+    # 3. Tenta salvar diretamente no GitHub
     try:
         g = Github(TOKEN)
         repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
 
         try:
+            # Atualiza o arquivo existente
             contents = repo.get_contents(PATH_DIVIDAS, ref=BRANCH)
-            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
-            st.success("📁 Livro Caixa salvo (atualizado) no GitHub!")
+            repo.update_file(
+                contents.path, commit_message, csv_string, contents.sha, branch=BRANCH
+            )
+            st.success("📁 Livro Caixa atualizado com sucesso no GitHub!")
         except Exception:
+            # Se não existir, cria um novo arquivo
             repo.create_file(PATH_DIVIDAS, commit_message, csv_string, branch=BRANCH)
-            st.success("📁 Livro Caixa salvo (criado) no GitHub!")
+            st.success("📁 Livro Caixa criado no GitHub!")
 
+        # Limpa cache para forçar recarregamento atualizado
         carregar_livro_caixa.clear()
         return True
 
     except Exception as e:
         st.error(f"⚠️ Falha ao salvar no GitHub: {e}")
-        st.warning("Verifique se seu GITHUB_TOKEN e variáveis de repositório estão corretos.")
+        st.warning("Verifique se o GITHUB_TOKEN tem permissão de escrita.")
         return False
+
 
 
 @st.cache_data(show_spinner="Carregando dados...")
@@ -3182,6 +3185,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
