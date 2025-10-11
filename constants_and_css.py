@@ -19,7 +19,7 @@ COLUNAS_PRODUTOS = [
 ]
 COLUNAS_COMPRAS = ["Data", "Produto", "Quantidade", "Valor Total", "Cor", "FotoURL"] 
 
-COLUNAS_PRODUTOS_COMPLETAS = COLUNAS_PRODUTOS + ["CashbackPercent", "DetalhesGrade"]
+COLUNAS_PRODUTOS_COMPLETAS = COLUNAS_PRODUTOS + ["CashbackPercent", "DetalhesGrade", "DescricaoLonga", "PromocaoEspecial"]
 
 # GITHUB SECRETS (Leitura ajustada)
 try:
@@ -81,6 +81,7 @@ NIVEIS_CASHBACK = {
     "Ouro": {"min_gasto": 2000, "percentual": 0.03},   # 3%
     "Diamante": {"min_gasto": 5000, "percentual": 0.05} # 5%
 }
+
 
 
 
