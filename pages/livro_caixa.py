@@ -2814,24 +2814,21 @@ def livro_caixa():
                             st.session_state.df_clientes = df_clientes_upd
                         
                         # ================================================================
-                        # 🚀 LÓGICA DE ENVIO DO TELEGRAM
+                        # 🚀 LÓGICA DE ENVIO DO TELEGRAM E GERAÇÃO DE PDF
                         # ================================================================
                         if TELEGRAM_ENABLED:
-                            # ✅ CORREÇÃO: A lógica de adicionar a nova movimentação ao df_movimentacoes_upd
-                            # é movida para ANTES do cálculo do total_compras.
-                            transaction_id_temp = str(uuid.uuid4()) # ID temporário para contagem
+                            # Adiciona temporariamente a nova movimentação para contagem correta
                             nova_movimentacao_temp = { "Data": data_input.isoformat(), "Cliente": cliente_final, "Tipo": "Entrada", "Status": status_selecionado }
-                            df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([nova_movimentacao_temp])], ignore_index=True)
+                            df_movimentacoes_para_contagem = pd.concat([st.session_state.df, pd.DataFrame([nova_movimentacao_temp])], ignore_index=True)
                             
                             idx_cliente_final = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()[0]
                             cliente_final_data = df_clientes_upd.loc[idx_cliente_final]
                             saldo_atualizado = cliente_final_data["Cashback"]
                             
-                            # ✅ Agora df_movimentacoes_upd já existe e contém a venda atual (temporariamente)
-                            total_compras = df_movimentacoes_upd[
-                                (df_movimentacoes_upd['Cliente'] == cliente) &
-                                (df_movimentacoes_upd['Tipo'] == 'Entrada') &
-                                (df_movimentacoes_upd['Status'] == 'Realizada')
+                            total_compras = df_movimentacoes_para_contagem[
+                                (df_movimentacoes_para_contagem['Cliente'] == cliente) &
+                                (df_movimentacoes_para_contagem['Tipo'] == 'Entrada') &
+                                (df_movimentacoes_para_contagem['Status'] == 'Realizada')
                             ].shape[0]
 
                             fuso_horario_brasil = pytz.timezone('America/Sao_Paulo')
@@ -2862,17 +2859,48 @@ def livro_caixa():
                                 "----------------------------------\n\n"
                             )
                             
+                            subiu_de_nivel = False
                             if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
+                                subiu_de_nivel = True
                                 mensagem_body += f"🎉 *Parabéns! Você subiu para o nível {nivel_cliente}!* Aproveite seus novos benefícios.\n----------------------------------\n\n"
 
                             mensagem_footer = "✨ *COMO USAR SEU CRÉDITO NA DOCE&BELLA*\n1. *Limite de Uso:* Você pode usar até 50% do valor total da sua nova compra.\n2. *Saldo Mínimo:* Para resgatar, seu saldo deve ser de, no mínimo, R$ 20,00.\n\n📞 *PRECISA DE AJUDA OU QUER CONSULTAR SEU SALDO?*\nBasta chamar a Doce&Bella pelo ZAP! 💬\n\n🚨 *Dica: Salve nosso número na sua agenda para não perder as promoções e novidades!*"
                             
                             mensagem_completa = mensagem_header + mensagem_parabens + mensagem_body + mensagem_footer
-                            enviar_mensagem_telegram(mensagem_completa)
+                            
+                            # --- Gera o PDF ---
+                            pdf_bytes = gerar_recibo_cashback_pdf(
+                                cliente_nome=cliente,
+                                cashback_ganho=total_cashback_ganho,
+                                saldo_atualizado=saldo_atualizado,
+                                total_compras=total_compras,
+                                nivel_cliente=nivel_cliente,
+                                lista_produtos_vendidos=st.session_state.lista_produtos,
+                                subiu_de_nivel=subiu_de_nivel
+                            )
+                            nome_arquivo_pdf = f"recibo_{cliente.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.pdf"
+
+                            # --- Envia o PDF com a mensagem como legenda ---
+                            enviar_recibo_telegram(
+                                pdf_bytes=pdf_bytes,
+                                file_name=nome_arquivo_pdf,
+                                caption=mensagem_completa
+                            )
 
                             if era_primeira_compra and indicador_nome:
-                                # ... (lógica de bônus de indicação) ...
-                                pass
+                                idx_indicador = df_clientes_upd.index[df_clientes_upd['Nome'] == indicador_nome].tolist()
+                                if idx_indicador:
+                                    bonus = valor_base * 0.03 # 3% de bônus
+                                    df_clientes_upd.loc[idx_indicador[0], 'Cashback'] += bonus
+                                    salvar_clientes_cash_github(df_clientes_upd, f"Bônus de indicação para {indicador_nome}")
+                                    
+                                    bonus_str = f"R$ {bonus:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    nivel_indicador = df_clientes_upd.loc[idx_indicador[0], 'Nivel']
+                                    mensagem_indicador = (
+                                        f"Oi, {indicador_nome}! Agradecemos demais a sua indicação da {cliente}! "
+                                        f"Você acaba de ganhar *{bonus_str}* extras! Seu nível atual é: *{nivel_indicador}*."
+                                    )
+                                    enviar_mensagem_telegram(mensagem_indicador)
 
                     # Lógica para salvar a movimentação no livro caixa
                     transaction_id_final = str(uuid.uuid4())
@@ -2887,8 +2915,7 @@ def livro_caixa():
                         "TransactionID": transaction_id_final 
                     }
                     
-                    # ✅ Reatribui df_movimentacoes_upd, agora descartando a linha temporária e adicionando a completa.
-                    df_movimentacoes_upd = st.session_state.df.copy() # Recomeça com o DF original
+                    df_movimentacoes_upd = st.session_state.df.copy()
                     if edit_mode:
                         idx_to_update = df_movimentacoes_upd.index[df_movimentacoes_upd['TransactionID'] == st.session_state.edit_id].tolist()
                         if idx_to_update:
@@ -2902,49 +2929,36 @@ def livro_caixa():
                     
                     if salvar_dados_no_github(df_movimentacoes_upd, msg_commit, data_input):
                         st.success("Movimentação salva com sucesso!")
-                        st.session_state.df = df_movimentacoes_upd
-                        st.session_state.lista_produtos = []
-                        st.session_state.edit_id = None
-                        carregar_livro_caixa.clear()
-                        st.rerun()
-                    # ================================================================
-                        # ✅ INÍCIO DA GERAÇÃO DO PDF E BOTÃO DE DOWNLOAD
-                        # ================================================================
+                        
+                        # Bloco de geração de PDF e botão de download (movido para DENTRO do if de sucesso)
                         subiu_de_nivel = False
                         if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
                             subiu_de_nivel = True
                         
-                        # Chama a função para gerar o PDF em memória
                         pdf_bytes = gerar_recibo_cashback_pdf(
                             cliente_nome=cliente,
                             cashback_ganho=total_cashback_ganho,
-                            saldo_atualizado=saldo_atualizado, # Esta variável já existe na sua lógica do Telegram
-                            total_compras=total_compras,       # Esta variável também já existe
+                            saldo_atualizado=saldo_atualizado,
+                            total_compras=total_compras,
                             nivel_cliente=nivel_cliente,
                             lista_produtos_vendidos=st.session_state.lista_produtos,
                             subiu_de_nivel=subiu_de_nivel
                         )
                         
-                        # Cria o nome do arquivo dinamicamente
                         nome_arquivo_pdf = f"recibo_{cliente.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.pdf"
 
-                        # Exibe o botão de download
                         st.download_button(
                             label="📄 Baixar Recibo da Venda (PDF)",
                             data=pdf_bytes,
                             file_name=nome_arquivo_pdf,
                             mime="application/pdf"
                         )
-                        # ================================================================
-                        # ✅ FIM DA GERAÇÃO DO PDF
-                        # ================================================================
                         
                         st.session_state.df = df_movimentacoes_upd
                         st.session_state.lista_produtos = []
                         st.session_state.edit_id = None
                         carregar_livro_caixa.clear()
                         
-                        # Adiciona um botão para o usuário limpar e começar de novo
                         if st.button("🎉 Finalizar e Nova Venda"):
                             st.rerun()
 
@@ -3573,6 +3587,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
