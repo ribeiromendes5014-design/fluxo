@@ -443,14 +443,12 @@ def highlight_value(row):
 
 def calcular_nivel(total_gasto: float) -> str:
     """Define o nível de fidelidade do cliente baseado no total gasto."""
-    if total_gasto >= 5000:
+    if total_gasto >= 499.00:
         return "Diamante 💎"
-    elif total_gasto >= 2000:
+    elif total_gasto >= 199.00:
         return "Ouro 🥇"
-    elif total_gasto >= 500:
-        return "Prata 🥈"
     else:
-        return "Bronze 🥉"
+        return "Prata 🥈"
 
 @st.cache_data(show_spinner="A carregar clientes...")
 def carregar_clientes_cash():
@@ -3349,6 +3347,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
