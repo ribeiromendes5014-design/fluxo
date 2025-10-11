@@ -464,6 +464,20 @@ def gestao_produtos():
                         nova_foto = st.text_input("URL da Foto", value=row.get("FotoURL", ""), key=f"edit_foto_{eid}")
                         novo_cb = st.text_input("Código de Barras", value=str(row.get("CodigoBarras", "")), key=f"edit_cb_{eid}")
 
+                        # --- CÓDIGO NOVO PARA O MODO TURBO ---
+                        # Garante que a coluna PromocaoEspecial exista para a leitura
+                        if "PromocaoEspecial" not in row:
+                            row["PromocaoEspecial"] = "NAO" # Valor padrão se a coluna não existir
+
+                        valor_atual_turbo = str(row.get("PromocaoEspecial", "NAO")).strip().upper() == "SIM"
+                        
+                        novo_status_turbo = st.toggle(
+                            "🚀 Ativar Modo Turbo", 
+                            value=valor_atual_turbo, 
+                            key=f"edit_turbo_{eid}",
+                            help="Produtos no modo Turbo dão mais cashback para clientes Ouro (7%) e Diamante (15%)."
+                        )
+
                     st.markdown("##### Detalhes da Grade e Cashback")
                     col_details, col_cashback = st.columns([2, 1])
                     edited_details = current_details_grade.copy()
@@ -502,15 +516,29 @@ def gestao_produtos():
                     _, col_save, col_cancel = st.columns([3, 1.5, 1.5])
                     if col_save.button("💾 Salvar", key=f"save_{eid}", type="primary", use_container_width=True):
                         preco_vista_float = to_float(novo_preco_vista)
-                        # LINHA DE ATUALIZAÇÃO DO DATAFRAME CORRIGIDA PARA INCLUIR DescricaoLonga
-                        produtos.loc[produtos["ID"] == str(eid), ["Nome", "Marca", "Categoria", "Quantidade", "PrecoCusto", "PrecoVista", "PrecoCartao", "Validade", "FotoURL", "CodigoBarras", "CashbackPercent", "DetalhesGrade", "DescricaoLonga"]] = [novo_nome.strip(), nova_marca.strip(), nova_cat.strip(), int(nova_qtd), to_float(novo_preco_custo), preco_vista_float, round(preco_vista_float / FATOR_CARTAO, 2), nova_validade, nova_foto.strip(), str(novo_cb).strip(), novo_cashback_percent, str(edited_details), nova_descricao_longa.strip()]
+                        
+                        # Converte o status do toggle (True/False) para o texto ("SIM"/"NAO") a ser salvo
+                        valor_turbo_para_salvar = "SIM" if novo_status_turbo else "NAO"
+
+                        # Adicione "PromocaoEspecial" à lista de colunas e o valor_turbo_para_salvar à lista de valores
+                        produtos.loc[produtos["ID"] == str(eid), 
+                                     ["Nome", "Marca", "Categoria", "Quantidade", "PrecoCusto", 
+                                      "PrecoVista", "PrecoCartao", "Validade", "FotoURL", 
+                                      "CodigoBarras", "CashbackPercent", "DetalhesGrade", 
+                                      "DescricaoLonga", "PromocaoEspecial" # <- COLUNA ADICIONADA
+                                      ]] = [
+                                          novo_nome.strip(), nova_marca.strip(), nova_cat.strip(), int(nova_qtd),
+                                          to_float(novo_preco_custo), preco_vista_float, round(preco_vista_float / FATOR_CARTAO, 2),
+                                          nova_validade, nova_foto.strip(), str(novo_cb).strip(), novo_cashback_percent,
+                                          str(edited_details), nova_descricao_longa.strip(),
+                                          valor_turbo_para_salvar # <- VALOR ADICIONADO
+                                          ]
+
                         st.session_state["produtos"] = produtos
                         if salvar_produtos_no_github(produtos, "Atualizando produto"): inicializar_produtos.clear()
-                        del st.session_state["edit_prod"]
-                        st.rerun()
-                    if col_cancel.button("❌ Cancelar", key=f"cancel_{eid}", use_container_width=True):
                         del st.session_state["edit_prod"]
                         st.rerun()
 
     with tab_relatorio:
         relatorio_produtos()
+
