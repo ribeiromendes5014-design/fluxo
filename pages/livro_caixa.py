@@ -3,7 +3,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, date
 import requests
-from reportlab.lib.units import mm
 from requests.exceptions import ConnectionError, RequestException 
 from io import StringIO
 import io, os
@@ -15,6 +14,16 @@ import base64
 import uuid
 import calendar
 import pytz
+# ... (outras importações como streamlit, pandas, etc.)
+
+# --- INÍCIO DO BLOCO DE IMPORTAÇÃO DO REPORTLAB ---
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.colors import HexColor
+from reportlab.lib.units import mm
+from reportlab.lib import colors
+import io
+# --- FIM DO BLOCO DE IMPORTAÇÃO DO REPORTLAB ---
 
 def gerar_recibo_cashback_pdf(cliente_nome, cashback_ganho, saldo_atualizado, total_compras, nivel_cliente, lista_produtos_vendidos, subiu_de_nivel):
     """Gera um PDF estilo recibo com as informações de cashback da venda."""
@@ -3588,6 +3597,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
