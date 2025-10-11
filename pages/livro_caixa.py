@@ -2286,21 +2286,24 @@ def livro_caixa():
     default_data_pagamento = None 
 
     if edit_mode:
-        original_idx_to_edit = st.session_state.edit_id
-        linha_df_exibicao = df_exibicao[df_exibicao['original_index'] == original_idx_to_edit]
+    # st.session_state.edit_id agora armazena o TransactionID (que é uma string)
+    transaction_id_to_edit = st.session_state.edit_id
+    linha_df_exibicao = df_exibicao[df_exibicao['TransactionID'] == transaction_id_to_edit]
 
-        if not linha_df_exibicao.empty:
-            movimentacao_para_editar = linha_df_exibicao.iloc[0]
-            default_loja = movimentacao_para_editar['Loja']
-            default_data = movimentacao_para_editar['Data'] if pd.notna(movimentacao_para_editar['Data']) else datetime.now().date()
-            default_cliente = movimentacao_para_editar['Cliente']
-            default_valor = abs(movimentacao_para_editar['Valor']) if movimentacao_para_editar['Valor'] != 0 else 0.01 
-            default_forma = movimentacao_para_editar['Forma de Pagamento']
-            default_tipo = movimentacao_para_editar['Tipo']
-            default_produtos_json = movimentacao_para_editar['Produtos Vendidos'] if pd.notna(movimentacao_para_editar['Produtos Vendidos']) else ""
-            default_categoria = movimentacao_para_editar['Categoria']
-            default_status = movimentacao_para_editar['Status'] 
-            default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None) 
+    if not linha_df_exibicao.empty:
+        movimentacao_para_editar = linha_df_exibicao.iloc[0]
+        # A partir daqui, o resto do seu código para preencher os valores
+        # padrão (default_loja, default_data, etc.) continua funcionando perfeitamente.
+        default_loja = movimentacao_para_editar['Loja']
+        default_data = movimentacao_para_editar['Data'] if pd.notna(movimentacao_para_editar['Data']) else datetime.now().date()
+        default_cliente = movimentacao_para_editar['Cliente']
+        default_valor = abs(movimentacao_para_editar['Valor']) if movimentacao_para_editar['Valor'] != 0 else 0.01 
+        default_forma = movimentacao_para_editar['Forma de Pagamento']
+        default_tipo = movimentacao_para_editar['Tipo']
+        default_produtos_json = movimentacao_para_editar['Produtos Vendidos'] if pd.notna(movimentacao_para_editar['Produtos Vendidos']) else ""
+        default_categoria = movimentacao_para_editar['Categoria']
+        default_status = movimentacao_para_editar['Status'] 
+        default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None) 
             
             if st.session_state.edit_id_loaded != original_idx_to_edit:
                 if default_tipo == "Entrada" and default_produtos_json:
@@ -3260,6 +3263,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
