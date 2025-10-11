@@ -23,22 +23,32 @@ from constants_and_css import * # Linha 2 (CORRETA - Importa as funções espec�
 # ================================================================
 # 🔑 CREDENCIAIS E CONFIGURAÇÕES DO REPOSITÓRIO (carregadas do secrets)
 # ================================================================
-import streamlit as st
-
 OWNER = st.secrets.get("REPO_OWNER", "ribeiromendes5014-design")
 REPO_NAME = st.secrets.get("REPO_NAME", "fluxo")
 BRANCH = st.secrets.get("BRANCH", "main")
-TOKEN = st.secrets.get("GITHUB_TOKEN", None)
+TOKEN = st.secrets.get("GITHUB_TOKEN", None) # GITHUB_TOKEN lido aqui
 
 # ================================================================
-# 📂 Caminhos dos arquivos no repositório
+# 📂 Caminhos dos arquivos no repositório (AGORA LENDO DO SECRETS)
 # ================================================================
-ARQ_CLIENTES_CASH = "clientes_cash.csv"       # ✅ Está correto
-ARQ_LOCAL = "livro_caixa.csv"                 # ok (backup local)
-PATH_DIVIDAS = "livro_caixa.csv"         # depende do seu repo
-ARQ_PROMOCOES = "promocoes.csv"
-ARQ_COMPRAS = "historico_compras.csv"
-ARQ_PRODUTOS = "produtos_estoque.csv"
+
+# O ARQUIVO PRINCIPAL DO LIVRO CAIXA
+PATH_DIVIDAS = st.secrets.get("livro_caixa", {}).get("CSV_PATH", "livro_caixa.csv")
+
+# ARQ_LOCAL (Se for mantido) deve ser igual ao PATH_DIVIDAS para consistência
+# ARQ_LOCAL era sua constante de backup, vamos mantê-la consistente
+ARQ_LOCAL = PATH_DIVIDAS 
+
+# OUTROS ARQUIVOS LIDOS DO SECRETS OU HARDCODED:
+ARQ_CLIENTES_CASH = "clientes_cash.csv" # Se não tiver seção no secrets, mantenha assim
+
+# ARQUIVO DE PROMOÇÕES
+ARQ_PROMOCOES = st.secrets.get("promocoes", {}).get("CSV_PATH", "promocoes.csv")
+
+# ARQUIVO DE PRODUTOS
+ARQ_PRODUTOS = st.secrets.get("produtos", {}).get("CSV_PATH", "produtos_estoque.csv")
+
+ARQ_COMPRAS = "historico_compras.csv" # Mantenha como string se não estiver no secrets
 
 # NOVO: Constante para o arquivo de clientes
 
@@ -3114,6 +3124,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
