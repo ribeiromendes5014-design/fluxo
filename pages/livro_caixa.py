@@ -2491,8 +2491,74 @@ def livro_caixa():
                         st.session_state.cashback_a_usar = 0.0
 
                 with col_prod_add:
-                    # (Sua lógica de adicionar produtos por selectbox ou código de barras vai aqui)
-                    pass
+                    st.markdown("##### Adicionar Produto")
+                    
+                    foto_cb_upload_caixa = st.file_uploader(
+                        "📤 Upload de imagem do código de barras", 
+                        type=["png", "jpg", "jpeg"], 
+                        key="cb_upload_caixa"
+                    )
+                    
+                    if foto_cb_upload_caixa is not None:
+                        imagem_bytes = foto_cb_upload_caixa.getvalue() 
+                        codigos_lidos = ler_codigo_barras_api(imagem_bytes)
+                        if codigos_lidos:
+                            st.session_state.cb_lido_livro_caixa = codigos_lidos[0]
+                            st.toast(f"Código de barras lido: {codigos_lidos[0]}")
+                        else:
+                            st.session_state.cb_lido_livro_caixa = ""
+                            st.error("❌ Não foi possível ler nenhum código na imagem enviada.")
+                    
+                    index_selecionado = 0
+                    if st.session_state.get("cb_lido_livro_caixa"): 
+                        opcao_encontrada = encontrar_opcao_por_cb(st.session_state.cb_lido_livro_caixa, produtos_para_venda, opcoes_produtos)
+                        if opcao_encontrada:
+                            index_selecionado = opcoes_produtos.index(opcao_encontrada)
+                            st.toast(f"Produto correspondente ao CB encontrado!")
+                        else:
+                            st.warning(f"Código '{st.session_state.cb_lido_livro_caixa}' lido, mas nenhum produto com esse CB encontrado.")
+                            st.session_state.cb_lido_livro_caixa = ""
+
+                    produto_selecionado = st.selectbox(
+                        "Selecione o Produto (ID | Nome)", 
+                        opcoes_produtos, 
+                        key="input_produto_selecionado",
+                        index=index_selecionado
+                    )
+                    
+                    if produto_selecionado and (produto_selecionado != opcoes_produtos[index_selecionado]) and st.session_state.get("cb_lido_livro_caixa"):
+                         st.session_state.cb_lido_livro_caixa = ""
+
+                    if produto_selecionado == OPCAO_MANUAL:
+                        nome_produto_manual = st.text_input("Nome (Manual)", key="input_nome_prod_manual")
+                        col_m1, col_m2 = st.columns(2)
+                        with col_m1:
+                            quantidade_manual = st.number_input("Qtd", min_value=0.01, step=1.0, key="input_qtd_prod_manual")
+                            custo_unitario_manual = st.number_input("Custo Un. (R$)", min_value=0.00, format="%.2f", key="input_custo_prod_manual")
+                        with col_m2:
+                            preco_unitario_manual = st.number_input("Preço Un. (R$)", min_value=0.01, format="%.2f", key="input_preco_prod_manual")
+                        
+                        if st.button("Adicionar Manual", key="adicionar_item_manual_button", on_click=callback_adicionar_manual, args=(nome_produto_manual, quantidade_manual, preco_unitario_manual, custo_unitario_manual)):
+                            st.rerun() 
+
+                    elif produto_selecionado:
+                        produto_id_selecionado = extrair_id_do_nome(produto_selecionado) 
+                        produto_row_completa = produtos_para_venda[produtos_para_venda["ID"] == produto_id_selecionado]
+                        
+                        if not produto_row_completa.empty:
+                            produto_data = produto_row_completa.iloc[0]
+                            estoque_disp = int(produto_data['Quantidade'])
+                            
+                            col_p1, col_p2 = st.columns(2)
+                            with col_p1:
+                                quantidade_input = st.number_input("Qtd", min_value=1, value=1, step=1, max_value=estoque_disp if estoque_disp > 0 else 1, key="input_qtd_prod_edit")
+                                st.caption(f"Estoque Disponível: {estoque_disp}")
+                            with col_p2:
+                                preco_unitario_input = st.number_input("Preço Unitário (R$)", min_value=0.01, format="%.2f", value=float(produto_data['PrecoVista']), key="input_preco_prod_edit")
+                                st.caption(f"Custo Unitário: R$ {produto_data['PrecoCusto']:,.2f}")
+
+                            if st.button("Adicionar Item", key="adicionar_item_button", on_click=callback_adicionar_estoque, args=(produto_id_selecionado, produto_data['Nome'], quantidade_input, preco_unitario_input, produto_data['PrecoCusto'], estoque_disp)):
+                                st.rerun()
 
 
             col_entrada_valor, col_entrada_status = st.columns(2)
@@ -3183,6 +3249,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
