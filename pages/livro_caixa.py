@@ -2396,24 +2396,35 @@ def livro_caixa():
                 # ===================================================================
                 cliente_normalizado = cliente.strip().lower()
 
+                # Garante que a coluna 'Nome' existe antes de tentar a busca
                 if 'Nome' in df_clientes.columns:
+                    # Busca de forma eficiente se o cliente existe no DataFrame
                     cliente_encontrado = df_clientes['Nome'].str.strip().str.lower().eq(cliente_normalizado).any() if cliente_normalizado else False
 
+                    # Executa a lógica apenas se o campo cliente foi preenchido e não estiver em modo de edição
                     if cliente.strip() and not edit_mode:
                         if cliente_encontrado:
+                            # Se encontrou, pega os dados do cliente
                             cliente_df = df_clientes[df_clientes['Nome'].str.strip().str.lower() == cliente_normalizado]
                             c_cashback = cliente_df.iloc[0]["Cashback"]
                             c_nivel = cliente_df.iloc[0]["Nivel"]
                             st.success(f"🎉 Cliente Fidelidade Encontrado! Saldo Cashback: R$ {c_cashback:,.2f} | Nível: {c_nivel}")
                             
+                            # Armazena os dados do cliente ativo na sessão (essencial para o resgate)
                             st.session_state.cliente_fidelidade_ativo = {
-                                "nome": cliente.strip(), "cashback": c_cashback, "nivel": c_nivel
+                                "nome": cliente.strip(),
+                                "cashback": c_cashback,
+                                "nivel": c_nivel
                             }
                         else:
+                            # Se não encontrou, exibe a mensagem para novo cliente
                             st.info("✨ Cliente novo ou não encontrado na fidelidade. Será cadastrado após a venda!")
+                            
+                            # Limpa os dados de qualquer cliente ativo anteriormente na sessão
                             if "cliente_fidelidade_ativo" in st.session_state:
                                 del st.session_state.cliente_fidelidade_ativo
                 else:
+                    # Limpa os dados do cliente ativo se o campo de nome for apagado
                     if "cliente_fidelidade_ativo" in st.session_state:
                         del st.session_state.cliente_fidelidade_ativo
                 # ===================================================================
@@ -3140,6 +3151,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
