@@ -2615,22 +2615,35 @@ def livro_caixa():
             enviar = st.form_submit_button("💾 Adicionar e Salvar", type="primary", use_container_width=True)
 
             if enviar:
-                # --- LÓGICA DE SALVAMENTO ---
-                valor_final_movimentacao = 0.0
-                produtos_vendidos_json = "[]"
-                if st.session_state.lista_produtos:
-                    df_prods = pd.DataFrame(st.session_state.lista_produtos)
-                    valor_final_movimentacao = (pd.to_numeric(df_prods['Quantidade']) * pd.to_numeric(df_prods['Preço Unitário'])).sum()
-                    produtos_vendidos_json = df_prods.to_json(orient='records')
+                # --- LÓGICA DE SALVAMENTO CORRIGIDA ---
 
-                cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
-                
-                cliente_final_com_nota = cliente
-                if cashback_resgatado > 0:
-                    cliente_final_com_nota = f"{cliente} (Cashback Usado: R$ {cashback_resgatado:,.2f})"
+                # 1. Determina o valor final e a categoria corretamente
+                if tipo == "Saída":
+                    # Para saídas, busca o valor do campo de número correspondente
+                    valor_base = st.session_state.get('input_valor_saida', 0.0)
+                    produtos_vendidos_json = "[]"
+                    # Garante que o valor salvo para saídas seja negativo
+                    valor_a_salvar = -abs(valor_base)
+                    categoria_final = categoria_selecionada # Usa a categoria definida para saídas
+                else: # tipo == "Entrada"
+                    # Para entradas, calcula com base na lista de produtos ou valor manual
+                    if st.session_state.lista_produtos:
+                        df_prods = pd.DataFrame(st.session_state.lista_produtos)
+                        valor_base = (pd.to_numeric(df_prods['Quantidade']) * pd.to_numeric(df_prods['Preço Unitário'])).sum()
+                        produtos_vendidos_json = df_prods.to_json(orient='records')
+                    else:
+                        valor_base = st.session_state.get('input_valor_entrada', 0.0)
+                        produtos_vendidos_json = "[]"
+                    
+                    cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
+                    valor_a_salvar = valor_base - cashback_resgatado
+                    categoria_final = "" # Entradas não possuem categoria de custo
 
+                # Lógica de atualização de cashback (mantida)
                 if tipo == "Entrada" and status_selecionado == "Realizada" and cliente:
-                    valor_base_compra = valor_final_movimentacao 
+                    # ... (seu código original de gestão de cashback) ...
+                    # Esta parte não precisa de alteração.
+                    valor_base_compra = valor_base 
                     cashback_ganho = round(valor_base_compra * 0.03, 2)
                     
                     df_clientes_upd = st.session_state.df_clientes.copy()
@@ -2653,18 +2666,25 @@ def livro_caixa():
                         if salvar_clientes_cash_github(df_clientes_upd, msg_cashback):
                             st.toast(msg_cashback)
                             st.session_state.df_clientes = df_clientes_upd
-                
-                # Salva a movimentação no livro caixa
+
+
+                # 2. Monta o dicionário da nova movimentação usando as variáveis do formulário
                 df_movimentacoes_upd = st.session_state.df.copy()
                 nova_movimentacao = {
-                    "Data": date.today().isoformat(), "Loja": "Doce&bella", "Cliente": cliente_final_com_nota,
-                    "Valor": valor_final_movimentacao - cashback_resgatado,
-                    "Forma de Pagamento": "PIX", "Tipo": tipo, "Produtos Vendidos": produtos_vendidos_json,
-                    "Categoria": "", "Status": status_selecionado, 
-                    "Data Pagamento": date.today().isoformat() if status_selecionado == "Realizada" else None
+                    "Data": data_input.isoformat(),                   # CORRIGIDO: Usa a data do formulário
+                    "Loja": loja_selecionada,                          # CORRIGIDO: Usa a loja do formulário
+                    "Cliente": cliente_final,
+                    "Valor": valor_a_salvar,                           # CORRIGIDO: Usa o valor correto e com sinal negativo para saídas
+                    "Forma de Pagamento": forma_pagamento,             # CORRIGIDO: Usa a forma de pagamento selecionada
+                    "Tipo": tipo,
+                    "Produtos Vendidos": produtos_vendidos_json,
+                    "Categoria": categoria_final,
+                    "Status": status_selecionado,
+                    "Data Pagamento": data_pagamento_final.isoformat() if data_pagamento_final else None
                 }
-                
+
                 if edit_mode:
+                    # (Seu código de edição existente)
                     df_movimentacoes_upd.loc[st.session_state.edit_id] = nova_movimentacao
                     msg_commit = "Movimentação editada"
                 else:
@@ -3221,6 +3241,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
