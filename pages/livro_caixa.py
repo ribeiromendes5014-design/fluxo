@@ -2752,23 +2752,22 @@ def livro_caixa():
                     msg_commit = "Nova movimentação adicionada"
                 
                 if salvar_dados_no_github(df_movimentacoes_upd, msg_commit, data_input):
-                    st.success("Movimentação salva com sucesso!")
-
-                    # Geração do PDF e botão de download
-                    subiu_de_nivel = cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']
-                    total_compras = df_movimentacoes_upd[(df_movimentacoes_upd['Cliente'] == cliente) & (df_movimentacoes_upd['Tipo'] == 'Entrada') & (df_movimentacoes_upd['Status'] == 'Realizada')].shape[0]
-                    saldo_atualizado = df_clientes_upd.loc[df_clientes_upd['Nome'] == cliente, 'Cashback'].iloc[0]
-
-                    pdf_bytes = gerar_recibo_cashback_pdf(
-                        cliente_nome=cliente, cashback_ganho=total_cashback_ganho, saldo_atualizado=saldo_atualizado,
-                        total_compras=total_compras, nivel_cliente=nivel_cliente,
-                        lista_produtos_vendidos=st.session_state.lista_produtos, subiu_de_nivel=subiu_de_nivel
-                    )
-                    nome_arquivo_pdf = f"recibo_{cliente.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.pdf"
-                    st.download_button(label="📄 Baixar Recibo da Venda (PDF)", data=pdf_bytes, file_name=nome_arquivo_pdf, mime="application/pdf")
-                    
-                    st.session_state.lista_produtos = []
-                    if st.button("🎉 Finalizar e Nova Venda"):
+                        st.success("Movimentação salva com sucesso! Atualizando a tabela...")
+                        
+                        # Limpa o cache para garantir que os dados sejam recarregados do GitHub na próxima execução
+                        carregar_livro_caixa.clear()
+                        
+                        # Limpa os estados da venda atual para a próxima operação
+                        st.session_state.lista_produtos = []
+                        st.session_state.edit_id = None
+                        
+                        # NOTA: O botão de download do PDF foi removido porque o st.rerun()
+                        # recarrega a página imediatamente, impedindo o clique no botão.
+                        # O PDF já foi enviado para o Telegram. Se ainda quiser o download,
+                        # o fluxo com o botão "Finalizar e Nova Venda" é o correto.
+                        
+                        # Força o aplicativo a re-executar do topo.
+                        # Isso fará com que a 'Tabela de Movimentações' seja redesenhada com os novos dados.
                         st.rerun()
 
         # ================================================================
@@ -3396,6 +3395,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
