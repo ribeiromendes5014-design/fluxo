@@ -3418,3 +3418,4 @@ if st.session_state.pagina_atual != "Livro Caixa":
 
 
 
+
