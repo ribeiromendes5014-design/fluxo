@@ -2949,13 +2949,16 @@ def livro_caixa():
             )
 
 
+            # ====================================================================================
+# ✅ COLE ESTE BLOCO NO LUGAR DO SEU BLOCO "Operações de Edição e Exclusão" ANTIGO
+# ====================================================================================
             st.markdown("---")
             st.markdown("### Operações de Edição e Exclusão")
             
-            # [Bloco de Edição e Exclusão]
             if df_para_mostrar.empty:
                 st.info("Nenhuma movimentação disponível para edição/exclusão com os filtros aplicados.")
             else:
+                # CORRIGIDO: O dicionário agora armazena o TransactionID, que é único e seguro.
                 opcoes_movimentacao_operacao = {
                     f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Cliente']} | R$ {abs(row['Valor']):,.2f}": row['TransactionID']
                     for index, row in df_para_mostrar.iterrows()
@@ -2969,69 +2972,65 @@ def livro_caixa():
                     key="select_movimentacao_operacao_lc"
                 )
 
-                original_idx_selecionado = opcoes_movimentacao_operacao.get(movimentacao_selecionada_str)
+                # CORRIGIDO: A variável agora armazena o TransactionID selecionado.
+                transaction_id_selecionado = opcoes_movimentacao_operacao.get(movimentacao_selecionada_str)
                 item_selecionado_str = movimentacao_selecionada_str
 
-                if original_idx_selecionado is not None and movimentacao_selecionada_str != "Selecione uma movimentação...":
-                    row = df_exibicao[df_exibicao['original_index'] == original_idx_selecionado].iloc[0]
+                if transaction_id_selecionado is not None and movimentacao_selecionada_str != "Selecione uma movimentação...":
+                    # CORRIGIDO: A busca agora é feita no DataFrame principal usando o TransactionID.
+                    # Isso garante que a linha correta seja sempre encontrada, independentemente dos filtros.
+                    linha_encontrada = df_exibicao[df_exibicao['TransactionID'] == transaction_id_selecionado]
+                    
+                    if not linha_encontrada.empty:
+                        row = linha_encontrada.iloc[0]
 
-                    if row['Tipo'] == 'Entrada' and row['Produtos Vendidos'] and pd.notna(row['Produtos Vendidos']):
-                        st.markdown("#### Detalhes dos Produtos Selecionados")
-                        try:
-                            # [Bloco de exibição de detalhes dos produtos]
+                        if row['Tipo'] == 'Entrada' and row['Produtos Vendidos'] and pd.notna(row['Produtos Vendidos']):
+                            st.markdown("#### Detalhes dos Produtos Selecionados")
                             try:
-                                produtos = json.loads(row['Produtos Vendidos'])
-                            except json.JSONDecodeError:
-                                produtos = ast.literal_eval(row['Produtos Vendidos'])
+                                produtos_dict = ast.literal_eval(row['Produtos Vendidos'])
+                                df_detalhe = pd.DataFrame(produtos_dict)
+                                
+                                # Sua lógica para calcular totais e lucro
+                                for col in ['Quantidade', 'Preço Unitário', 'Custo Unitário']:
+                                    if col in df_detalhe.columns:
+                                        df_detalhe[col] = pd.to_numeric(df_detalhe[col], errors='coerce').fillna(0)
 
-                            df_detalhe = pd.DataFrame(produtos)
-                            for col in ['Quantidade', 'Preço Unitário', 'Custo Unitário']:
-                                df_detalhe[col] = pd.to_numeric(df_detalhe[col], errors='coerce').fillna(0)
+                                df_detalhe['Total Venda'] = df_detalhe.get('Quantidade', 0) * df_detalhe.get('Preço Unitário', 0)
+                                df_detalhe['Total Custo'] = df_detalhe.get('Quantidade', 0) * df_detalhe.get('Custo Unitário', 0)
+                                df_detalhe['Lucro Bruto'] = df_detalhe['Total Venda'] - df_detalhe['Total Custo']
+                                
+                                st.dataframe(df_detalhe, hide_index=True, use_container_width=True)
+                            except Exception as e:
+                                st.error(f"Erro ao processar detalhes dos produtos: {e}")
+                            st.markdown("---")
 
-                            df_detalhe['Total Venda'] = df_detalhe['Quantidade'] * df_detalhe['Preço Unitário']
-                            df_detalhe['Total Custo'] = df_detalhe['Quantidade'] * df_detalhe['Custo Unitário']
-                            df_detalhe['Lucro Bruto'] = df_detalhe['Total Venda'] - df_detalhe['Total Custo']
+                        col_op_1, col_op_2 = st.columns(2)
 
-                            st.dataframe(df_detalhe, hide_index=True, use_container_width=True, 
-                                column_config={
-                                    "Produto": "Produto",
-                                    "Quantidade": st.column_config.NumberColumn("Qtd"),
-                                    "Preço Unitário": st.column_config.NumberColumn("Preço Un.", format="R$ %.2f"),
-                                    "Custo Unitário": st.column_config.NumberColumn("Custo Un.", format="R$ %.2f"),
-                                    "Total Venda": st.column_config.NumberColumn("Total Venda", format="R$ %.2f"),
-                                    "Total Custo": st.column_config.NumberColumn("Total Custo", format="R$ %.2f"),
-                                    "Lucro Bruto": st.column_config.NumberColumn("Lucro Bruto", format="R$ %.2f", help="Venda - Custo")
-                                }
-                            ) 
-                        
-                        except Exception as e:
-                            st.error(f"Erro ao processar detalhes dos produtos: {e}")
-
-                        st.markdown("---")
-
-
-                    col_op_1, col_op_2 = st.columns(2)
-
-                    if col_op_1.button(f"✏️ Editar: {item_selecionado_str}", key=f"edit_mov_{original_idx_selecionado}", use_container_width=True, type="secondary"):
-                        st.session_state.edit_id = original_idx_selecionado
-                        st.session_state.edit_id_loaded = None 
-                        st.rerun()
-
-                    if col_op_2.button(f"🗑️ Excluir: {item_selecionado_str}", key=f"del_mov_{original_idx_selecionado}", use_container_width=True, type="primary"):
-                        if row['Status'] == 'Realizada' and row['Tipo'] == 'Entrada':
-                            try:
-                                produtos_vendidos_antigos = ast.literal_eval(row['Produtos Vendidos'])
-                                for item in produtos_vendidos_antigos:
-                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
-                                if salvar_produtos_no_github(st.session_state.produtos, "Reversão de estoque por exclusão de venda"):
-                                    inicializar_produtos.clear()
-                            except: pass
-
-                        st.session_state.df = st.session_state.df.drop(row['original_index'], errors='ignore')
-
-                        if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
-                            st.cache_data.clear()
+                        if col_op_1.button(f"✏️ Editar: {item_selecionado_str}", key=f"edit_mov_{transaction_id_selecionado}", use_container_width=True, type="secondary"):
+                            st.session_state.edit_id = transaction_id_selecionado # Armazena o ID correto para edição
+                            st.session_state.edit_id_loaded = None 
                             st.rerun()
+
+                        if col_op_2.button(f"🗑️ Excluir: {item_selecionado_str}", key=f"del_mov_{transaction_id_selecionado}", use_container_width=True, type="primary"):
+                            if row['Status'] == 'Realizada' and row['Tipo'] == 'Entrada':
+                                try:
+                                    produtos_vendidos_antigos = ast.literal_eval(row['Produtos Vendidos'])
+                                    for item in produtos_vendidos_antigos:
+                                        if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
+                                    if salvar_produtos_no_github(st.session_state.produtos, "Reversão de estoque por exclusão de venda"):
+                                        inicializar_produtos.clear()
+                                except: pass
+
+                            # CORRIGIDO: Encontra o índice real no DataFrame de dados original para excluir.
+                            idx_to_drop = st.session_state.df.index[st.session_state.df['TransactionID'] == transaction_id_selecionado].tolist()
+                            if idx_to_drop:
+                                st.session_state.df = st.session_state.df.drop(idx_to_drop[0])
+                                # CORRIGIDO: Passa a data da transação para a função de salvar.
+                                data_da_transacao_excluida = row['Data']
+                                
+                                if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE, data_da_transacao_excluida):
+                                    st.cache_data.clear()
+                                    st.rerun()
                 else:
                     st.info("Selecione uma movimentação no menu acima para ver detalhes e opções de edição/exclusão.")
 
@@ -3350,6 +3349,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
