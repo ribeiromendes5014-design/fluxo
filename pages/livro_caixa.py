@@ -2604,56 +2604,95 @@ def livro_caixa():
 
         else: # Tipo é Saída
             st.markdown("---")
+            # Inicializa/reseta os estados de controle da divisão
+            if 'valor_total_saida' not in st.session_state: st.session_state.valor_total_saida = 0.0
+            if 'show_split_form' not in st.session_state: st.session_state.show_split_form = False
+            if 'saldo_geral_disponivel' not in st.session_state: st.session_state.saldo_geral_disponivel = 0.0
+
+            # --- PARTE 1: Formulário Inicial para coletar a intenção do usuário ---
             cliente = st.text_input("Nome/Descrição da Despesa", value=default_cliente, key="input_cliente_form_saida", disabled=edit_mode)
-            valor_final_movimentacao = st.number_input("Valor (R$)", value=default_valor, min_value=0.01, format="%.2f", key="input_valor_saida")
-            
-            # ==================================================================
-            # NOVA OPÇÃO ADICIONADA AQUI
-            # ==================================================================
-            fonte_recurso = st.radio(
-                "Deduzir esta saída de:",
+            valor_saida = st.number_input("Valor Total da Saída (R$)", value=default_valor, min_value=0.01, format="%.2f", key="input_valor_saida")
+
+            fonte_recurso_escolhida = st.radio(
+                "Qual a fonte principal do recurso para esta despesa?",
                 ("Entradas do Mês Atual", "Saldo Geral Acumulado"),
-                key="input_fonte_recurso",
-                horizontal=True,
-                help="""
-                - **Entradas do Mês Atual:** Afeta o saldo do mês (Entradas - Saídas). Use para custos operacionais.
-                - **Saldo Geral Acumulado:** Não afeta o saldo do mês, apenas o caixa total. Use para investimentos ou despesas pagas com saldo anterior.
-                """
+                key="input_fonte_recurso_inicial"
             )
-            # ==================================================================
-            
-            status_selecionado = st.radio("Status", ["Realizada", "Pendente"], index=0 if default_status == "Realizada" else 1, key="input_status_global_saida", disabled=edit_mode)
-        
-        data_pagamento_final = None 
-        if status_selecionado == "Pendente":
-            data_pagamento_final = st.date_input("Data Prevista de Pagamento", value=date.today())
 
-        with st.form("form_movimentacao", clear_on_submit=not edit_mode):
-            st.markdown("#### Dados Finais da Transação")
-            
-            col_f1, col_f2, col_f3 = st.columns(3)
+            def verificar_saldo_e_prosseguir():
+                """Função chamada pelo botão para validar o saldo e definir o próximo passo."""
+                st.session_state.valor_total_saida = st.session_state.input_valor_saida
 
-            with col_f1:
-                loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_form")
-                data_input = st.date_input("Data da Transação", value=default_data, key="input_data_form")
-            
-            with col_f2:
-                cliente_final = cliente
-                st.text_input("Cliente/Descrição (Final)", value=cliente_final, key="input_cliente_form_display", disabled=True)
-                
-                if status_selecionado == "Realizada":
-                    data_pagamento_final = data_input
-                    forma_pagamento = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="input_forma_pagamento_form")
-                else:
-                    forma_pagamento = "Pendente" 
-                    st.text_input("Forma de Pagamento", value="Pendente", disabled=True)
-            
-            with col_f3:
-                st.markdown(f"**Valor Final:** R$ {valor_final_movimentacao:,.2f}")
-                st.markdown(f"**Status:** **{status_selecionado}**")
-                st.markdown(f"**Data Pagamento:** {data_pagamento_final.strftime('%d/%m/%Y') if data_pagamento_final else 'N/A'}")
+                if st.session_state.input_fonte_recurso_inicial == "Entradas do Mês Atual":
+                    # Se for do mês, não precisa validar, vai direto para o formulário final
+                    st.session_state.show_split_form = False
+                else: # Escolheu Saldo Geral Acumulado
+                    # Calcula o saldo geral disponível
+                    df_geral_realizado = df_exibicao[df_exibicao['Status'] == 'Realizada']
+                    _, _, saldo_geral_atual = calcular_resumo(df_geral_realizado)
+                    st.session_state.saldo_geral_disponivel = saldo_geral_atual
 
-            enviar = st.form_submit_button("💾 Adicionar e Salvar", type="primary", use_container_width=True)
+                    if st.session_state.valor_total_saida > saldo_geral_atual:
+                        # Saldo insuficiente -> mostra o formulário de divisão
+                        st.session_state.show_split_form = True
+                    else:
+                        # Saldo suficiente -> vai para o formulário final
+                        st.session_state.show_split_form = False
+
+            st.button("Verificar Saldo e Continuar", on_click=verificar_saldo_e_prosseguir, type="primary", use_container_width=True)
+
+
+            # --- PARTE 2: Formulário de Divisão (SÓ APARECE QUANDO NECESSÁRIO) ---
+            if st.session_state.get('show_split_form', False):
+                st.warning("⚠️ Saldo Geral Insuficiente!")
+                st.info(f"A despesa de R$ {st.session_state.valor_total_saida:,.2f} é maior que o saldo geral disponível de R$ {st.session_state.saldo_geral_disponivel:,.2f}.")
+                st.markdown("Por favor, divida o valor da saída entre as fontes de recurso.")
+
+                with st.form("form_split_saida"):
+                    st.subheader("Dividir Valor da Saída")
+
+                    max_do_geral = min(st.session_state.valor_total_saida, st.session_state.saldo_geral_disponivel)
+                    valor_do_geral = st.number_input(
+                        "Valor a ser deduzido do Saldo Geral Acumulado",
+                        min_value=0.0, max_value=float(max_do_geral), value=float(max_do_geral), format="%.2f"
+                    )
+
+                    valor_do_mes = st.session_state.valor_total_saida - valor_do_geral
+                    st.metric(label="Valor a ser deduzido das Entradas do Mês (Restante)", value=f"R$ {valor_do_mes:,.2f}")
+
+                    st.markdown(f"**Resumo:** Serão criadas duas movimentações: **R$ {valor_do_geral:,.2f}** (do Saldo Geral) e **R$ {valor_do_mes:,.2f}** (do Mês Atual).")
+
+                    # Coleta de dados finais (Loja, Data, etc.) DENTRO do form de divisão
+                    loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_split")
+                    data_input = st.date_input("Data da Transação", value=default_data, key="input_data_split")
+                    forma_pagamento = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="input_forma_pagamento_split")
+
+                    enviar_divisao = st.form_submit_button("✅ Confirmar e Salvar Divisão")
+
+                    if enviar_divisao:
+                        df_movimentacoes_upd = st.session_state.df.copy()
+                        # Transação 1: Parte do Saldo Geral
+                        if valor_do_geral > 0:
+                            transacao_geral = { "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": f"{cliente} (Parte do Saldo Geral)", "Valor": -abs(valor_do_geral), "Forma de Pagamento": forma_pagamento, "Tipo": "Saída", "Produtos Vendidos": "[]", "Categoria": "", "Status": "Realizada", "Data Pagamento": data_input.isoformat(), "FonteRecurso": "Saldo Geral Acumulado", "RecorrenciaID": "", "TransacaoPaiID": "", "TransactionID": str(uuid.uuid4()) }
+                            df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([transacao_geral])], ignore_index=True)
+                        # Transação 2: Parte do Mês Atual
+                        if valor_do_mes > 0:
+                            transacao_mes = { "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": f"{cliente} (Parte do Mês Atual)", "Valor": -abs(valor_do_mes), "Forma de Pagamento": forma_pagamento, "Tipo": "Saída", "Produtos Vendidos": "[]", "Categoria": "", "Status": "Realizada", "Data Pagamento": data_input.isoformat(), "FonteRecurso": "Entradas do Mês Atual", "RecorrenciaID": "", "TransacaoPaiID": "", "TransactionID": str(uuid.uuid4()) }
+                            df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([transacao_mes])], ignore_index=True)
+
+                        if salvar_dados_no_github(df_movimentacoes_upd, "Saída dividida adicionada", data_input):
+                            st.success("Movimentação dividida e salva com sucesso!"); st.session_state.show_split_form = False; st.session_state.valor_total_saida = 0.0; st.session_state.df = df_movimentacoes_upd; carregar_livro_caixa.clear(); st.rerun()
+
+            # --- PARTE 3: Formulário Final Simples (QUANDO O SALDO É SUFICIENTE OU A FONTE É O MÊS) ---
+            elif st.session_state.get('valor_total_saida', 0) > 0 and not st.session_state.get('show_split_form', False):
+                 with st.form("form_movimentacao_saida_simples"):
+                    st.markdown("#### Dados Finais da Transação"); st.info(f"Registrando saída de R$ {st.session_state.valor_total_saida:,.2f} a partir de '{st.session_state.input_fonte_recurso_inicial}'.")
+                    
+                    loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_simples")
+                    data_input = st.date_input("Data da Transação", value=default_data, key="input_data_simples")
+                    forma_pagamento = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="input_forma_pagamento_simples")
+                    
+                    enviar_simples = st.form_submit_button("💾 Adicionar e Salvar")
 
             if enviar:
                 # --- LÓGICA DE SALVAMENTO ATUALIZADA ---
@@ -3317,6 +3356,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
