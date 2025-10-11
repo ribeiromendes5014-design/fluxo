@@ -2729,7 +2729,7 @@ def livro_caixa():
             if status_selecionado == "Pendente":
                 data_pagamento_final = st.date_input("Data Prevista de Pagamento", value=date.today())
 
-            with st.form("form_movimentacao_entrada", clear_on_submit=not edit_mode):
+            with st.form("form_movimentacao_entrada", clear_on_submit=True):
                 st.markdown("#### Dados Finais da Transação")
                 col_f1, col_f2, col_f3 = st.columns(3)
                 with col_f1:
@@ -2751,227 +2751,223 @@ def livro_caixa():
 
                 enviar_entrada = st.form_submit_button("💾 Adicionar e Salvar Entrada", type="primary", use_container_width=True)
 
-                if enviar_entrada:
-                    # --- LÓGICA DE SALVAMENTO COM CASHBACK TURBO E NOTIFICAÇÃO TELEGRAM ---
+        if enviar_entrada:
+            # --- LÓGICA DE SALVAMENTO COM CASHBACK TURBO E NOTIFICAÇÃO TELEGRAM ---
+            
+            valor_base = valor_final_movimentacao
+            cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
+            valor_a_salvar = valor_base - cashback_resgatado
+
+            # Define df_movimentacoes_upd no início para garantir que sempre exista
+            df_movimentacoes_upd = st.session_state.df.copy()
+
+            if status_selecionado == "Realizada" and cliente:
+                produtos_catalogo_df = inicializar_produtos()
+                df_clientes_upd = st.session_state.df_clientes.copy()
+                
+                cliente_idx_list = []
+                cliente_data_antes = None
+                era_primeira_compra = False
+                indicador_nome = None
+
+                if 'Nome' in df_clientes_upd.columns:
+                    cliente_idx_list = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()
+
+                if cliente_idx_list:
+                    idx = cliente_idx_list[0]
+                    cliente_data_antes = df_clientes_upd.loc[idx].copy()
+                    gasto_total_atualizado = cliente_data_antes["TotalGasto"] + valor_base
+                    nivel_cliente = calcular_nivel(gasto_total_atualizado)
+                    if cliente_data_antes["TotalGasto"] == 0: era_primeira_compra = True
+                    if 'Indicado Por' in cliente_data_antes: indicador_nome = cliente_data_antes.get('Indicado Por')
+                else:
+                    nivel_cliente = calcular_nivel(valor_base)
+                    era_primeira_compra = True
+                
+                total_cashback_ganho = 0.0
+                for item_vendido in st.session_state.lista_produtos:
+                    produto_id = item_vendido.get("Produto_ID")
+                    valor_item = float(item_vendido.get("Preço Unitário", 0)) * float(item_vendido.get("Quantidade", 0))
+                    percentual_cashback = 0.0
+                    is_turbo = False
+                    if produto_id:
+                        produto_info = produtos_catalogo_df[produtos_catalogo_df["ID"] == produto_id]
+                        if not produto_info.empty:
+                            status_promo = produto_info.iloc[0].get("PromocaoEspecial", "NAO")
+                            if str(status_promo).strip().upper() == "SIM": is_turbo = True
                     
-                    valor_base = valor_final_movimentacao
-                    cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
-                    valor_a_salvar = valor_base - cashback_resgatado
-
-                    # Define df_movimentacoes_upd no início para garantir que sempre exista
-                    df_movimentacoes_upd = st.session_state.df.copy()
-
-                    if status_selecionado == "Realizada" and cliente:
-                        produtos_catalogo_df = inicializar_produtos()
-                        df_clientes_upd = st.session_state.df_clientes.copy()
-                        
-                        cliente_idx_list = []
-                        cliente_data_antes = None
-                        era_primeira_compra = False
-                        indicador_nome = None
-
-                        if 'Nome' in df_clientes_upd.columns:
-                            cliente_idx_list = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()
-
-                        if cliente_idx_list:
-                            idx = cliente_idx_list[0]
-                            cliente_data_antes = df_clientes_upd.loc[idx].copy()
-                            gasto_total_atualizado = cliente_data_antes["TotalGasto"] + valor_base
-                            nivel_cliente = calcular_nivel(gasto_total_atualizado)
-                            if cliente_data_antes["TotalGasto"] == 0: era_primeira_compra = True
-                            if 'Indicado Por' in cliente_data_antes: indicador_nome = cliente_data_antes.get('Indicado Por')
-                        else:
-                            nivel_cliente = calcular_nivel(valor_base)
-                            era_primeira_compra = True
-                        
-                        total_cashback_ganho = 0.0
-                        for item_vendido in st.session_state.lista_produtos:
-                            produto_id = item_vendido.get("Produto_ID")
-                            valor_item = float(item_vendido.get("Preço Unitário", 0)) * float(item_vendido.get("Quantidade", 0))
-                            percentual_cashback = 0.0
-                            is_turbo = False
-                            if produto_id:
-                                produto_info = produtos_catalogo_df[produtos_catalogo_df["ID"] == produto_id]
-                                if not produto_info.empty:
-                                    status_promo = produto_info.iloc[0].get("PromocaoEspecial", "NAO")
-                                    if str(status_promo).strip().upper() == "SIM": is_turbo = True
-                            
-                            if is_turbo:
-                                if "Diamante" in nivel_cliente: percentual_cashback = 0.15
-                                elif "Ouro" in nivel_cliente: percentual_cashback = 0.07
-                                else: percentual_cashback = 0.03
-                            else:
-                                if "Diamante" in nivel_cliente: percentual_cashback = 0.08
-                                elif "Ouro" in nivel_cliente: percentual_cashback = 0.05
-                                else: percentual_cashback = 0.03
-                            total_cashback_ganho += valor_item * percentual_cashback
-                        total_cashback_ganho = round(total_cashback_ganho, 2)
-                        
-                        if cliente_idx_list:
-                            idx = cliente_idx_list[0]
-                            df_clientes_upd.loc[idx, "TotalGasto"] += valor_base
-                            df_clientes_upd.loc[idx, "Nivel"] = nivel_cliente
-                            df_clientes_upd.loc[idx, "Cashback"] -= cashback_resgatado
-                            df_clientes_upd.loc[idx, "Cashback"] += total_cashback_ganho
-                        else:
-                            novo_cliente_data = { "Nome": cliente.strip(), "Cashback": total_cashback_ganho, "TotalGasto": valor_base, "Nivel": nivel_cliente }
-                            df_clientes_upd = pd.concat([df_clientes_upd, pd.DataFrame([novo_cliente_data])], ignore_index=True)
-                        
-                        msg_cashback = f"Cashback para {cliente}: Ganho de R${total_cashback_ganho:,.2f} nesta compra."
-                        if salvar_clientes_cash_github(df_clientes_upd, msg_cashback):
-                            st.toast(msg_cashback)
-                            st.session_state.df_clientes = df_clientes_upd
-                        
-                        # ================================================================
-                        # 🚀 LÓGICA DE ENVIO DO TELEGRAM E GERAÇÃO DE PDF
-                        # ================================================================
-                        if TELEGRAM_ENABLED:
-                            # Adiciona temporariamente a nova movimentação para contagem correta
-                            nova_movimentacao_temp = { "Data": data_input.isoformat(), "Cliente": cliente_final, "Tipo": "Entrada", "Status": status_selecionado }
-                            df_movimentacoes_para_contagem = pd.concat([st.session_state.df, pd.DataFrame([nova_movimentacao_temp])], ignore_index=True)
-                            
-                            idx_cliente_final = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()[0]
-                            cliente_final_data = df_clientes_upd.loc[idx_cliente_final]
-                            saldo_atualizado = cliente_final_data["Cashback"]
-                            
-                            total_compras = df_movimentacoes_para_contagem[
-                                (df_movimentacoes_para_contagem['Cliente'] == cliente) &
-                                (df_movimentacoes_para_contagem['Tipo'] == 'Entrada') &
-                                (df_movimentacoes_para_contagem['Status'] == 'Realizada')
-                            ].shape[0]
-
-                            fuso_horario_brasil = pytz.timezone('America/Sao_Paulo')
-                            agora_brasil = datetime.now(fuso_horario_brasil)
-                            data_hora_lancamento = agora_brasil.strftime('%d/%m/%Y às %H:%M')
-
-                            cashback_ganho_str = f"R$ {total_cashback_ganho:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            saldo_atual_str = f"R$ {saldo_atualizado:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-                            lista_produtos_str = ""
-                            if st.session_state.lista_produtos:
-                                lista_produtos_str += "\n--- Itens da Sua Compra ---\n"
-                                for item in st.session_state.lista_produtos:
-                                    nome_produto = item.get('Produto', 'Produto desconhecido')
-                                    qtd = int(item.get('Quantidade', 0))
-                                    lista_produtos_str += f"  - {qtd}x {nome_produto}\n"
-                                lista_produtos_str += "\n"
-
-                            mensagem_header = "✨ *Novidade imperdível na Doce&Bella!* ✨\n\nAgora você aproveita ainda mais com nosso Programa de Fidelidade 🛍💖\n\n➡️ A cada compra, você acumula pontos.\n➡️ Quanto mais você compra, mais descontos exclusivos você ganha!\n\n"
-                            mensagem_parabens = f"🎉 *PARABÉNS, {cliente.upper()}! VOCÊ GANHOU CASHBACK!* 🎉\n\n"
-                            mensagem_body = (
-                                f"A loja Doce&Bella te presenteia com *{cashback_ganho_str}* em novos créditos!\n"
-                                f"{lista_produtos_str}"
-                                "--- *Seu Saldo Atualizado* ---\n"
-                                f"🗓 Data/Hora: {data_hora_lancamento}\n"
-                                f"💰 Saldo Atual: *{saldo_atual_str}*\n"
-                                f"🛒 Total de Compras: {total_compras}\n"
-                                "----------------------------------\n\n"
-                            )
-                            
-                            subiu_de_nivel = False
-                            if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
-                                subiu_de_nivel = True
-                                mensagem_body += f"🎉 *Parabéns! Você subiu para o nível {nivel_cliente}!* Aproveite seus novos benefícios.\n----------------------------------\n\n"
-
-                            mensagem_footer = "✨ *COMO USAR SEU CRÉDITO NA DOCE&BELLA*\n1. *Limite de Uso:* Você pode usar até 50% do valor total da sua nova compra.\n2. *Saldo Mínimo:* Para resgatar, seu saldo deve ser de, no mínimo, R$ 20,00.\n\n📞 *PRECISA DE AJUDA OU QUER CONSULTAR SEU SALDO?*\nBasta chamar a Doce&Bella pelo ZAP! 💬\n\n🚨 *Dica: Salve nosso número na sua agenda para não perder as promoções e novidades!*"
-                            
-                            mensagem_completa = mensagem_header + mensagem_parabens + mensagem_body + mensagem_footer
-                            
-                            # --- Gera o PDF ---
-                            pdf_bytes = gerar_recibo_cashback_pdf(
-                                cliente_nome=cliente,
-                                cashback_ganho=total_cashback_ganho,
-                                saldo_atualizado=saldo_atualizado,
-                                total_compras=total_compras,
-                                nivel_cliente=nivel_cliente,
-                                lista_produtos_vendidos=st.session_state.lista_produtos,
-                                subiu_de_nivel=subiu_de_nivel
-                            )
-                            nome_arquivo_pdf = f"recibo_{cliente.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.pdf"
-
-                            # --- Envia o PDF com a mensagem como legenda ---
-                            enviar_recibo_telegram(
-                                pdf_bytes=pdf_bytes,
-                                file_name=nome_arquivo_pdf,
-                                caption=mensagem_completa
-                            )
-
-                            if era_primeira_compra and indicador_nome:
-                                idx_indicador = df_clientes_upd.index[df_clientes_upd['Nome'] == indicador_nome].tolist()
-                                if idx_indicador:
-                                    bonus = valor_base * 0.03 # 3% de bônus
-                                    df_clientes_upd.loc[idx_indicador[0], 'Cashback'] += bonus
-                                    salvar_clientes_cash_github(df_clientes_upd, f"Bônus de indicação para {indicador_nome}")
-                                    
-                                    bonus_str = f"R$ {bonus:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                                    nivel_indicador = df_clientes_upd.loc[idx_indicador[0], 'Nivel']
-                                    mensagem_indicador = (
-                                        f"Oi, {indicador_nome}! Agradecemos demais a sua indicação da {cliente}! "
-                                        f"Você acaba de ganhar *{bonus_str}* extras! Seu nível atual é: *{nivel_indicador}*."
-                                    )
-                                    enviar_mensagem_telegram(mensagem_indicador)
-
-                    # Lógica para salvar a movimentação no livro caixa
-                    transaction_id_final = str(uuid.uuid4())
-                    if edit_mode: transaction_id_final = st.session_state.edit_id
-                    
-                    nova_movimentacao = { 
-                        "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente_final, 
-                        "Valor": valor_a_salvar, "Forma de Pagamento": forma_pagamento, "Tipo": "Entrada", 
-                        "Produtos Vendidos": produtos_vendidos_json, "Categoria": "", "Status": status_selecionado, 
-                        "Data Pagamento": data_pagamento_final.isoformat() if data_pagamento_final else None, 
-                        "FonteRecurso": "", "RecorrenciaID": '', "TransacaoPaiID": '', 
-                        "TransactionID": transaction_id_final 
-                    }
-                    
-                    df_movimentacoes_upd = st.session_state.df.copy()
-                    if edit_mode:
-                        idx_to_update = df_movimentacoes_upd.index[df_movimentacoes_upd['TransactionID'] == st.session_state.edit_id].tolist()
-                        if idx_to_update:
-                            df_movimentacoes_upd.loc[idx_to_update[0]] = pd.Series(nova_movimentacao)
-                            msg_commit = f"Edição da movimentação ID {st.session_state.edit_id[:8]}"
-                        else:
-                            st.error("Erro: Não foi possível encontrar a movimentação para editar."); return
+                    if is_turbo:
+                        if "Diamante" in nivel_cliente: percentual_cashback = 0.15
+                        elif "Ouro" in nivel_cliente: percentual_cashback = 0.07
+                        else: percentual_cashback = 0.03
                     else:
-                        df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([nova_movimentacao])], ignore_index=True)
-                        msg_commit = "Nova movimentação adicionada"
+                        if "Diamante" in nivel_cliente: percentual_cashback = 0.08
+                        elif "Ouro" in nivel_cliente: percentual_cashback = 0.05
+                        else: percentual_cashback = 0.03
+                    total_cashback_ganho += valor_item * percentual_cashback
+                total_cashback_ganho = round(total_cashback_ganho, 2)
+                
+                if cliente_idx_list:
+                    idx = cliente_idx_list[0]
+                    df_clientes_upd.loc[idx, "TotalGasto"] += valor_base
+                    df_clientes_upd.loc[idx, "Nivel"] = nivel_cliente
+                    df_clientes_upd.loc[idx, "Cashback"] -= cashback_resgatado
+                    df_clientes_upd.loc[idx, "Cashback"] += total_cashback_ganho
+                else:
+                    novo_cliente_data = { "Nome": cliente.strip(), "Cashback": total_cashback_ganho, "TotalGasto": valor_base, "Nivel": nivel_cliente }
+                    df_clientes_upd = pd.concat([df_clientes_upd, pd.DataFrame([novo_cliente_data])], ignore_index=True)
+                
+                msg_cashback = f"Cashback para {cliente}: Ganho de R${total_cashback_ganho:,.2f} nesta compra."
+                if salvar_clientes_cash_github(df_clientes_upd, msg_cashback):
+                    st.toast(msg_cashback)
+                    st.session_state.df_clientes = df_clientes_upd
+                
+                # ================================================================
+                # 🚀 LÓGICA DE ENVIO DO TELEGRAM E GERAÇÃO DE PDF
+                # ================================================================
+                if TELEGRAM_ENABLED:
+                    # Adiciona temporariamente a nova movimentação para contagem correta
+                    nova_movimentacao_temp = { "Data": data_input.isoformat(), "Cliente": cliente_final, "Tipo": "Entrada", "Status": status_selecionado }
+                    df_movimentacoes_para_contagem = pd.concat([st.session_state.df, pd.DataFrame([nova_movimentacao_temp])], ignore_index=True)
                     
-                    if salvar_dados_no_github(df_movimentacoes_upd, msg_commit, data_input):
-                        st.success("Movimentação salva com sucesso!")
-                        
-                        # Bloco de geração de PDF e botão de download (movido para DENTRO do if de sucesso)
-                        subiu_de_nivel = False
-                        if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
-                            subiu_de_nivel = True
-                        
-                        # Reutiliza o PDF já gerado para o Telegram, se existir. Caso contrário, gera novamente.
-                        if 'pdf_bytes' not in locals():
-                            pdf_bytes = gerar_recibo_cashback_pdf(
-                                cliente_nome=cliente,
-                                cashback_ganho=total_cashback_ganho,
-                                saldo_atualizado=saldo_atualizado,
-                                total_compras=total_compras,
-                                nivel_cliente=nivel_cliente,
-                                lista_produtos_vendidos=st.session_state.lista_produtos,
-                                subiu_de_nivel=subiu_de_nivel
-                            )
-                        if 'nome_arquivo_pdf' not in locals():
-                            nome_arquivo_pdf = f"recibo_{cliente.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.pdf"
+                    idx_cliente_final = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()[0]
+                    cliente_final_data = df_clientes_upd.loc[idx_cliente_final]
+                    saldo_atualizado = cliente_final_data["Cashback"]
+                    
+                    total_compras = df_movimentacoes_para_contagem[
+                        (df_movimentacoes_para_contagem['Cliente'] == cliente) &
+                        (df_movimentacoes_para_contagem['Tipo'] == 'Entrada') &
+                        (df_movimentacoes_para_contagem['Status'] == 'Realizada')
+                    ].shape[0]
 
-                        st.download_button(
-                            label="📄 Baixar Recibo da Venda (PDF)",
-                            data=pdf_bytes,
-                            file_name=nome_arquivo_pdf,
-                            mime="application/pdf"
-                        )
-                        
-                        st.session_state.df = df_movimentacoes_upd
-                        st.session_state.lista_produtos = []
-                        st.session_state.edit_id = None
-                        carregar_livro_caixa.clear()
-                        
-                        if st.button("🎉 Finalizar e Nova Venda"):
-                            st.rerun()
+                    fuso_horario_brasil = pytz.timezone('America/Sao_Paulo')
+                    agora_brasil = datetime.now(fuso_horario_brasil)
+                    data_hora_lancamento = agora_brasil.strftime('%d/%m/%Y às %H:%M')
+
+                    cashback_ganho_str = f"R$ {total_cashback_ganho:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    saldo_atual_str = f"R$ {saldo_atualizado:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+                    lista_produtos_str = ""
+                    if st.session_state.lista_produtos:
+                        lista_produtos_str += "\n--- Itens da Sua Compra ---\n"
+                        for item in st.session_state.lista_produtos:
+                            nome_produto = item.get('Produto', 'Produto desconhecido')
+                            qtd = int(item.get('Quantidade', 0))
+                            lista_produtos_str += f"  - {qtd}x {nome_produto}\n"
+                        lista_produtos_str += "\n"
+
+                    mensagem_header = "✨ *Novidade imperdível na Doce&Bella!* ✨\n\nAgora você aproveita ainda mais com nosso Programa de Fidelidade 🛍💖\n\n➡️ A cada compra, você acumula pontos.\n➡️ Quanto mais você compra, mais descontos exclusivos você ganha!\n\n"
+                    mensagem_parabens = f"🎉 *PARABÉNS, {cliente.upper()}! VOCÊ GANHOU CASHBACK!* 🎉\n\n"
+                    mensagem_body = (
+                        f"A loja Doce&Bella te presenteia com *{cashback_ganho_str}* em novos créditos!\n"
+                        f"{lista_produtos_str}"
+                        "--- *Seu Saldo Atualizado* ---\n"
+                        f"🗓 Data/Hora: {data_hora_lancamento}\n"
+                        f"💰 Saldo Atual: *{saldo_atual_str}*\n"
+                        f"🛒 Total de Compras: {total_compras}\n"
+                        "----------------------------------\n\n"
+                    )
+                    
+                    subiu_de_nivel = False
+                    if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
+                        subiu_de_nivel = True
+                        mensagem_body += f"🎉 *Parabéns! Você subiu para o nível {nivel_cliente}!* Aproveite seus novos benefícios.\n----------------------------------\n\n"
+
+                    mensagem_footer = "✨ *COMO USAR SEU CRÉDITO NA DOCE&BELLA*\n1. *Limite de Uso:* Você pode usar até 50% do valor total da sua nova compra.\n2. *Saldo Mínimo:* Para resgatar, seu saldo deve ser de, no mínimo, R$ 20,00.\n\n📞 *PRECISA DE AJUDA OU QUER CONSULTAR SEU SALDO?*\nBasta chamar a Doce&Bella pelo ZAP! 💬\n\n🚨 *Dica: Salve nosso número na sua agenda para não perder as promoções e novidades!*"
+                    
+                    mensagem_completa = mensagem_header + mensagem_parabens + mensagem_body + mensagem_footer
+                    
+                    pdf_bytes = gerar_recibo_cashback_pdf(
+                        cliente_nome=cliente,
+                        cashback_ganho=total_cashback_ganho,
+                        saldo_atualizado=saldo_atualizado,
+                        total_compras=total_compras,
+                        nivel_cliente=nivel_cliente,
+                        lista_produtos_vendidos=st.session_state.lista_produtos,
+                        subiu_de_nivel=subiu_de_nivel
+                    )
+                    nome_arquivo_pdf = f"recibo_{cliente.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.pdf"
+
+                    enviar_recibo_telegram(
+                        pdf_bytes=pdf_bytes,
+                        file_name=nome_arquivo_pdf,
+                        caption=mensagem_completa
+                    )
+
+                    if era_primeira_compra and indicador_nome:
+                        idx_indicador = df_clientes_upd.index[df_clientes_upd['Nome'] == indicador_nome].tolist()
+                        if idx_indicador:
+                            bonus = valor_base * 0.03
+                            df_clientes_upd.loc[idx_indicador[0], 'Cashback'] += bonus
+                            salvar_clientes_cash_github(df_clientes_upd, f"Bônus de indicação para {indicador_nome}")
+                            
+                            bonus_str = f"R$ {bonus:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            nivel_indicador = df_clientes_upd.loc[idx_indicador[0], 'Nivel']
+                            mensagem_indicador = (
+                                f"Oi, {indicador_nome}! Agradecemos demais a sua indicação da {cliente}! "
+                                f"Você acaba de ganhar *{bonus_str}* extras! Seu nível atual é: *{nivel_indicador}*."
+                            )
+                            enviar_mensagem_telegram(mensagem_indicador)
+
+            # Lógica para salvar a movimentação no livro caixa
+            transaction_id_final = str(uuid.uuid4())
+            if edit_mode: transaction_id_final = st.session_state.edit_id
+            
+            nova_movimentacao = { 
+                "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente_final, 
+                "Valor": valor_a_salvar, "Forma de Pagamento": forma_pagamento, "Tipo": "Entrada", 
+                "Produtos Vendidos": produtos_vendidos_json, "Categoria": "", "Status": status_selecionado, 
+                "Data Pagamento": data_pagamento_final.isoformat() if data_pagamento_final else None, 
+                "FonteRecurso": "", "RecorrenciaID": '', "TransacaoPaiID": '', 
+                "TransactionID": transaction_id_final 
+            }
+            
+            df_movimentacoes_upd = st.session_state.df.copy()
+            if edit_mode:
+                idx_to_update = df_movimentacoes_upd.index[df_movimentacoes_upd['TransactionID'] == st.session_state.edit_id].tolist()
+                if idx_to_update:
+                    df_movimentacoes_upd.loc[idx_to_update[0]] = pd.Series(nova_movimentacao)
+                    msg_commit = f"Edição da movimentação ID {st.session_state.edit_id[:8]}"
+                else:
+                    st.error("Erro: Não foi possível encontrar a movimentação para editar."); return
+            else:
+                df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([nova_movimentacao])], ignore_index=True)
+                msg_commit = "Nova movimentação adicionada"
+            
+            if salvar_dados_no_github(df_movimentacoes_upd, msg_commit, data_input):
+                st.success("Movimentação salva com sucesso!")
+                
+                subiu_de_nivel = False
+                if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
+                    subiu_de_nivel = True
+                
+                if 'pdf_bytes' not in locals():
+                    pdf_bytes = gerar_recibo_cashback_pdf(
+                        cliente_nome=cliente,
+                        cashback_ganho=total_cashback_ganho,
+                        saldo_atualizado=saldo_atualizado,
+                        total_compras=total_compras,
+                        nivel_cliente=nivel_cliente,
+                        lista_produtos_vendidos=st.session_state.lista_produtos,
+                        subiu_de_nivel=subiu_de_nivel
+                    )
+                if 'nome_arquivo_pdf' not in locals():
+                    nome_arquivo_pdf = f"recibo_{cliente.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.pdf"
+
+                st.download_button(
+                    label="📄 Baixar Recibo da Venda (PDF)",
+                    data=pdf_bytes,
+                    file_name=nome_arquivo_pdf,
+                    mime="application/pdf"
+                )
+                
+                st.session_state.df = df_movimentacoes_upd
+                st.session_state.lista_produtos = []
+                st.session_state.edit_id = None
+                carregar_livro_caixa.clear()
+                
+                if st.button("🎉 Finalizar e Nova Venda"):
+                    st.rerun()
 
                     # --- FIM DA ALTERAÇÃO ---
 
@@ -3598,6 +3594,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
