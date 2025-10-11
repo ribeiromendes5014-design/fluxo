@@ -17,4 +17,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-10-11,Doce&bella,Leticia,128.8,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":128.8,""Custo Unit\u00e1rio"":0.0}]",,Pendente,,,
 2025-10-11,Doce&bella,Tais Agostinho,19.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":19.0,""Custo Unit\u00e1rio"":0.0}]",,Pendente,,,
 2025-10-11,Fotografia,ensaio,280.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""ensaio"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":280.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,
-2025-10-08,Doce&bella,Compra de mercadoria,-218.0,PIX,Saída,[],,Realizada,2025-10-08,,
+2025-10-11,Doce&bella,teste,100.0,Dinheiro,Entrada,[],,Realizada,2025-10-11,,
