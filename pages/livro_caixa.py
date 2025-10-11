@@ -2768,17 +2768,44 @@ def livro_caixa():
         
         st.subheader(f"📊 Resumo Financeiro Geral")
 
-        total_entradas_mes, total_saidas_mes, saldo_mes = calcular_resumo(df_mes_atual_realizado)
+        # ========================================================================
+        # BLOCO DE CÁLCULO ATUALIZADO
+        # ========================================================================
 
+        # 1. Garante que a coluna 'FonteRecurso' exista para evitar erros com dados antigos.
+        if 'FonteRecurso' not in df_mes_atual_realizado.columns:
+            df_mes_atual_realizado['FonteRecurso'] = ''
+
+        # 2. Cria um DataFrame específico para o CÁLCULO DO SALDO DO MÊS.
+        # Ele exclui as saídas que foram pagas com o "Saldo Geral Acumulado".
+        df_para_saldo_mes = df_mes_atual_realizado[
+            df_mes_atual_realizado['FonteRecurso'] != 'Saldo Geral Acumulado'
+        ].copy()
+
+        # 3. Calcula as métricas com base nos DataFrames corretos.
+        
+        # O Saldo do Mês (performance operacional) é calculado com o DataFrame filtrado.
+        _, _, saldo_mes = calcular_resumo(df_para_saldo_mes)
+        
+        # As Entradas e Saídas TOTAIS do mês são calculadas com o DataFrame original do mês.
+        total_entradas_mes, total_saidas_mes, _ = calcular_resumo(df_mes_atual_realizado)
+
+        # O Saldo Geral Total não muda, continua usando todas as transações realizadas.
         df_geral_realizado = df_exibicao[df_exibicao['Status'] == 'Realizada']
         _, _, saldo_geral_total = calcular_resumo(df_geral_realizado)
-        
+
+        # 4. Exibe as métricas com tooltips explicativos.
         col1, col2, col3, col4 = st.columns(4)
         col1.metric(f"Entradas (Mês: {primeiro_dia_mes.strftime('%b')})", f"R$ {total_entradas_mes:,.2f}")
-        col2.metric(f"Saídas (Mês: {primeiro_dia_mes.strftime('%b')})", f"R$ {total_saidas_mes:,.2f}")
-        delta_saldo_mes = f"R$ {saldo_mes:,.2f}"
-        col3.metric("Saldo do Mês (Realizado)", f"R$ {saldo_mes:,.2f}", delta=delta_saldo_mes if saldo_mes != 0 else None, delta_color="normal")
-        col4.metric("Saldo Atual (Geral)", f"R$ {saldo_geral_total:,.2f}")
+        
+        col2.metric(f"Saídas (Mês: {primeiro_dia_mes.strftime('%b')})", f"R$ {total_saidas_mes:,.2f}",
+                    help="Soma de TODAS as saídas realizadas no mês, independente da fonte do recurso.")
+        
+        col3.metric("Saldo do Mês (Realizado)", f"R$ {saldo_mes:,.2f}",
+                    help="Performance do Mês = (Entradas do Mês) - (Saídas pagas com as entradas do mês). Este valor não é afetado por despesas pagas com o Saldo Geral Acumulado.")
+
+        col4.metric("Saldo Atual (Geral)", f"R$ {saldo_geral_total:,.2f}",
+                    help="Caixa total atual, considerando todas as entradas e saídas de todos os períodos.")
 
         st.markdown("---")
         
@@ -3290,6 +3317,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
