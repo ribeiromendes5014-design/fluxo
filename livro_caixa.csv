@@ -12,3 +12,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-10-11,Doce&bella,Andica,50.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":50.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,
 2025-10-11,Doce&bella,loja,20.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":20.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,
 2025-10-11,Doce&bella,Marina,35.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":35.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,
+2025-10-11,Doce&bella,Vitoria Barbosa Lima,45.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":45.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,
