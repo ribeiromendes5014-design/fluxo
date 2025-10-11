@@ -2657,7 +2657,7 @@ def livro_caixa():
                 # Salva a movimentação no livro caixa
                 df_movimentacoes_upd = st.session_state.df.copy()
                 nova_movimentacao = {
-                    "Data": date.today().isoformat(), "Loja": "Matriz", "Cliente": cliente_final_com_nota,
+                    "Data": date.today().isoformat(), "Loja": "Doce&Bella", "Cliente": cliente_final_com_nota,
                     "Valor": valor_final_movimentacao - cashback_resgatado,
                     "Forma de Pagamento": "PIX", "Tipo": tipo, "Produtos Vendidos": produtos_vendidos_json,
                     "Categoria": "", "Status": status_selecionado, 
@@ -3221,6 +3221,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
