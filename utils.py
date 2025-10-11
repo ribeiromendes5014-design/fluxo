@@ -717,6 +717,7 @@ def carregar_produtos():
     df_processado = processar_produtos(df_base)
     return df_processado
 
+@st.cache_data
 def inicializar_produtos():
     """FUNÇÃO 3: A GERENTE."""
     if "produtos" not in st.session_state or st.session_state.produtos.empty:
@@ -989,6 +990,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
