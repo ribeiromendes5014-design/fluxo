@@ -2876,6 +2876,48 @@ def livro_caixa():
                         st.session_state.edit_id = None
                         carregar_livro_caixa.clear()
                         st.rerun()
+                    # ================================================================
+                        # ✅ INÍCIO DA GERAÇÃO DO PDF E BOTÃO DE DOWNLOAD
+                        # ================================================================
+                        subiu_de_nivel = False
+                        if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
+                            subiu_de_nivel = True
+                        
+                        # Chama a função para gerar o PDF em memória
+                        pdf_bytes = gerar_recibo_cashback_pdf(
+                            cliente_nome=cliente,
+                            cashback_ganho=total_cashback_ganho,
+                            saldo_atualizado=saldo_atualizado, # Esta variável já existe na sua lógica do Telegram
+                            total_compras=total_compras,       # Esta variável também já existe
+                            nivel_cliente=nivel_cliente,
+                            lista_produtos_vendidos=st.session_state.lista_produtos,
+                            subiu_de_nivel=subiu_de_nivel
+                        )
+                        
+                        # Cria o nome do arquivo dinamicamente
+                        nome_arquivo_pdf = f"recibo_{cliente.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.pdf"
+
+                        # Exibe o botão de download
+                        st.download_button(
+                            label="📄 Baixar Recibo da Venda (PDF)",
+                            data=pdf_bytes,
+                            file_name=nome_arquivo_pdf,
+                            mime="application/pdf"
+                        )
+                        # ================================================================
+                        # ✅ FIM DA GERAÇÃO DO PDF
+                        # ================================================================
+                        
+                        st.session_state.df = df_movimentacoes_upd
+                        st.session_state.lista_produtos = []
+                        st.session_state.edit_id = None
+                        carregar_livro_caixa.clear()
+                        
+                        # Adiciona um botão para o usuário limpar e começar de novo
+                        if st.button("🎉 Finalizar e Nova Venda"):
+                            st.rerun()
+
+                    # --- FIM DA ALTERAÇÃO ---
 
         else: # Tipo é Saída
             st.markdown("---")
@@ -3500,6 +3542,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
