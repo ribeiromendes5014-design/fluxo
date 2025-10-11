@@ -20,25 +20,27 @@ from constants_and_css import * # Linha 2 (CORRETA - Importa as funções espec�
 # Caso o código falhe, verifique se foram definidas corretamente.
 # ==============================================================================
 
+# NO ARQUIVO livro_caixa.py, localize e REMOVA/SUBSTITUA o bloco:
 # ================================================================
-# 🔑 CREDENCIAIS E CONFIGURAÇÕES DO REPOSITÓRIO (carregadas do secrets)
+# 🔑 CREDENCIAIS E CONFIGURAÇÕES DO REPOSITÓRIO (CORREÇÃO DA LEITURA)
 # ================================================================
-import streamlit as st
+OWNER = st.secrets.get("REPO_OWNER")
+REPO_NAME = st.secrets.get("REPO_NAME")
+BRANCH = st.secrets.get("BRANCH")
+# CORREÇÃO: LÊ O TOKEN DIRETAMENTE DO NÍVEL SUPERIOR
+TOKEN = st.secrets.get("GITHUB_TOKEN") 
 
-OWNER = st.secrets.get("REPO_OWNER", "ribeiromendes5014-design")
-REPO_NAME = st.secrets.get("REPO_NAME", "fluxo")
-BRANCH = st.secrets.get("BRANCH", "main")
-TOKEN = st.secrets.get("GITHUB_TOKEN", None)
 
 # ================================================================
-# 📂 Caminhos dos arquivos no repositório
+# 📂 Caminhos dos arquivos no repositório (AGORA LENDO DO SECRETS)
 # ================================================================
-ARQ_CLIENTES_CASH = "clientes_cash.csv"       # ✅ Está correto
-ARQ_LOCAL = "livro_caixa.csv"                 # ok (backup local)
-PATH_DIVIDAS = "livro_caixa.csv"         # depende do seu repo
-ARQ_PROMOCOES = "promocoes.csv"
-ARQ_COMPRAS = "historico_compras.csv"
-ARQ_PRODUTOS = "produtos_estoque.csv"
+
+# O ARQUIVO PRINCIPAL DO LIVRO CAIXA
+# CORREÇÃO: Usa 'livro_caixa.csv' como fallback se o secrets falhar
+PATH_DIVIDAS = st.secrets.get("livro_caixa", {}).get("CSV_PATH", "livro_caixa.csv")
+
+# ARQ_LOCAL (para consistência)
+ARQ_LOCAL = PATH_DIVIDAS 
 
 # NOVO: Constante para o arquivo de clientes
 
@@ -3150,6 +3152,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
