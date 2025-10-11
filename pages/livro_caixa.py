@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, date
 import requests
+from reportlab.lib.units import mm
 from requests.exceptions import ConnectionError, RequestException 
 from io import StringIO
 import io, os
@@ -3587,6 +3588,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
