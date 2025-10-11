@@ -21,4 +21,3 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-10-10,Doce&bella,mercadoria,-142.77,PIX,Saída,[],,Realizada,2025-10-10,,,,6853fe85-aa94-4ac8-b31d-58a5571bebd8
 2025-10-10,Doce&bella,mercadoria,-50.0,PIX,Saída,[],,Realizada,2025-10-10,,,,b90558d6-6f74-4da2-9f4e-88905cbb3fee
 2025-10-11,Doce&bella,teste,31.0,Dinheiro,Entrada,"[{""Produto_ID"": ""4"", ""Produto"": ""Kit Shampoo babasoul"", ""Quantidade"": 1, ""Pre\u00e7o Unit\u00e1rio"": 31.0, ""Custo Unit\u00e1rio"": 17.0}]",,Realizada,2025-10-11,,,,7e585250-05ea-445f-8c0a-22c189f45fcc
-2025-10-11,Doce&bella,admin,20.0,Dinheiro,Entrada,[],,Realizada,,,,,07a27c7d-6868-4450-a6a5-6e3328ea41d8
