@@ -625,7 +625,7 @@ def callback_salvar_novo_produto(produtos, tipo_produto, nome, marca, categoria,
             round(to_float(preco_vista) / FATOR_CARTAO, 2) if to_float(preco_vista) > 0 else 0.0,
             validade, foto_url, codigo_barras
         )
-        if save_csv_github(produtos, ARQ_PRODUTOS, f"Novo produto simples: {nome} (ID {new_id})"):
+        if salvar_dados_no_github(produtos, ARQ_PRODUTOS, f"Novo produto simples: {nome} (ID {new_id})"):
             st.session_state.produtos = produtos
             inicializar_produtos.clear()
             st.success(f"Produto '{nome}' cadastrado com sucesso!")
@@ -3157,6 +3157,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
