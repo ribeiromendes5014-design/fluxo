@@ -2799,13 +2799,14 @@ def livro_caixa():
                         df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([nova_movimentacao])], ignore_index=True)
                         msg_commit = "Nova movimentação adicionada"
                     
+                    # 3. SALVA A MOVIMENTAÇÃO PRINCIPAL E ATUALIZA A TELA
                     if salvar_dados_no_github(df_movimentacoes_upd, msg_commit, data_input):
                         st.success("Movimentação salva com sucesso!")
                         st.session_state.df = df_movimentacoes_upd
                         st.session_state.lista_produtos = []
                         st.session_state.edit_id = None
                         carregar_livro_caixa.clear()
-                        st.rerun()
+                        st.rerun(
 
         else: # Tipo é Saída
             st.markdown("---")
@@ -3430,6 +3431,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
