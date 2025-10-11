@@ -608,7 +608,7 @@ def salvar_clientes_cash_github(df: pd.DataFrame, commit_message: str):
 def inicializar_produtos():
     COLUNAS_PRODUTOS = [
         "ID", "Nome", "Marca", "Categoria", "Quantidade", "PrecoCusto", 
-        "PrecoVista", "PrecoCartao", "Validade", "FotoURL", "CodigoBarras", "PaiID"
+        "PrecoVista", "PrecoCartao", "Validade", "FotoURL", "CodigoBarras", "PaiID", "PromocaoEspecial"
     ]
     if "produtos" not in st.session_state:
         url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}"
@@ -3362,6 +3362,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
