@@ -123,6 +123,37 @@ def enviar_mensagem_telegram(mensagem: str):
         requests.post(url, data=payload, timeout=5)
     except requests.exceptions.RequestException as e:
         print(f"Erro ao enviar para o Telegram: {e}")
+def enviar_mensagem_telegram(mensagem: str):
+    if not TELEGRAM_ENABLED: return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_ID}/sendMessage"
+    payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': mensagem, 'parse_mode': 'Markdown'}
+    if TELEGRAM_THREAD_ID: payload['message_thread_id'] = TELEGRAM_THREAD_ID
+    try:
+        requests.post(url, data=payload, timeout=5)
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao enviar para o Telegram: {e}")
+
+# ================================================================
+# ✅ NOVA FUNÇÃO PARA ENVIAR O PDF
+# ================================================================
+def enviar_recibo_telegram(pdf_bytes: bytes, file_name: str, caption: str):
+    """Envia um documento PDF (em bytes) para o Telegram com uma legenda."""
+    if not TELEGRAM_ENABLED: return
+    
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_ID}/sendDocument"
+    
+    # Prepara os dados do formulário (payload) e os arquivos
+    payload = {'chat_id': TELEGRAM_CHAT_ID, 'caption': caption, 'parse_mode': 'Markdown'}
+    if TELEGRAM_THREAD_ID: payload['message_thread_id'] = TELEGRAM_THREAD_ID
+    
+    files = {'document': (file_name, pdf_bytes, 'application/pdf')}
+    
+    try:
+        # A requisição para enviar arquivos usa o parâmetro 'files'
+        requests.post(url, data=payload, files=files, timeout=15)
+        st.toast("📄 Recibo enviado para o Telegram!")
+    except requests.exceptions.RequestException as e:
+        st.error(f"Falha ao enviar o PDF para o Telegram: {e}")
 
 # ================================================================
 # 📂 Caminhos dos arquivos no repositório
@@ -3542,6 +3573,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
