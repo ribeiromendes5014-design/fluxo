@@ -2656,18 +2656,17 @@ def livro_caixa():
             enviar = st.form_submit_button("💾 Adicionar e Salvar", type="primary", use_container_width=True)
 
             if enviar:
-                # --- LÓGICA DE SALVAMENTO CORRIGIDA ---
+                # --- LÓGICA DE SALVAMENTO ATUALIZADA ---
 
-                # 1. Determina o valor final e a categoria corretamente
+                # 1. Determina o valor final, categoria e fonte do recurso
                 if tipo == "Saída":
-                    # Para saídas, busca o valor do campo de número correspondente
                     valor_base = st.session_state.get('input_valor_saida', 0.0)
                     produtos_vendidos_json = "[]"
-                    # Garante que o valor salvo para saídas seja negativo
-                    valor_a_salvar = -abs(valor_base)
-                    categoria_final = categoria_selecionada # Usa a categoria definida para saídas
+                    valor_a_salvar = -abs(valor_base) # Garante que saídas sejam negativas
+                    categoria_final = categoria_selecionada # Categoria de custo
+                    # Captura a escolha da fonte do recurso para a despesa
+                    fonte_recurso_final = st.session_state.get('input_fonte_recurso', "Entradas do Mês Atual")
                 else: # tipo == "Entrada"
-                    # Para entradas, calcula com base na lista de produtos ou valor manual
                     if st.session_state.lista_produtos:
                         df_prods = pd.DataFrame(st.session_state.lista_produtos)
                         valor_base = (pd.to_numeric(df_prods['Quantidade']) * pd.to_numeric(df_prods['Preço Unitário'])).sum()
@@ -2678,20 +2677,16 @@ def livro_caixa():
                     
                     cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
                     valor_a_salvar = valor_base - cashback_resgatado
-                    categoria_final = "" # Entradas não possuem categoria de custo
+                    categoria_final = "" # Entradas não têm categoria de custo
+                    fonte_recurso_final = "" # Entradas não têm fonte de recurso
 
-                # Lógica de atualização de cashback (mantida)
+                # Lógica de atualização de cashback (mantida como estava)
                 if tipo == "Entrada" and status_selecionado == "Realizada" and cliente:
-                    # ... (seu código original de gestão de cashback) ...
-                    # Esta parte não precisa de alteração.
                     valor_base_compra = valor_base 
                     cashback_ganho = round(valor_base_compra * 0.03, 2)
-                    
                     df_clientes_upd = st.session_state.df_clientes.copy()
-                    
                     if 'Nome' in df_clientes_upd.columns:
                         cliente_idx_list = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()
-
                         if cliente_idx_list:
                             idx = cliente_idx_list[0]
                             df_clientes_upd.loc[idx, "Cashback"] -= cashback_resgatado
@@ -2703,34 +2698,47 @@ def livro_caixa():
                             novo_cliente_data = {"Nome": cliente.strip(), "Cashback": cashback_ganho, "TotalGasto": valor_base_compra, "Nivel": calcular_nivel(valor_base_compra)}
                             df_clientes_upd = pd.concat([df_clientes_upd, pd.DataFrame([novo_cliente_data])], ignore_index=True)
                             msg_cashback = f"Novo cliente {cliente}: Ganho R${cashback_ganho:,.2f}"
-                        
                         if salvar_clientes_cash_github(df_clientes_upd, msg_cashback):
                             st.toast(msg_cashback)
                             st.session_state.df_clientes = df_clientes_upd
 
+                # 2. Adiciona o TransactionID para garantir a unicidade do registro
+                transaction_id_final = str(uuid.uuid4())
+                if edit_mode:
+                    # Se estiver editando, reutiliza o ID da transação existente
+                    transaction_id_final = st.session_state.edit_id
 
-                # 2. Monta o dicionário da nova movimentação usando as variáveis do formulário
+                # 3. Monta o dicionário da nova movimentação com TODAS as colunas
                 df_movimentacoes_upd = st.session_state.df.copy()
                 nova_movimentacao = {
-                    "Data": data_input.isoformat(),                   # CORRIGIDO: Usa a data do formulário
-                    "Loja": loja_selecionada,                          # CORRIGIDO: Usa a loja do formulário
+                    "Data": data_input.isoformat(),
+                    "Loja": loja_selecionada,
                     "Cliente": cliente_final,
-                    "Valor": valor_a_salvar,                           # CORRIGIDO: Usa o valor correto e com sinal negativo para saídas
-                    "Forma de Pagamento": forma_pagamento,             # CORRIGIDO: Usa a forma de pagamento selecionada
+                    "Valor": valor_a_salvar,
+                    "Forma de Pagamento": forma_pagamento,
                     "Tipo": tipo,
                     "Produtos Vendidos": produtos_vendidos_json,
                     "Categoria": categoria_final,
                     "Status": status_selecionado,
-                    "Data Pagamento": data_pagamento_final.isoformat() if data_pagamento_final else None
+                    "Data Pagamento": data_pagamento_final.isoformat() if data_pagamento_final else None,
+                    "FonteRecurso": fonte_recurso_final,  # <-- CAMPO NOVO
+                    "RecorrenciaID": '',                  # <-- CAMPO ADICIONADO
+                    "TransacaoPaiID": '',                 # <-- CAMPO ADICIONADO
+                    "TransactionID": transaction_id_final # <-- CAMPO NOVO E ESSENCIAL
                 }
 
                 if edit_mode:
-                    # (Seu código de edição existente)
-                    df_movimentacoes_upd.loc[st.session_state.edit_id] = nova_movimentacao
-                    msg_commit = "Movimentação editada"
+                    # CORRIGIDO: Encontra o índice real da linha para atualizar usando o TransactionID
+                    idx_to_update = df_movimentacoes_upd.index[df_movimentacoes_upd['TransactionID'] == st.session_state.edit_id].tolist()
+                    if idx_to_update:
+                        df_movimentacoes_upd.loc[idx_to_update[0]] = pd.Series(nova_movimentacao)
+                        msg_commit = f"Edição da movimentação ID {st.session_state.edit_id[:8]}"
+                    else:
+                        st.error("Erro: Não foi possível encontrar a movimentação para editar.")
+                        return # Para a execução se o ID não for encontrado
                 else:
                     df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([nova_movimentacao])], ignore_index=True)
-                    msg_commit = "Nova movimentação"
+                    msg_commit = "Nova movimentação adicionada"
                 
                 if salvar_dados_no_github(df_movimentacoes_upd, msg_commit, data_input):
                     st.success("Movimentação salva com sucesso!")
@@ -3282,6 +3290,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
