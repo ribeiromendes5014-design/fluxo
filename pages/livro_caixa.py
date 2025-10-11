@@ -2762,7 +2762,6 @@ def livro_caixa():
                     df_movimentacoes_upd = st.session_state.df.copy()
 
                     if status_selecionado == "Realizada" and cliente:
-                        # ... (toda a sua lógica de cálculo de cashback e atualização de clientes continua aqui, sem alterações)
                         produtos_catalogo_df = inicializar_produtos()
                         df_clientes_upd = st.session_state.df_clientes.copy()
                         
@@ -2945,17 +2944,19 @@ def livro_caixa():
                         if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
                             subiu_de_nivel = True
                         
-                        pdf_bytes = gerar_recibo_cashback_pdf(
-                            cliente_nome=cliente,
-                            cashback_ganho=total_cashback_ganho,
-                            saldo_atualizado=saldo_atualizado,
-                            total_compras=total_compras,
-                            nivel_cliente=nivel_cliente,
-                            lista_produtos_vendidos=st.session_state.lista_produtos,
-                            subiu_de_nivel=subiu_de_nivel
-                        )
-                        
-                        nome_arquivo_pdf = f"recibo_{cliente.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.pdf"
+                        # Reutiliza o PDF já gerado para o Telegram, se existir. Caso contrário, gera novamente.
+                        if 'pdf_bytes' not in locals():
+                            pdf_bytes = gerar_recibo_cashback_pdf(
+                                cliente_nome=cliente,
+                                cashback_ganho=total_cashback_ganho,
+                                saldo_atualizado=saldo_atualizado,
+                                total_compras=total_compras,
+                                nivel_cliente=nivel_cliente,
+                                lista_produtos_vendidos=st.session_state.lista_produtos,
+                                subiu_de_nivel=subiu_de_nivel
+                            )
+                        if 'nome_arquivo_pdf' not in locals():
+                            nome_arquivo_pdf = f"recibo_{cliente.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.pdf"
 
                         st.download_button(
                             label="📄 Baixar Recibo da Venda (PDF)",
@@ -3597,6 +3598,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
