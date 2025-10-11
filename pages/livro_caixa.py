@@ -267,6 +267,30 @@ def carregar_livro_caixa():
     # Retorna apenas as colunas padrão na ordem correta
     cols_to_return = COLUNAS_PADRAO_COMPLETO
     return df[[col for col in cols_to_return if col in df.columns]]
+    import os, requests, streamlit as st
+from github import Github
+
+st.subheader("🔍 Diagnóstico de gravação")
+
+# 1. Teste de gravação local
+try:
+    with open("teste_gravacao.txt", "w", encoding="utf-8") as f:
+        f.write("teste ok")
+    st.success("✅ Consegui gravar no disco local.")
+except Exception as e:
+    st.error(f"❌ Falha ao gravar no disco local: {e}")
+
+# 2. Teste de leitura local
+st.write("Arquivos na pasta atual:", os.listdir("."))
+
+# 3. Teste de conexão com GitHub
+try:
+    g = Github(st.secrets["GITHUB_TOKEN"])
+    repo = g.get_repo(f"{st.secrets['REPO_OWNER']}/{st.secrets['REPO_NAME']}")
+    st.success(f"✅ Consegui acessar o repositório: {repo.full_name}")
+except Exception as e:
+    st.error(f"❌ Erro de autenticação GitHub: {e}")
+
 
 
 def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
@@ -3158,6 +3182,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
