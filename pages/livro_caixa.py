@@ -2640,63 +2640,78 @@ def livro_caixa():
                 enviar_entrada = st.form_submit_button("💾 Adicionar e Salvar Entrada", type="primary", use_container_width=True)
 
                 # ====================================================================================
-# ✅ NOVO BLOCO DE CÓDIGO PARA O "if enviar_entrada:"
+# ✅ NOVO BLOCO DE LÓGICA DE CASHBACK (SUBSTITUA O ANTIGO)
 # ====================================================================================
                 if enviar_entrada:
-                    # --- LÓGICA DE SALVAMENTO PARA ENTRADAS (COM CASHBACK DINÂMICO) ---
+                    # --- LÓGICA DE SALVAMENTO COM CASHBACK TURBO ---
                     
                     valor_base = valor_final_movimentacao
                     cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
                     valor_a_salvar = valor_base - cashback_resgatado
 
-                    # 1. ATUALIZAÇÃO DE CASHBACK E FIDELIDADE (LÓGICA DINÂMICA)
+                    # 1. ATUALIZAÇÃO DE CASHBACK E FIDELIDADE (LÓGICA TURBO)
                     if status_selecionado == "Realizada" and cliente:
-                        valor_base_compra = valor_base
+                        produtos_catalogo_df = inicializar_produtos() # Carrega o catálogo de produtos
                         df_clientes_upd = st.session_state.df_clientes.copy()
                         
-                        # Função interna para obter a porcentagem de cashback correta
-                        def obter_percentual_cashback(nivel: str) -> float:
-                            if "Diamante" in nivel: return 0.08  # 8%
-                            if "Ouro" in nivel: return 0.05      # 5%
-                            return 0.03                          # 3% para Prata e novos clientes
-
                         cliente_idx_list = []
                         if 'Nome' in df_clientes_upd.columns:
                             cliente_idx_list = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()
 
-                        if cliente_idx_list:  # --- Se o cliente JÁ EXISTE ---
+                        # Primeiro, determinamos o nível do cliente
+                        if cliente_idx_list: # Cliente existente
                             idx = cliente_idx_list[0]
-                            # Primeiro, atualiza o gasto total
-                            df_clientes_upd.loc[idx, "TotalGasto"] += valor_base_compra
-                            # Depois, recalcula o nível com base no novo gasto
-                            novo_nivel = calcular_nivel(df_clientes_upd.loc[idx, "TotalGasto"])
-                            df_clientes_upd.loc[idx, "Nivel"] = novo_nivel
-                            # Agora, calcula o cashback com base no novo nível
-                            percentual = obter_percentual_cashback(novo_nivel)
-                            cashback_ganho = round(valor_base_compra * percentual, 2)
-                            
-                            # Atualiza o saldo de cashback
-                            df_clientes_upd.loc[idx, "Cashback"] -= cashback_resgatado
-                            df_clientes_upd.loc[idx, "Cashback"] += cashback_ganho
-                            
-                            msg_cashback = f"Cashback para {cliente} (Nível {novo_nivel.split(' ')[0]}): Ganho de R${cashback_ganho:,.2f} ({percentual:.0%})"
+                            # Simula o novo gasto total para obter o nível correto para ESTA compra
+                            gasto_total_atualizado = df_clientes_upd.loc[idx, "TotalGasto"] + valor_base
+                            nivel_cliente = calcular_nivel(gasto_total_atualizado)
+                        else: # Cliente novo
+                            nivel_cliente = calcular_nivel(valor_base)
                         
-                        else:  # --- Se for um CLIENTE NOVO ---
-                            novo_gasto_total = valor_base_compra
-                            novo_nivel = calcular_nivel(novo_gasto_total)
-                            percentual = obter_percentual_cashback(novo_nivel)
-                            cashback_ganho = round(novo_gasto_total * percentual, 2)
+                        # Agora, calculamos o cashback item por item
+                        total_cashback_ganho = 0.0
+                        for item_vendido in st.session_state.lista_produtos:
+                            produto_id = item_vendido.get("Produto_ID")
+                            valor_item = float(item_vendido.get("Preço Unitário", 0)) * float(item_vendido.get("Quantidade", 0))
+                            percentual_cashback = 0.0
+
+                            # Verifica se o produto é Turbo
+                            is_turbo = False
+                            if produto_id:
+                                produto_info = produtos_catalogo_df[produtos_catalogo_df["ID"] == produto_id]
+                                if not produto_info.empty:
+                                    status_promo = produto_info.iloc[0].get("PromocaoEspecial", "NAO")
+                                    if str(status_promo).strip().upper() == "SIM":
+                                        is_turbo = True
                             
+                            # Define o percentual com base no nível e se é Turbo
+                            if is_turbo:
+                                if "Diamante" in nivel_cliente: percentual_cashback = 0.15 # 15%
+                                elif "Ouro" in nivel_cliente: percentual_cashback = 0.07   # 7%
+                                else: percentual_cashback = 0.03 # Prata ganha 3% normal
+                            else: # Regra padrão para produtos não-turbo
+                                if "Diamante" in nivel_cliente: percentual_cashback = 0.08 # 8%
+                                elif "Ouro" in nivel_cliente: percentual_cashback = 0.05   # 5%
+                                else: percentual_cashback = 0.03 # 3%
+
+                            total_cashback_ganho += valor_item * percentual_cashback
+
+                        total_cashback_ganho = round(total_cashback_ganho, 2)
+                        
+                        # Finalmente, atualiza o DataFrame de clientes
+                        if cliente_idx_list:
+                            idx = cliente_idx_list[0]
+                            df_clientes_upd.loc[idx, "TotalGasto"] += valor_base
+                            df_clientes_upd.loc[idx, "Nivel"] = nivel_cliente
+                            df_clientes_upd.loc[idx, "Cashback"] -= cashback_resgatado
+                            df_clientes_upd.loc[idx, "Cashback"] += total_cashback_ganho
+                        else:
                             novo_cliente_data = {
-                                "Nome": cliente.strip(),
-                                "Cashback": cashback_ganho,
-                                "TotalGasto": novo_gasto_total,
-                                "Nivel": novo_nivel
+                                "Nome": cliente.strip(), "Cashback": total_cashback_ganho,
+                                "TotalGasto": valor_base, "Nivel": nivel_cliente
                             }
                             df_clientes_upd = pd.concat([df_clientes_upd, pd.DataFrame([novo_cliente_data])], ignore_index=True)
-                            msg_cashback = f"Novo cliente {cliente} cadastrado! Ganho de R${cashback_ganho:,.2f} de cashback ({percentual:.0%})."
-
-                        # Tenta salvar o arquivo de clientes no GitHub
+                        
+                        msg_cashback = f"Cashback para {cliente}: Ganho de R${total_cashback_ganho:,.2f} nesta compra."
                         if salvar_clientes_cash_github(df_clientes_upd, msg_cashback):
                             st.toast(msg_cashback)
                             st.session_state.df_clientes = df_clientes_upd
@@ -3362,6 +3377,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
