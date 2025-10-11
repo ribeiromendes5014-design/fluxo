@@ -9,7 +9,8 @@ from io import StringIO
 import io, os
 import base64
 import pytz
-import json # NOVO: Necessário para desserializar o ITENS_JSON dos pedidos
+import json 
+import pytz
 
 # Tenta importar PyGithub para persistência.
 try:
@@ -1045,4 +1046,5 @@ def cashback_system():
         PAGINAS_INTERNAS["Processar Pedidos"]()
 
 # Nenhuma chamada de função deve estar aqui. O app.py chama cashback_system().
+
 
