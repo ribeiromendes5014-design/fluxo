@@ -2712,38 +2712,73 @@ def livro_caixa():
                             st.toast(msg_cashback)
                             st.session_state.df_clientes = df_clientes_upd
                         
-                        # 🚀 LÓGICA DE ENVIO DO TELEGRAM
+                        # ================================================================
+                        # 🚀 INÍCIO DA LÓGICA DE ENVIO DO TELEGRAM (VERSÃO ATUALIZADA)
+                        # ================================================================
                         if TELEGRAM_ENABLED:
                             idx_cliente_final = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()[0]
-                            saldo_atualizado = df_clientes_upd.loc[idx_cliente_final, "Cashback"]
-                            
+                            cliente_final_data = df_clientes_upd.loc[idx_cliente_final]
+                            saldo_atualizado = cliente_final_data["Cashback"]
+                            total_compras = df_movimentacoes_upd[
+                                (df_movimentacoes_upd['Cliente'] == cliente) &
+                                (df_movimentacoes_upd['Tipo'] == 'Entrada') &
+                                (df_movimentacoes_upd['Status'] == 'Realizada')
+                            ].shape[0]
+
                             fuso_horario_brasil = pytz.timezone('America/Sao_Paulo')
                             agora_brasil = datetime.now(fuso_horario_brasil)
                             data_hora_lancamento = agora_brasil.strftime('%d/%m/%Y às %H:%M')
+
                             cashback_ganho_str = f"R$ {total_cashback_ganho:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                             saldo_atual_str = f"R$ {saldo_atualizado:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            
-                            mensagem_header = "✨ *Novidade imperdível na Doce&Bella!* ✨\n\nAgora você pode aproveitar ainda mais as suas compras favoritas com o nosso Prograna de Fidelidade 🛍💖\n---------------------------------\n\n"
-                            mensagem_body = (
-                                f"Olá *{cliente}*, aqui é o programa de fidelidade da loja Doce&Bella!\n\n"
-                                f"Parabéns você ganhou *{cashback_ganho_str}* em créditos CASHBACK.\n"
-                                f"💖 Seu saldo em *{data_hora_lancamento}* é de *{saldo_atual_str}*.\n\n"
-                                f"⭐ Seu nível atual é: *{nivel_cliente}*"
-                            )
-                            # ✅ A verificação agora funciona, pois cliente_data_antes sempre existe
-                            if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
-                                mensagem_body += f"\n\n🎉 Parabéns! Você subiu para o nível *{nivel_cliente}*! Aproveite seus novos benefícios."
-                            
-                            mensagem_footer = (
-                                f"\n\n=================================\n\n"
-                                f"🟩 *REGRAS PARA RESGATAR SEUS CRÉDITOS*\n"
-                                f"- Resgate máximo: *50% sobre o valor da compra.*\n"
-                                f"- Saldo mínimo para resgate: *R$ 20,00*.\n\n"
-                                f"💬 *Fale conosco para consultar seu saldo e resgatar!*\n"
-                            )
-                            enviar_mensagem_telegram(mensagem_header + mensagem_body + mensagem_footer)
 
-                            # Lógica de Bônus de Indicação
+                            # --- Monta a lista de produtos vendidos ---
+                            lista_produtos_str = ""
+                            if st.session_state.lista_produtos:
+                                lista_produtos_str += "\n--- Itens da Sua Compra ---\n"
+                                for item in st.session_state.lista_produtos:
+                                    nome_produto = item.get('Produto', 'Produto desconhecido')
+                                    qtd = int(item.get('Quantidade', 0))
+                                    lista_produtos_str += f"  - {qtd}x {nome_produto}\n"
+                                lista_produtos_str += "\n"
+
+
+                            # --- Monta a mensagem principal ---
+                            mensagem_header = (
+                                "✨ *Novidade imperdível na Doce&Bella!* ✨\n\n"
+                                "Agora você pode aproveitar ainda mais as suas compras favoritas com o nosso Programa de Fidelidade 🛍💖\n\n"
+                                "➡️ A cada compra, você acumula pontos.\n"
+                                "➡️ Quanto mais você compra, mais descontos exclusivos você ganha!\n\n"
+                            )
+
+                            mensagem_parabens = f"🎉 *PARABÉNS, {cliente.upper()}! VOCÊ GANHOU CASHBACK!* 🎉\n\n"
+
+                            mensagem_body = (
+                                f"A loja Doce&Bella te presenteia com *{cashback_ganho_str}* em novos créditos!\n"
+                                f"{lista_produtos_str}" # Inclui a lista de produtos aqui
+                                "--- *Seu Saldo Atualizado* ---\n"
+                                f"🗓 Data/Hora: {data_hora_lancamento}\n"
+                                f"💰 Saldo Atual: *{saldo_atual_str}*\n"
+                                f"🛒 Total de Compras: {total_compras}\n"
+                                "----------------------------------\n\n"
+                            )
+                            
+                            if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
+                                mensagem_body += f"🎉 *Parabéns! Você subiu para o nível {nivel_cliente}!* Aproveite seus novos benefícios.\n----------------------------------\n\n"
+
+                            mensagem_footer = (
+                                "✨ *COMO USAR SEU CRÉDITO NA DOCE&BELLA*\n"
+                                "1. *Limite de Uso:* Você pode usar até 50% do valor total da sua nova compra.\n"
+                                "2. *Saldo Mínimo:* Para resgatar, seu saldo deve ser de, no mínimo, R$ 20,00.\n\n"
+                                "📞 *PRECISA DE AJUDA OU QUER CONSULTAR SEU SALDO?*\n"
+                                "Basta chamar a Doce&Bella pelo ZAP! 💬\n\n"
+                                "🚨 *Dica: Salve nosso número na sua agenda para não perder as promoções e novidades!*"
+                            )
+                            
+                            mensagem_completa = mensagem_header + mensagem_parabens + mensagem_body + mensagem_footer
+                            enviar_mensagem_telegram(mensagem_completa)
+
+                            # --- Lógica de Bônus de Indicação (permanece a mesma) ---
                             if era_primeira_compra and indicador_nome:
                                 idx_indicador = df_clientes_upd.index[df_clientes_upd['Nome'] == indicador_nome].tolist()
                                 if idx_indicador:
@@ -2758,6 +2793,9 @@ def livro_caixa():
                                         f"Você acaba de ganhar *{bonus_str}* extras! Seu nível atual é: *{nivel_indicador}*."
                                     )
                                     enviar_mensagem_telegram(mensagem_indicador)
+                        # ================================================================
+                        # 🚀 FIM DA LÓGICA DE ENVIO DO TELEGRAM
+                        # ================================================================
 
                     # Lógica para salvar a movimentação no livro caixa
                     transaction_id_final = str(uuid.uuid4())
@@ -3415,6 +3453,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
