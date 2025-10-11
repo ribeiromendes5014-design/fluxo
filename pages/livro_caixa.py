@@ -2641,20 +2641,68 @@ def livro_caixa():
 
                 enviar_entrada = st.form_submit_button("💾 Adicionar e Salvar Entrada", type="primary", use_container_width=True)
 
+                # ====================================================================================
+# ✅ SUBSTITUA SEU BLOCO "if enviar_entrada:" INTEIRO POR ESTE
+# ====================================================================================
                 if enviar_entrada:
+                    # --- LÓGICA DE SALVAMENTO PARA ENTRADAS (COM CASHBACK CORRIGIDO) ---
+                    
                     valor_base = valor_final_movimentacao
                     cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
                     valor_a_salvar = valor_base - cashback_resgatado
                     
+                    # 1. ATUALIZAÇÃO DE CASHBACK E FIDELIDADE (LÓGICA REINTEGRADA)
+                    # Este bloco só executa se a venda for Realizada e tiver um nome de cliente.
                     if status_selecionado == "Realizada" and cliente:
-                        # (Sua lógica de cashback completa vai aqui)
-                        pass
-                    
+                        # O valor base para cálculo de cashback/gasto é o valor da compra ANTES de descontar o cashback.
+                        valor_base_compra = valor_base
+                        cashback_ganho = round(valor_base_compra * 0.03, 2) # Ex: 3% de cashback
+                        
+                        # Cria uma cópia segura do DataFrame de clientes para modificação
+                        df_clientes_upd = st.session_state.df_clientes.copy()
+                        
+                        if 'Nome' in df_clientes_upd.columns:
+                            # Procura pelo cliente (ignorando maiúsculas/minúsculas e espaços)
+                            cliente_idx_list = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()
+
+                            if cliente_idx_list: # --- Se o cliente JÁ EXISTE ---
+                                idx = cliente_idx_list[0]
+                                df_clientes_upd.loc[idx, "Cashback"] -= cashback_resgatado
+                                df_clientes_upd.loc[idx, "Cashback"] += cashback_ganho
+                                df_clientes_upd.loc[idx, "TotalGasto"] += valor_base_compra
+                                df_clientes_upd.loc[idx, "Nivel"] = calcular_nivel(df_clientes_upd.loc[idx, "TotalGasto"])
+                                msg_cashback = f"Cashback para {cliente}: Resgate R${cashback_resgatado:,.2f}, Ganho R${cashback_ganho:,.2f}"
+                            else: # --- Se for um CLIENTE NOVO ---
+                                novo_cliente_data = {
+                                    "Nome": cliente.strip(), 
+                                    "Cashback": cashback_ganho, 
+                                    "TotalGasto": valor_base_compra, 
+                                    "Nivel": calcular_nivel(valor_base_compra)
+                                }
+                                df_clientes_upd = pd.concat([df_clientes_upd, pd.DataFrame([novo_cliente_data])], ignore_index=True)
+                                msg_cashback = f"Novo cliente {cliente} cadastrado! Ganho de R${cashback_ganho:,.2f} de cashback."
+                            
+                            # Tenta salvar o arquivo de clientes no GitHub
+                            if salvar_clientes_cash_github(df_clientes_upd, msg_cashback):
+                                st.toast(msg_cashback)
+                                # Atualiza o estado da sessão com os novos dados
+                                st.session_state.df_clientes = df_clientes_upd
+                            else:
+                                st.error("Falha ao salvar os dados de cashback no GitHub.")
+
+                    # 2. PREPARAÇÃO DA MOVIMENTAÇÃO PRINCIPAL (LIVRO CAIXA)
                     transaction_id_final = str(uuid.uuid4())
                     if edit_mode:
                         transaction_id_final = st.session_state.edit_id
                     
-                    nova_movimentacao = { "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente_final, "Valor": valor_a_salvar, "Forma de Pagamento": forma_pagamento, "Tipo": "Entrada", "Produtos Vendidos": produtos_vendidos_json, "Categoria": "", "Status": status_selecionado, "Data Pagamento": data_pagamento_final.isoformat() if data_pagamento_final else None, "FonteRecurso": "", "RecorrenciaID": '', "TransacaoPaiID": '', "TransactionID": transaction_id_final }
+                    nova_movimentacao = { 
+                        "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente_final, 
+                        "Valor": valor_a_salvar, "Forma de Pagamento": forma_pagamento, "Tipo": "Entrada", 
+                        "Produtos Vendidos": produtos_vendidos_json, "Categoria": "", "Status": status_selecionado, 
+                        "Data Pagamento": data_pagamento_final.isoformat() if data_pagamento_final else None, 
+                        "FonteRecurso": "", "RecorrenciaID": '', "TransacaoPaiID": '', 
+                        "TransactionID": transaction_id_final 
+                    }
                     
                     df_movimentacoes_upd = st.session_state.df.copy()
                     if edit_mode:
@@ -2669,8 +2717,14 @@ def livro_caixa():
                         df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([nova_movimentacao])], ignore_index=True)
                         msg_commit = "Nova movimentação adicionada"
                     
+                    # 3. SALVA A MOVIMENTAÇÃO PRINCIPAL E ATUALIZA A TELA
                     if salvar_dados_no_github(df_movimentacoes_upd, msg_commit, data_input):
-                        st.success("Movimentação salva com sucesso!"); st.session_state.df = df_movimentacoes_upd; st.session_state.lista_produtos = []; st.session_state.edit_id = None; carregar_livro_caixa.clear(); st.rerun()
+                        st.success("Movimentação salva com sucesso!")
+                        st.session_state.df = df_movimentacoes_upd
+                        st.session_state.lista_produtos = []
+                        st.session_state.edit_id = None
+                        carregar_livro_caixa.clear()
+                        st.rerun()
 
         else: # Tipo é Saída
             st.markdown("---")
@@ -3296,6 +3350,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
