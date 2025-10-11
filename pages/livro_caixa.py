@@ -2674,46 +2674,149 @@ def livro_caixa():
                 enviar_entrada = st.form_submit_button("💾 Adicionar e Salvar Entrada", type="primary", use_container_width=True)
 
             if enviar_entrada:
-                valor_base = 0.0
-                if st.session_state.lista_produtos:
-                    df_temp = pd.DataFrame(st.session_state.lista_produtos)
-                    valor_base = (pd.to_numeric(df_temp['Quantidade']) * pd.to_numeric(df_temp['Preço Unitário'])).sum()
+                    # --- LÓGICA DE SALVAMENTO COM CASHBACK TURBO E NOTIFICAÇÃO TELEGRAM ---
+                    
+                    valor_base = valor_final_movimentacao
+                    cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
+                    valor_a_salvar = valor_base - cashback_resgatado
 
-                if valor_base <= 0:
-                    st.error("Não é possível registrar uma venda com valor total de R$ 0,00.")
-                    st.stop()
+                    if status_selecionado == "Realizada" and cliente:
+                        produtos_catalogo_df = inicializar_produtos()
+                        df_clientes_upd = st.session_state.df_clientes.copy()
+                        
+                        cliente_idx_list = []
+                        cliente_data_antes = None # ✅ Variável inicializada como None para garantir que ela sempre exista
+                        era_primeira_compra = False
+                        indicador_nome = None
 
-                cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
-                valor_a_salvar = valor_base - cashback_resgatado
-                df_movimentacoes_upd = st.session_state.df.copy()
+                        if 'Nome' in df_clientes_upd.columns:
+                            cliente_idx_list = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()
 
-                if status_selecionado == "Realizada" and cliente:
-                    # Logic for cashback calculation, client update, and Telegram notification
-                    pass
+                        if cliente_idx_list: # Cliente existente
+                            idx = cliente_idx_list[0]
+                            cliente_data_antes = df_clientes_upd.loc[idx].copy() # ✅ Dados do cliente capturados ANTES da venda
+                            gasto_total_atualizado = cliente_data_antes["TotalGasto"] + valor_base
+                            nivel_cliente = calcular_nivel(gasto_total_atualizado)
+                            # Verifica se era a primeira compra
+                            if cliente_data_antes["TotalGasto"] == 0: era_primeira_compra = True
+                            # Captura o nome do indicador, se houver
+                            if 'Indicado Por' in cliente_data_antes: indicador_nome = cliente_data_antes['Indicado Por']
+                        else: # Cliente novo
+                            nivel_cliente = calcular_nivel(valor_base)
+                            era_primeira_compra = True
+                        
+                        # Lógica de cálculo do cashback (item por item)
+                        total_cashback_ganho = 0.0
+                        for item_vendido in st.session_state.lista_produtos:
+                            produto_id = item_vendido.get("Produto_ID")
+                            valor_item = float(item_vendido.get("Preço Unitário", 0)) * float(item_vendido.get("Quantidade", 0))
+                            percentual_cashback = 0.0
+                            is_turbo = False
+                            if produto_id:
+                                produto_info = produtos_catalogo_df[produtos_catalogo_df["ID"] == produto_id]
+                                if not produto_info.empty:
+                                    status_promo = produto_info.iloc[0].get("PromocaoEspecial", "NAO")
+                                    if str(status_promo).strip().upper() == "SIM": is_turbo = True
+                            
+                            if is_turbo:
+                                if "Diamante" in nivel_cliente: percentual_cashback = 0.15
+                                elif "Ouro" in nivel_cliente: percentual_cashback = 0.07
+                                else: percentual_cashback = 0.03
+                            else:
+                                if "Diamante" in nivel_cliente: percentual_cashback = 0.08
+                                elif "Ouro" in nivel_cliente: percentual_cashback = 0.05
+                                else: percentual_cashback = 0.03
+                            total_cashback_ganho += valor_item * percentual_cashback
+                        total_cashback_ganho = round(total_cashback_ganho, 2)
+                        
+                        # Atualiza o DataFrame de clientes
+                        if cliente_idx_list:
+                            idx = cliente_idx_list[0]
+                            df_clientes_upd.loc[idx, "TotalGasto"] += valor_base
+                            df_clientes_upd.loc[idx, "Nivel"] = nivel_cliente
+                            df_clientes_upd.loc[idx, "Cashback"] -= cashback_resgatado
+                            df_clientes_upd.loc[idx, "Cashback"] += total_cashback_ganho
+                        else:
+                            novo_cliente_data = { "Nome": cliente.strip(), "Cashback": total_cashback_ganho, "TotalGasto": valor_base, "Nivel": nivel_cliente }
+                            df_clientes_upd = pd.concat([df_clientes_upd, pd.DataFrame([novo_cliente_data])], ignore_index=True)
+                        
+                        msg_cashback = f"Cashback para {cliente}: Ganho de R${total_cashback_ganho:,.2f} nesta compra."
+                        if salvar_clientes_cash_github(df_clientes_upd, msg_cashback):
+                            st.toast(msg_cashback)
+                            st.session_state.df_clientes = df_clientes_upd
+                        
+                        # 🚀 LÓGICA DE ENVIO DO TELEGRAM
+                        if TELEGRAM_ENABLED:
+                            idx_cliente_final = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()[0]
+                            saldo_atualizado = df_clientes_upd.loc[idx_cliente_final, "Cashback"]
+                            
+                            fuso_horario_brasil = pytz.timezone('America/Sao_Paulo')
+                            agora_brasil = datetime.now(fuso_horario_brasil)
+                            data_hora_lancamento = agora_brasil.strftime('%d/%m/%Y às %H:%M')
+                            cashback_ganho_str = f"R$ {total_cashback_ganho:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            saldo_atual_str = f"R$ {saldo_atualizado:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            
+                            mensagem_header = "✨ *Novidade imperdível na Doce&Bella!* ✨\n\nAgora você aproveita ainda mais com nosso Programa de Fidelidade 🛍💖\n---------------------------------\n\n"
+                            mensagem_body = (
+                                f"Olá *{cliente}*, aqui é o programa de fidelidade da loja Doce&Bella!\n\n"
+                                f"Você ganhou *{cashback_ganho_str}* em créditos CASHBACK.\n"
+                                f"💖 Seu saldo em *{data_hora_lancamento}* é de *{saldo_atual_str}*.\n\n"
+                                f"⭐ Seu nível atual é: *{nivel_cliente}*"
+                            )
+                            # ✅ A verificação agora funciona, pois cliente_data_antes sempre existe
+                            if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
+                                mensagem_body += f"\n\n🎉 Parabéns! Você subiu para o nível *{nivel_cliente}*! Aproveite seus novos benefícios."
+                            
+                            mensagem_footer = (
+                                f"\n\n=================================\n\n"
+                                f"🟩 *REGRAS PARA RESGATAR SEUS CRÉDITOS*\n"
+                                f"- Resgate máximo: *50% sobre o valor da compra.*\n"
+                                f"- Saldo mínimo para resgate: *R$ 20,00*.\n\n"
+                                f"💬 *Fale conosco para consultar seu saldo e resgatar!*\n"
+                            )
+                            enviar_mensagem_telegram(mensagem_header + mensagem_body + mensagem_footer)
 
-                transaction_id_final = str(uuid.uuid4())
-                if edit_mode: transaction_id_final = st.session_state.edit_id
-                
-                nova_movimentacao = { 
-                    "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente, 
-                    "Valor": valor_a_salvar, "Forma de Pagamento": forma_pagamento, "Tipo": "Entrada", 
-                    "Produtos Vendidos": json.dumps(st.session_state.lista_produtos), "Categoria": "", "Status": status_selecionado, 
-                    "Data Pagamento": data_pagamento_final.isoformat() if data_pagamento_final else None, 
-                    "FonteRecurso": "", "TransactionID": transaction_id_final 
-                }
-                
-                if edit_mode:
-                    idx_to_update = df_movimentacoes_upd.index[df_movimentacoes_upd['TransactionID'] == st.session_state.edit_id].tolist()
-                    if idx_to_update:
-                        df_movimentacoes_upd.loc[idx_to_update[0]] = pd.Series(nova_movimentacao)
-                        msg_commit = f"Edição da movimentação ID {st.session_state.edit_id[:8]}"
+                            # Lógica de Bônus de Indicação
+                            if era_primeira_compra and indicador_nome:
+                                idx_indicador = df_clientes_upd.index[df_clientes_upd['Nome'] == indicador_nome].tolist()
+                                if idx_indicador:
+                                    bonus = valor_base * 0.03 # 3% de bônus
+                                    df_clientes_upd.loc[idx_indicador[0], 'Cashback'] += bonus
+                                    salvar_clientes_cash_github(df_clientes_upd, f"Bônus de indicação para {indicador_nome}")
+                                    
+                                    bonus_str = f"R$ {bonus:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    nivel_indicador = df_clientes_upd.loc[idx_indicador[0], 'Nivel']
+                                    mensagem_indicador = (
+                                        f"Oi, {indicador_nome}! Agradecemos demais a sua indicação da {cliente}! "
+                                        f"Você acaba de ganhar *{bonus_str}* extras! Seu nível atual é: *{nivel_indicador}*."
+                                    )
+                                    enviar_mensagem_telegram(mensagem_indicador)
+
+                    # Lógica para salvar a movimentação no livro caixa
+                    transaction_id_final = str(uuid.uuid4())
+                    if edit_mode: transaction_id_final = st.session_state.edit_id
+                    
+                    nova_movimentacao = { 
+                        "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente_final, 
+                        "Valor": valor_a_salvar, "Forma de Pagamento": forma_pagamento, "Tipo": "Entrada", 
+                        "Produtos Vendidos": produtos_vendidos_json, "Categoria": "", "Status": status_selecionado, 
+                        "Data Pagamento": data_pagamento_final.isoformat() if data_pagamento_final else None, 
+                        "FonteRecurso": "", "RecorrenciaID": '', "TransacaoPaiID": '', 
+                        "TransactionID": transaction_id_final 
+                    }
+                    
+                    df_movimentacoes_upd = st.session_state.df.copy()
+                    if edit_mode:
+                        idx_to_update = df_movimentacoes_upd.index[df_movimentacoes_upd['TransactionID'] == st.session_state.edit_id].tolist()
+                        if idx_to_update:
+                            df_movimentacoes_upd.loc[idx_to_update[0]] = pd.Series(nova_movimentacao)
+                            msg_commit = f"Edição da movimentação ID {st.session_state.edit_id[:8]}"
+                        else:
+                            st.error("Erro: Não foi possível encontrar a movimentação para editar."); return
                     else:
-                        st.error("Erro: Não foi possível encontrar a movimentação para editar."); st.stop()
-                else:
-                    df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([nova_movimentacao])], ignore_index=True)
-                    msg_commit = "Nova movimentação adicionada"
-                
-                # 3. SALVA A MOVIMENTAÇÃO PRINCIPAL E ATUALIZA A TELA
+                        df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([nova_movimentacao])], ignore_index=True)
+                        msg_commit = "Nova movimentação adicionada"
+                    
                     if salvar_dados_no_github(df_movimentacoes_upd, msg_commit, data_input):
                         st.success("Movimentação salva com sucesso!")
                         st.session_state.df = df_movimentacoes_upd
@@ -3346,6 +3449,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
