@@ -941,7 +941,7 @@ def homepage():
 
             card_html = f"""
             <div class="product-card">
-                <p style="font-weight: bold; color: #E91E63; margin-bottom: 10px; font-size: 0.9em;">✨ Doce&Bella - Novidade</p>
+                <p style="font-weight: bold; color: #E91E63; margin-bottom: 10px; font-size: 0.9em;">✨ Doce&bella - Novidade</p>
                 <img src="{foto_url}" alt="{nome}">
                 <p style="font-weight: bold; margin-top: 10px; height: 30px; white-space: normal;">{nome} ({marca})</p>
                 <p style="font-size: 0.9em;">✨ Estoque: {qtd}</p>
@@ -3221,6 +3221,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
