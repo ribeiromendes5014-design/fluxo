@@ -46,7 +46,7 @@ ARQ_PRODUTOS = "produtos_estoque.csv"
 COLUNAS_CLIENTES_CASH = ["Nome", "Cashback", "TotalGasto", "Nivel"]
 
 COLUNAS_COMPRAS = ["Data", "Produto", "Quantidade", "Valor Total", "Cor", "FotoURL"]
-COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo", "Produtos Vendidos", "Categoria", "Status", "Data Pagamento"]
+COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo", "Produtos Vendidos", "Categoria", "Status", "Data Pagamento", "FonteRecurso"]
 COLUNAS_PADRAO_COMPLETO = COLUNAS_PADRAO + ["RecorrenciaID", "TransacaoPaiID", "TransactionID"]
 COLUNAS_COMPLETAS_PROCESSADAS = COLUNAS_PADRAO_COMPLETO + ["Data_dt", "original_index", "Saldo Acumulado", "ID Visível", "Cor_Valor"]
 FATOR_CARTAO = 0.95 # Ex: 5% de taxa de cartão
@@ -3267,6 +3267,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
