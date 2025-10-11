@@ -433,12 +433,15 @@ def calcular_nivel(total_gasto: float) -> str:
     else:
         return "Bronze 🥉"
 
-@st.cache_data(show_spinner="Carregando clientes...")
+@st.cache_data(show_spinner="A carregar clientes...")
 def carregar_clientes_cash():
-    """Carrega o histórico de clientes e cashback de forma robusta."""
+    """
+    Carrega o histórico de clientes e cashback de forma robusta, lidando com
+    ficheiros vazios e renomeando colunas corretamente.
+    """
     df = load_csv_github(ARQ_CLIENTES_CASH)
 
-    # Mapa para renomear as colunas do seu CSV para o padrão interno do aplicativo
+    # Mapa para renomear as colunas do seu CSV para o padrão interno da aplicação
     mapa_colunas_para_app = {
         "NOME": "Nome", 
         "CASHBACK_DISPONIVEL": "Cashback",
@@ -446,28 +449,26 @@ def carregar_clientes_cash():
         "NIVEL_ATUAL": "Nivel"
     }
     
-    # Colunas internas que o aplicativo espera usar
+    # Colunas internas que a aplicação espera usar
     colunas_internas_esperadas = ["Nome", "Cashback", "TotalGasto", "Nivel"]
 
-    # --- INÍCIO DA CORREÇÃO ---
-    # Caso 1: O arquivo CSV não foi carregado ou está completamente vazio.
+    # Caso 1: O ficheiro CSV não foi carregado ou está completamente vazio.
     if df is None or df.empty:
-        # Cria um DataFrame vazio, mas já com a estrutura correta para o resto do app.
+        # Cria um DataFrame vazio com a estrutura correta para o resto da app.
         df_final = pd.DataFrame(columns=colunas_internas_esperadas)
         # Garante que as colunas numéricas tenham o tipo correto (float)
         df_final["Cashback"] = pd.Series(dtype='float64')
         df_final["TotalGasto"] = pd.Series(dtype='float64')
         return df_final
-    # --- FIM DA CORREÇÃO ---
 
-    # Caso 2: O arquivo foi carregado com sucesso.
-    # Renomeia as colunas do CSV para o padrão do app
+    # Caso 2: O ficheiro foi carregado com sucesso.
+    # Renomeia as colunas do CSV para o padrão da app
     df.rename(columns=mapa_colunas_para_app, inplace=True)
 
     # Garante que todas as colunas esperadas existam no DataFrame carregado
     for col in colunas_internas_esperadas:
         if col not in df.columns:
-            # Se a coluna não existir, cria ela com um valor padrão apropriado
+            # Se a coluna não existir, cria-a com um valor padrão apropriado
             df[col] = 0.0 if col in ["Cashback", "TotalGasto"] else ""
 
     # Converte as colunas numéricas com segurança, tratando possíveis erros
@@ -2937,6 +2938,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
