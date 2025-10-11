@@ -2723,10 +2723,10 @@ def livro_caixa():
                             cashback_ganho_str = f"R$ {total_cashback_ganho:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                             saldo_atual_str = f"R$ {saldo_atualizado:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                             
-                            mensagem_header = "✨ *Novidade imperdível na Doce&Bella!* ✨\n\nAgora você aproveita ainda mais com nosso Programa de Fidelidade 🛍💖\n---------------------------------\n\n"
+                            mensagem_header = "✨ *Novidade imperdível na Doce&Bella!* ✨\n\nAgora você pode aproveitar ainda mais as suas compras favoritas com o nosso Prograna de Fidelidade 🛍💖\n---------------------------------\n\n"
                             mensagem_body = (
                                 f"Olá *{cliente}*, aqui é o programa de fidelidade da loja Doce&Bella!\n\n"
-                                f"Você ganhou *{cashback_ganho_str}* em créditos CASHBACK.\n"
+                                f"Parabéns você ganhou *{cashback_ganho_str}* em créditos CASHBACK.\n"
                                 f"💖 Seu saldo em *{data_hora_lancamento}* é de *{saldo_atual_str}*.\n\n"
                                 f"⭐ Seu nível atual é: *{nivel_cliente}*"
                             )
@@ -3415,6 +3415,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
