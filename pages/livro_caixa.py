@@ -31,6 +31,28 @@ REPO_NAME = st.secrets.get("REPO_NAME", "fluxo")
 BRANCH = st.secrets.get("BRANCH", "main")
 TOKEN = st.secrets.get("GITHUB_TOKEN", None)
 
+
+# ================================================================
+# ⚙️ CONFIGURAÇÃO E FUNÇÃO DO TELEGRAM
+# ================================================================
+try:
+    TELEGRAM_BOT_ID = st.secrets["telegram"]["BOT_ID"]
+    TELEGRAM_CHAT_ID = st.secrets["telegram"]["CHAT_ID"]
+    TELEGRAM_THREAD_ID = st.secrets["telegram"].get("MESSAGE_THREAD_ID")
+    TELEGRAM_ENABLED = True
+except KeyError:
+    TELEGRAM_ENABLED = False
+
+def enviar_mensagem_telegram(mensagem: str):
+    if not TELEGRAM_ENABLED: return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_ID}/sendMessage"
+    payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': mensagem, 'parse_mode': 'Markdown'}
+    if TELEGRAM_THREAD_ID: payload['message_thread_id'] = TELEGRAM_THREAD_ID
+    try:
+        requests.post(url, data=payload, timeout=5)
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao enviar para o Telegram: {e}")
+
 # ================================================================
 # 📂 Caminhos dos arquivos no repositório
 # ================================================================
@@ -3345,6 +3367,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
