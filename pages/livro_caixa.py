@@ -22,13 +22,12 @@ from constants_and_css import * # Linha 2 (CORRETA - Importa as funções espec�
 
 # NO ARQUIVO livro_caixa.py, localize e REMOVA/SUBSTITUA o bloco:
 # ================================================================
-# 🔑 CREDENCIAIS E CONFIGURAÇÕES DO REPOSITÓRIO (CORREÇÃO DA LEITURA)
+# 🔑 CREDENCIAIS E CONFIGURAÇÕES DO REPOSITÓRIO
 # ================================================================
 OWNER = st.secrets.get("REPO_OWNER")
 REPO_NAME = st.secrets.get("REPO_NAME")
 BRANCH = st.secrets.get("BRANCH")
-# CORREÇÃO: LÊ O TOKEN DIRETAMENTE DO NÍVEL SUPERIOR
-TOKEN = st.secrets.get("GITHUB_TOKEN") 
+TOKEN = st.secrets.get("GITHUB_TOKEN")
 
 
 # ================================================================
@@ -3152,6 +3151,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
