@@ -433,46 +433,44 @@ def calcular_nivel(total_gasto: float) -> str:
     else:
         return "Bronze 🥉"
 
-@st.cache_data(show_spinner="Carregando clientes e cashback...")
+@st.cache_data(show_spinner="Carregando clientes...")
 def carregar_clientes_cash():
-    """Carrega o histórico de clientes e cashback (GitHub primeiro) e renomeia as colunas."""
-    df = None
-    
-    # 1. Tenta carregar do GitHub (fonte principal)
-    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CLIENTES_CASH}"
-    df = load_csv_github(url_raw)
+    """Carrega o histórico de clientes e cashback de forma robusta."""
+    df = load_csv_github(ARQ_CLIENTES_CASH)
 
-    # 2. Se falhar, tenta um fallback local
-    #if df is None or df.empty:
-     #   try:
-      #      if os.path.exists(ARQ_CLIENTES_CASH):
-       #         df = pd.read_csv(ARQ_CLIENTES_CASH, dtype=str)
-       # except Exception:
-        #    pass 
-
-    # 3. Se ainda assim não carregou, cria um DataFrame vazio
-    if df is None or df.empty:
-        df = pd.DataFrame(columns=["Nome", "Cashback", "TotalGasto", "Nivel"])
-
-    # ===================================================================
-    # CORREÇÃO PRINCIPAL: Renomeia as colunas do CSV para o padrão do app
-    # ===================================================================
-    mapa_colunas = {
-        # NOVO: Padroniza a coluna de nome do seu CSV para o padrão do app
+    # Mapa para renomear as colunas do seu CSV para o padrão interno do aplicativo
+    mapa_colunas_para_app = {
         "NOME": "Nome", 
         "CASHBACK_DISPONIVEL": "Cashback",
         "GASTO_ACUMULADO": "TotalGasto",
         "NIVEL_ATUAL": "Nivel"
     }
-    df.rename(columns=mapa_colunas, inplace=True)
-    # ===================================================================
+    
+    # Colunas internas que o aplicativo espera usar
+    colunas_internas_esperadas = ["Nome", "Cashback", "TotalGasto", "Nivel"]
 
-    # Garante que as colunas padrão existam após renomear
-    for col in ["Nome", "Cashback", "TotalGasto", "Nivel"]:
+    # --- INÍCIO DA CORREÇÃO ---
+    # Caso 1: O arquivo CSV não foi carregado ou está completamente vazio.
+    if df is None or df.empty:
+        # Cria um DataFrame vazio, mas já com a estrutura correta para o resto do app.
+        df_final = pd.DataFrame(columns=colunas_internas_esperadas)
+        # Garante que as colunas numéricas tenham o tipo correto (float)
+        df_final["Cashback"] = pd.Series(dtype='float64')
+        df_final["TotalGasto"] = pd.Series(dtype='float64')
+        return df_final
+    # --- FIM DA CORREÇÃO ---
+
+    # Caso 2: O arquivo foi carregado com sucesso.
+    # Renomeia as colunas do CSV para o padrão do app
+    df.rename(columns=mapa_colunas_para_app, inplace=True)
+
+    # Garante que todas as colunas esperadas existam no DataFrame carregado
+    for col in colunas_internas_esperadas:
         if col not in df.columns:
+            # Se a coluna não existir, cria ela com um valor padrão apropriado
             df[col] = 0.0 if col in ["Cashback", "TotalGasto"] else ""
 
-    # Normaliza os tipos
+    # Converte as colunas numéricas com segurança, tratando possíveis erros
     df["Cashback"] = pd.to_numeric(df["Cashback"], errors='coerce').fillna(0.0)
     df["TotalGasto"] = pd.to_numeric(df["TotalGasto"], errors='coerce').fillna(0.0)
 
@@ -3644,6 +3642,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
