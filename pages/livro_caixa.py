@@ -15,6 +15,76 @@ import uuid
 import calendar
 import pytz
 
+def gerar_recibo_cashback_pdf(cliente_nome, cashback_ganho, saldo_atualizado, total_compras, nivel_cliente, lista_produtos_vendidos, subiu_de_nivel):
+    """Gera um PDF estilo recibo com as informações de cashback da venda."""
+    
+    buffer = io.BytesIO()
+    page_size = (80*mm, 230*mm) # Aumentei um pouco a altura para caber tudo
+
+    # Função para desenhar o fundo amarelo
+    def draw_background(canvas, doc):
+        canvas.setFillColor(HexColor("#FFF9C4")) # Amarelo claro
+        canvas.rect(0, 0, page_size[0], page_size[1], fill=True, stroke=False)
+
+    doc = SimpleDocTemplate(buffer, pagesize=page_size, rightMargin=7, leftMargin=7, topMargin=7, bottomMargin=7)
+
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="NormalCenter", fontSize=9, alignment=1, spaceAfter=2))
+    styles.add(ParagraphStyle(name="BoldCenter", fontSize=11, alignment=1, spaceAfter=8, fontName='Helvetica-Bold'))
+    styles.add(ParagraphStyle(name="SmallText", fontSize=8, alignment=0, leading=10, spaceAfter=4))
+    styles.add(ParagraphStyle(name="SectionHeader", fontSize=9, alignment=1, spaceBefore=8, spaceAfter=4, fontName='Helvetica-Bold'))
+    
+    story = []
+
+    # --- Cabeçalho da Loja ---
+    story.append(Paragraph("✨ Doce&Bella Cosméticos ✨", styles["BoldCenter"]))
+    story.append(Paragraph("Seu Programa de Fidelidade", styles["NormalCenter"]))
+    story.append(Spacer(1, 4*mm))
+
+    # --- Mensagem de Parabéns ---
+    story.append(Paragraph(f"🎉 PARABÉNS, {cliente_nome.upper()}! 🎉", styles["BoldCenter"]))
+    story.append(Paragraph(f"Você ganhou <b>R$ {cashback_ganho:,.2f}</b> em créditos!", styles["NormalCenter"]))
+    story.append(Spacer(1, 4*mm))
+    
+    # --- Produtos Vendidos ---
+    if lista_produtos_vendidos:
+        story.append(Paragraph("--- Itens da Sua Compra ---", styles["NormalCenter"]))
+        for item in lista_produtos_vendidos:
+            nome = item.get('Produto', 'N/A')
+            qtd = int(item.get('Quantidade', 0))
+            story.append(Paragraph(f"- {qtd}x {nome}", styles["SmallText"]))
+        story.append(Spacer(1, 4*mm))
+
+    # --- Saldo Atualizado ---
+    data_hora_agora = datetime.now().strftime('%d/%m/%Y às %H:%M')
+    story.append(Paragraph("--- Seu Saldo Atualizado ---", styles["NormalCenter"]))
+    story.append(Paragraph(f"<b>🗓 Data/Hora:</b> {data_hora_agora}", styles["SmallText"]))
+    story.append(Paragraph(f"<b>💰 Saldo Atual:</b> R$ {saldo_atualizado:,.2f}", styles["SmallText"]))
+    story.append(Paragraph(f"<b>🛒 Total de Compras:</b> {total_compras}", styles["SmallText"]))
+    story.append(Spacer(1, 4*mm))
+    
+    # --- Mensagem de Subiu de Nível ---
+    if subiu_de_nivel:
+        story.append(Paragraph(f"🎉 Parabéns! Você subiu para o nível <b>{nivel_cliente}</b>!", styles["NormalCenter"]))
+        story.append(Spacer(1, 4*mm))
+
+    # --- Regras do Programa ---
+    story.append(Paragraph("COMO USAR SEU CRÉDITO", styles["SectionHeader"]))
+    story.append(Paragraph("<b>1. Limite de Uso:</b> Você pode usar até 50% do valor da sua nova compra.", styles["SmallText"]))
+    story.append(Paragraph("<b>2. Saldo Mínimo:</b> Para resgatar, seu saldo deve ser de, no mínimo, R$ 20,00.", styles["SmallText"]))
+    story.append(Spacer(1, 4*mm))
+
+    # --- Contato ---
+    story.append(Paragraph("📞 PRECISA DE AJUDA?", styles["SectionHeader"]))
+    story.append(Paragraph("Basta chamar a Doce&Bella pelo ZAP! 💬", styles["NormalCenter"]))
+    
+    # Gera o PDF
+    doc.build(story, onFirstPage=draw_background, onLaterPages=draw_background)
+    
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_bytes
+
 from constants_and_css import * # Linha 2 (CORRETA - Importa as funções específicas de renderização que estavam misturadas)
 # ==============================================================================
 # PLACEHOLDER CONSTANTS (Assumed to be imported from constants_and_css)
@@ -3430,6 +3500,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
