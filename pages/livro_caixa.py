@@ -2253,12 +2253,15 @@ def livro_caixa():
         return None
     
     def encontrar_opcao_por_cb(codigo_barras, produtos_df, opcoes_produtos_list):
-        if not codigo_barras: return None
+        """Busca um produto pelo código de barras e retorna a string da opção correspondente."""
+        if not codigo_barras:
+            return None
         
-        produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
+        # Garante que a comparação seja feita entre strings para evitar erros de tipo
+        produto_encontrado = produtos_df[produtos_df["CodigoBarras"].astype(str) == str(codigo_barras)]
         
         if not produto_encontrado.empty:
-            produto_id = produto_encontrado.iloc[0]["ID"]
+            produto_id = str(produto_encontrado.iloc[0]["ID"])
             
             for opcao in opcoes_produtos_list:
                 if opcao.startswith(f"{produto_id} |"):
@@ -2286,26 +2289,25 @@ def livro_caixa():
     default_data_pagamento = None 
 
     if edit_mode:
-    # st.session_state.edit_id agora armazena o TransactionID (que é uma string)
-    transaction_id_to_edit = st.session_state.edit_id
-    linha_df_exibicao = df_exibicao[df_exibicao['TransactionID'] == transaction_id_to_edit]
+        # st.session_state.edit_id agora armazena o TransactionID (que é uma string)
+        transaction_id_to_edit = st.session_state.edit_id
+        linha_df_exibicao = df_exibicao[df_exibicao['TransactionID'] == transaction_id_to_edit]
 
-    if not linha_df_exibicao.empty:
-        movimentacao_para_editar = linha_df_exibicao.iloc[0]
-        # A partir daqui, o resto do seu código para preencher os valores
-        # padrão (default_loja, default_data, etc.) continua funcionando perfeitamente.
-        default_loja = movimentacao_para_editar['Loja']
-        default_data = movimentacao_para_editar['Data'] if pd.notna(movimentacao_para_editar['Data']) else datetime.now().date()
-        default_cliente = movimentacao_para_editar['Cliente']
-        default_valor = abs(movimentacao_para_editar['Valor']) if movimentacao_para_editar['Valor'] != 0 else 0.01 
-        default_forma = movimentacao_para_editar['Forma de Pagamento']
-        default_tipo = movimentacao_para_editar['Tipo']
-        default_produtos_json = movimentacao_para_editar['Produtos Vendidos'] if pd.notna(movimentacao_para_editar['Produtos Vendidos']) else ""
-        default_categoria = movimentacao_para_editar['Categoria']
-        default_status = movimentacao_para_editar['Status'] 
-        default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None) 
+        if not linha_df_exibicao.empty:
+            movimentacao_para_editar = linha_df_exibicao.iloc[0]
+            default_loja = movimentacao_para_editar['Loja']
+            default_data = movimentacao_para_editar['Data'] if pd.notna(movimentacao_para_editar['Data']) else datetime.now().date()
+            default_cliente = movimentacao_para_editar['Cliente']
+            default_valor = abs(movimentacao_para_editar['Valor']) if movimentacao_para_editar['Valor'] != 0 else 0.01 
+            default_forma = movimentacao_para_editar['Forma de Pagamento']
+            default_tipo = movimentacao_para_editar['Tipo']
+            default_produtos_json = movimentacao_para_editar['Produtos Vendidos'] if pd.notna(movimentacao_para_editar['Produtos Vendidos']) else ""
+            default_categoria = movimentacao_para_editar['Categoria']
+            default_status = movimentacao_para_editar['Status'] 
+            default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None)
             
-            if st.session_state.edit_id_loaded != original_idx_to_edit:
+            # CORREÇÃO: Verifica se os produtos para o ID da transação atual já foram carregados
+            if st.session_state.get('edit_id_loaded') != transaction_id_to_edit:
                 if default_tipo == "Entrada" and default_produtos_json:
                     try:
                         try:
@@ -2319,24 +2321,26 @@ def livro_caixa():
                             p['Custo Unitário'] = float(p.get('Custo Unitário', 0))
                             p['Produto_ID'] = str(p.get('Produto_ID', ''))
                             
-                        st.session_state.lista_produtos = [p for p in produtos_list if p['Quantidade'] > 0] 
+                        st.session_state.lista_produtos = [p for p in produtos_list if p.get('Quantidade', 0) > 0] 
                     except:
                         st.session_state.lista_produtos = []
                 else: 
                     st.session_state.lista_produtos = []
                 
-                st.session_state.edit_id_loaded = original_idx_to_edit 
+                # CORREÇÃO: Atualiza o ID carregado com o TransactionID correto
+                st.session_state.edit_id_loaded = transaction_id_to_edit 
                 st.session_state.cb_lido_livro_caixa = "" 
             
-            st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
+            st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID Visível {movimentacao_para_editar['ID Visível']}")
             
         else:
+            # Caso o ID da transação não seja encontrado, reseta o modo de edição
             st.session_state.edit_id = None
             st.session_state.edit_id_loaded = None 
             st.session_state.lista_produtos = [] 
             edit_mode = False
             st.info("Movimentação não encontrada, saindo do modo de edição.")
-            st.rerun() 
+            st.rerun()
     else:
         if st.session_state.edit_id_loaded is not None:
              st.session_state.edit_id_loaded = None
@@ -3263,6 +3267,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
