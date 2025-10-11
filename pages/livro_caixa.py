@@ -197,17 +197,15 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
     Salva o DataFrame CSV do Livro Caixa no GitHub usando a API e também localmente (backup).
     Essa função garante a persistência de dados para o Streamlit.
     """
-
     # 1. Backup local (garante que grava o CSV mesmo sem GitHub)
     try:
         df.to_csv("livro_caixa.csv", index=False, encoding="utf-8-sig")
+        st.success("💾 Alteração salva localmente em livro_caixa.csv")
     except Exception as e:
         st.error(f"❌ Falha ao salvar localmente: {e}")
 
     # 2. Prepara DataFrame para envio ao GitHub
     df_temp = df.copy()
-
-    # Converte datas para string (YYYY-MM-DD)
     for col_date in ['Data', 'Data Pagamento']:
         if col_date in df_temp.columns:
             df_temp[col_date] = pd.to_datetime(df_temp[col_date], errors='coerce').apply(
@@ -221,16 +219,13 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
         csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
 
         try:
-            # Tenta atualizar arquivo existente
             contents = repo.get_contents(PATH_DIVIDAS, ref=BRANCH)
             repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
             st.success("📁 Livro Caixa salvo (atualizado) no GitHub!")
         except Exception:
-            # Se não existir, cria um novo
             repo.create_file(PATH_DIVIDAS, commit_message, csv_string, branch=BRANCH)
             st.success("📁 Livro Caixa salvo (criado) no GitHub!")
 
-        # Limpa o cache após salvar
         carregar_livro_caixa.clear()
         return True
 
@@ -3163,6 +3158,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
