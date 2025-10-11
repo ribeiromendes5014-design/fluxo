@@ -2867,7 +2867,7 @@ def livro_caixa():
                 st.info("Nenhuma movimentação disponível para edição/exclusão com os filtros aplicados.")
             else:
                 opcoes_movimentacao_operacao = {
-                    f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Cliente']} | R$ {abs(row['Valor']):,.2f}": row['original_index']
+                    f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Cliente']} | R$ {abs(row['Valor']):,.2f}": row['TransactionID']
                     for index, row in df_para_mostrar.iterrows()
                 }
                 opcoes_keys = ["Selecione uma movimentação..."] + list(opcoes_movimentacao_operacao.keys())
@@ -3260,6 +3260,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
