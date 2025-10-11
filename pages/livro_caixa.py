@@ -201,7 +201,6 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
     # 1. Backup local (garante que grava o CSV mesmo sem GitHub)
     try:
         df.to_csv("livro_caixa.csv", index=False, encoding="utf-8-sig")
-        st.success("💾 Alteração salva localmente em livro_caixa.csv")
     except Exception as e:
         st.error(f"❌ Falha ao salvar localmente: {e}")
 
@@ -3164,6 +3163,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
