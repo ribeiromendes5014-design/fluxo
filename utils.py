@@ -948,6 +948,81 @@ def callback_adicionar_estoque(prod_id, prod_nome, qtd, preco, custo, estoque_di
         st.session_state.input_produto_selecionado = ""
     else:
         st.warning("A quantidade excede o estoque ou é inválida.")
+    # =================================================================================
+# 🆕 FUNÇÕES DE PERSISTÊNCIA E LÓGICA DE MARKETING/OPT-IN
+# (Substituindo o módulo 'contato_handler.py')
+# =================================================================================
+
+def validar_contato(contato: str) -> str:
+    """Limpa o contato, garantindo apenas números (DDD + Número) para o padrão API 55."""
+    contato_limpo = re.sub(r'\D', '', str(contato))
+    # Adiciona o código do país (55 - Brasil) se não estiver presente
+    if not contato_limpo.startswith('55') and len(contato_limpo) >= 10:
+         return "55" + contato_limpo
+    if contato_limpo.startswith('55') and len(contato_limpo) >= 12:
+         return contato_limpo
+    return ""
+
+@st.cache_data(show_spinner="Carregando lista de contatos de marketing...")
+def carregar_contatos_marketing():
+    """Carrega a lista de contatos de marketing do GitHub."""
+    try:
+        from constants_and_css import ARQ_CONTATOS_MARKETING, OWNER as CONST_OWNER, REPO_NAME as CONST_REPO, BRANCH as CONST_BRANCH
+    except Exception: return pd.DataFrame(columns=["Nome", "Contato", "DataCadastro", "OPT_IN_PROMO"])
+
+    url_raw = f"https://raw.githubusercontent.com/{CONST_OWNER}/{CONST_REPO}/{CONST_BRANCH}/{ARQ_CONTATOS_MARKETING}"
+    df = load_csv_github(url_raw) # Reutiliza a função de carregamento
+    
+    colunas_marketing = ["Nome", "Contato", "DataCadastro", "OPT_IN_PROMO"]
+    if df is None:
+        return pd.DataFrame(columns=colunas_marketing)
+        
+    df.columns = [col.title() for col in df.columns] # Padroniza para 'Nome'
+
+    for col in colunas_marketing:
+        if col not in df.columns:
+            df[col] = ''
+    
+    return df[colunas_marketing]
+
+def salvar_contatos_marketing(df_novo: pd.DataFrame, commit_message: str):
+    """Salva o DataFrame de contatos de marketing atualizado no GitHub."""
+    
+    try:
+        from constants_and_css import ARQ_CONTATOS_MARKETING, OWNER as CONST_OWNER, REPO_NAME as CONST_REPO, BRANCH as CONST_BRANCH, GITHUB_TOKEN
+    except Exception: return False
+
+    token = (st.secrets.get("GITHUB_TOKEN") or st.secrets.get("github_token") or GITHUB_TOKEN)
+    repo_owner = st.secrets.get("REPO_OWNER") or st.secrets.get("owner") or CONST_OWNER
+    repo_name = st.secrets.get("REPO_NAME") or st.secrets.get("repo") or CONST_REPO
+    branch = st.secrets.get("BRANCH") or CONST_BRANCH
+    csv_remote_path = ARQ_CONTATOS_MARKETING
+
+    if not token:
+        st.warning("⚠️ Nenhum token do GitHub encontrado para salvar contatos.")
+        return False
+        
+    try:
+        g = Github(token)
+        repo = g.get_repo(f"{repo_owner}/{repo_name}")
+        csv_content = df_novo.to_csv(index=False, encoding="utf-8-sig")
+        
+        try:
+            contents = repo.get_contents(csv_remote_path, ref=branch)
+            repo.update_file(contents.path, commit_message, csv_content, contents.sha, branch=branch)
+            st.toast("📁 Contatos de Marketing atualizados no GitHub!")
+        except Exception:
+            repo.create_file(csv_remote_path, commit_message, csv_content, branch=branch)
+            st.toast("📁 Arquivo de Contatos de Marketing criado no GitHub!")
+            
+        carregar_contatos_marketing.clear()
+        
+        return True
+    except Exception as e:
+        st.error(f"Falha ao enviar Contatos de Marketing para o GitHub. Erro: ({e})")
+        return False
+
+    
 
 # ==================== FUNÇÕES DE ANÁLISE (HOMEPAGE) ====================
 @st.cache_data(show_spinner="Calculando mais vendidos...")
@@ -990,6 +1065,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
