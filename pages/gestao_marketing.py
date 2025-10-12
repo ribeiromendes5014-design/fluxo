@@ -4,37 +4,25 @@ from datetime import date, datetime, timedelta
 import re
 import sys, os 
 # ----------------------------------------------------------------------------------
-# CRÍTICO: Adiciona a pasta raiz (o diretório acima de 'pages') ao caminho do Python
-# Isso resolve o ModuleNotFoundError ao buscar 'utils.py' na raiz
+# 1. Ajuste de caminho para encontrar 'utils.py' na raiz
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # ----------------------------------------------------------------------------------
 
-# ✅ CORREÇÃO: Puxando TODAS as funções de manipulação de CSVs do 'utils.py'
-# Isso elimina a necessidade (e o erro) de importar 'contato_handler' e 'marketing_handler'
+# ✅ CORREÇÃO: Importa TUDO de uma única fonte (utils.py)
 from utils import (
     # Funções de Contatos (CRM)
     carregar_contatos_marketing, 
     salvar_contatos_marketing,
-    validar_contato, # Deve estar definido no utils.py para limpeza de números
+    validar_contato, 
 
     # Funções de Agenda (CMS)
+    # Assumindo que você as adicionou ao utils.py:
     carregar_agenda_marketing,
     salvar_agenda_marketing,
 
-    # Outras Funções Auxiliares (se precisar de prox_id, etc.)
-    prox_id # Assumindo que você moveu prox_id para utils.py
+    # Outras Funções Auxiliares 
+    prox_id # Puxa o prox_id do utils.py
 ) 
-
-# Se você manteve prox_id DENTRO deste arquivo, retire-o do import acima
-# e use a definição local:
-def prox_id(df, coluna_id="ID_PROMO"):
-    if df.empty:
-        return "1"
-    else:
-        try:
-            return str(pd.to_numeric(df[coluna_id], errors='coerce').fillna(0).astype(int).max() + 1)
-        except:
-            return str(len(df) + 1)
 
 # ==============================================================================
 # SUBABA: GESTÃO DE CONTATOS (REUTILIZAÇÃO E CADASTRO MANUAL)
@@ -51,22 +39,14 @@ def gestao_contatos_subaba():
             nome_manual = col_nome.text_input("👤 Nome", key="input_nome_manual")
             contato_manual = col_contato.text_input("📞 WhatsApp (DDD + Número)", key="input_contato_manual", help="Apenas números, Ex: 41991234567")
             
-            # Reutiliza a função de validação de contato que você forneceu
-            def validar_contato(contato: str) -> str:
-                contato_limpo = re.sub(r'\D', '', str(contato))
-                if len(contato_limpo) == 11 and not contato_limpo.startswith('55'):
-                    contato_limpo = contato_limpo
-                if not contato_limpo.startswith('55') and len(contato_limpo) >= 10:
-                    return "55" + contato_limpo
-                if contato_limpo.startswith('55') and len(contato_limpo) >= 12:
-                    return contato_limpo
-                return ""
-
+            # REMOVEMOS A DEFINIÇÃO LOCAL DE validar_contato, USANDO A IMPORTADA
             enviar_manual = st.form_submit_button("💾 Adicionar Contato e Ativar Opt-In")
             
             if enviar_manual:
-                contato_limpo = validar_contato(contato_manual)
+                # 1. VALIDAÇÃO USANDO A FUNÇÃO IMPORTADA DE utils.py
+                contato_limpo = validar_contato(contato_manual) 
                 
+                # ... (o restante da lógica de validação e salvamento permanece a mesma) ...
                 if len(contato_limpo) < 12:
                     st.error("❌ Contato inválido. Use o DDD + Número (Ex: 41991234567).")
                     return
@@ -74,7 +54,7 @@ def gestao_contatos_subaba():
                     st.error("❌ O nome é obrigatório.")
                     return
 
-                # --- Lógica de Salvamento (reutiliza o handler) ---
+                # --- Lógica de Salvamento (reutiliza o handler importado) ---
                 df_contatos = carregar_contatos_marketing()
                 
                 # Garante que as colunas existam
@@ -85,12 +65,10 @@ def gestao_contatos_subaba():
                 contato_existe = df_contatos['Contato'].astype(str).str.contains(contato_limpo).any()
                 
                 if contato_existe:
-                    # Atualiza o status Opt-in para garantir que o envio funcione
                     df_contatos.loc[df_contatos['Contato'].astype(str).str.contains(contato_limpo), 'OPT_IN_PROMO'] = True
                     df_contatos.loc[df_contatos['Contato'].astype(str).str.contains(contato_limpo), 'Nome'] = nome_manual.strip()
                     st.info(f"🎉 Contato {nome_manual.strip()} já existia. Opt-In reativado.")
                 else:
-                    # Adiciona novo contato manualmente
                     nova_linha = {
                         "Nome": nome_manual.strip(),
                         "Contato": contato_limpo,
@@ -100,7 +78,7 @@ def gestao_contatos_subaba():
                     df_contatos = pd.concat([df_contatos, pd.DataFrame([nova_linha])], ignore_index=True)
                     st.success(f"✅ Contato {nome_manual.strip()} adicionado à lista VIP.")
 
-                # Salva no GitHub
+                # 2. SALVA NO GITHUB USANDO A FUNÇÃO IMPORTADA
                 salvar_contatos_marketing(df_contatos, f"Cadastro manual de contato: {nome_manual.strip()}")
                 st.rerun() # Reinicia para atualizar a tabela
 
@@ -108,13 +86,13 @@ def gestao_contatos_subaba():
     
     # --- VISUALIZAÇÃO DOS CONTATOS ---
     st.subheader("Lista Completa de Contatos VIP")
+    # 3. CARREGA OS DADOS PARA EXIBIÇÃO USANDO A FUNÇÃO IMPORTADA
     df_contatos_display = carregar_contatos_marketing()
     
     if df_contatos_display.empty:
         st.info("Nenhum contato cadastrado ainda.")
         return
         
-    # Filtra apenas os contatos que deram OPT-IN e exibe
     df_ativos = df_contatos_display[df_contatos_display['OPT_IN_PROMO'].astype(bool)].copy()
     df_inativos = df_contatos_display[~df_contatos_display['OPT_IN_PROMO'].astype(bool)].copy()
 
@@ -254,4 +232,5 @@ def gestao_marketing():
 if __name__ == "__main__":
 
     gestao_marketing()
+
 
