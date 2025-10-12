@@ -2,6 +2,11 @@ import streamlit as st
 import pandas as pd
 from datetime import date, datetime, timedelta
 import re
+import sys, os 
+# ----------------------------------------------------------------------------------
+# CRÍTICO: Adiciona a pasta raiz (o diretório acima de 'pages') ao caminho do Python
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# ----------------------------------------------------------------------------------
 
 # Importa as funções de manipulação do CSV de contatos
 from contato_handler import carregar_contatos_marketing, salvar_contatos_marketing
@@ -235,4 +240,5 @@ def gestao_marketing():
 
 
 if __name__ == "__main__":
+
     gestao_marketing()
