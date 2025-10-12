@@ -5,16 +5,28 @@ import re
 import sys, os 
 # ----------------------------------------------------------------------------------
 # CRÍTICO: Adiciona a pasta raiz (o diretório acima de 'pages') ao caminho do Python
+# Isso resolve o ModuleNotFoundError ao buscar 'utils.py' na raiz
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # ----------------------------------------------------------------------------------
 
-# Importa as funções de manipulação do CSV de contatos
-from contato_handler import carregar_contatos_marketing, salvar_contatos_marketing
+# ✅ CORREÇÃO: Puxando TODAS as funções de manipulação de CSVs do 'utils.py'
+# Isso elimina a necessidade (e o erro) de importar 'contato_handler' e 'marketing_handler'
+from utils import (
+    # Funções de Contatos (CRM)
+    carregar_contatos_marketing, 
+    salvar_contatos_marketing,
+    validar_contato, # Deve estar definido no utils.py para limpeza de números
 
-# Importa as funções de manipulação do CSV da agenda de promoções
-from marketing_handler import carregar_agenda_marketing, salvar_agenda_marketing
+    # Funções de Agenda (CMS)
+    carregar_agenda_marketing,
+    salvar_agenda_marketing,
 
-# Funções auxiliares (Se precisar de prox_id, importe do livro_caixa ou utils)
+    # Outras Funções Auxiliares (se precisar de prox_id, etc.)
+    prox_id # Assumindo que você moveu prox_id para utils.py
+) 
+
+# Se você manteve prox_id DENTRO deste arquivo, retire-o do import acima
+# e use a definição local:
 def prox_id(df, coluna_id="ID_PROMO"):
     if df.empty:
         return "1"
@@ -242,3 +254,4 @@ def gestao_marketing():
 if __name__ == "__main__":
 
     gestao_marketing()
+
