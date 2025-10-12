@@ -56,6 +56,8 @@ ARQ_LOCAL = "livro_caixa.csv"
 PATH_DIVIDAS = CSV_PATH # Usa o caminho lido dos secrets ou o fallback
 ARQ_COMPRAS = "historico_compras.csv"
 ARQ_PROMOCOES = "promocoes.csv" 
+ARQ_CONTATOS_MARKETING = "contatos_marketing.csv" 
+ARQ_PROMOCOES_MARKETING = "marketing_promocoes.csv"
 COMMIT_MESSAGE = "Atualiza livro caixa via Streamlit (com produtos/categorias)"
 COMMIT_MESSAGE_DELETE = "Exclui movimentações do livro caixa"
 COMMIT_MESSAGE_EDIT = "Edita movimentação via Streamlit"
@@ -81,6 +83,7 @@ NIVEIS_CASHBACK = {
     "Ouro": {"min_gasto": 2000, "percentual": 0.03},   # 3%
     "Diamante": {"min_gasto": 5000, "percentual": 0.05} # 5%
 }
+
 
 
 
