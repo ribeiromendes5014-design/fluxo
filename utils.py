@@ -1021,6 +1021,74 @@ def salvar_contatos_marketing(df_novo: pd.DataFrame, commit_message: str):
     except Exception as e:
         st.error(f"Falha ao enviar Contatos de Marketing para o GitHub. Erro: ({e})")
         return False
+# utils.py (ADICIONAR ESTE BLOCO NO FINAL DO ARQUIVO)
+
+# =================================================================================
+# 🆕 FUNÇÕES DE AGENDA DE MARKETING (CMS)
+# =================================================================================
+
+@st.cache_data(show_spinner="Carregando agenda de marketing...")
+def carregar_agenda_marketing():
+    """Carrega a agenda de promoções de marketing do GitHub."""
+    try:
+        from constants_and_css import ARQ_PROMOCOES_MARKETING, OWNER as CONST_OWNER, REPO_NAME as CONST_REPO, BRANCH as CONST_BRANCH
+    except Exception: return pd.DataFrame(columns=["ID_PROMO", "DATA_ENVIO", "TEMPLATE_NOME", "FOTO_URL", "TEXTO_VAR1", "TEXTO_VAR2", "STATUS"])
+
+    ARQ_PROMOCOES_MARKETING = "marketing_promocoes.csv" # Usando o nome do arquivo
+
+    url_raw = f"https://raw.githubusercontent.com/{CONST_OWNER}/{CONST_REPO}/{CONST_BRANCH}/{ARQ_PROMOCOES_MARKETING}"
+    df = load_csv_github(url_raw) # Reutiliza a função de carregamento
+    
+    colunas_marketing = ["ID_PROMO", "DATA_ENVIO", "TEMPLATE_NOME", "FOTO_URL", "TEXTO_VAR1", "TEXTO_VAR2", "STATUS"]
+    if df is None:
+        return pd.DataFrame(columns=colunas_marketing)
+        
+    df.columns = [col.upper() for col in df.columns]
+
+    for col in colunas_marketing:
+        if col not in df.columns:
+            df[col] = ''
+    
+    return df[colunas_marketing]
+
+
+def salvar_agenda_marketing(df_novo: pd.DataFrame, commit_message: str):
+    """Salva o DataFrame da agenda de marketing no GitHub."""
+    
+    try:
+        from constants_and_css import ARQ_PROMOCOES_MARKETING, OWNER as CONST_OWNER, REPO_NAME as CONST_REPO, BRANCH as CONST_BRANCH, GITHUB_TOKEN
+    except Exception: return False
+
+    ARQ_PROMOCOES_MARKETING = "marketing_promocoes.csv" # Usando o nome do arquivo
+
+    token = (st.secrets.get("GITHUB_TOKEN") or st.secrets.get("github_token") or GITHUB_TOKEN)
+    repo_owner = st.secrets.get("REPO_OWNER") or st.secrets.get("owner") or CONST_OWNER
+    repo_name = st.secrets.get("REPO_NAME") or st.secrets.get("repo") or CONST_REPO
+    branch = st.secrets.get("BRANCH") or CONST_BRANCH
+    csv_remote_path = ARQ_PROMOCOES_MARKETING
+
+    if not token:
+        st.warning("⚠️ Nenhum token do GitHub encontrado para salvar a agenda.")
+        return False
+        
+    try:
+        g = Github(token)
+        repo = g.get_repo(f"{repo_owner}/{repo_name}")
+        csv_content = df_novo.to_csv(index=False, encoding="utf-8-sig")
+        
+        try:
+            contents = repo.get_contents(csv_remote_path, ref=branch)
+            repo.update_file(contents.path, commit_message, csv_content, contents.sha, branch=branch)
+            st.toast("📁 Agenda de Marketing atualizada no GitHub!")
+        except Exception:
+            repo.create_file(csv_remote_path, commit_message, csv_content, branch=branch)
+            st.toast("📁 Arquivo de Agenda de Marketing criado no GitHub!")
+            
+        carregar_agenda_marketing.clear()
+        return True
+    except Exception as e:
+        st.error(f"Falha ao enviar Agenda de Marketing para o GitHub. Erro: ({e})")
+        return False
 
     
 
@@ -1065,6 +1133,7 @@ try:
     get_most_sold = get_most_sold_products
 except Exception:
     pass
+
 
 
 
