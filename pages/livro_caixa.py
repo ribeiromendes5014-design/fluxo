@@ -2450,6 +2450,57 @@ def livro_caixa():
                             st.info("✨ Cliente novo ou não encontrado na fidelidade. Será cadastrado após a venda!")
                             if "cliente_fidelidade_ativo" in st.session_state:
                                 del st.session_state.cliente_fidelidade_ativo
+            # ================================================================
+                    # 2. LÓGICA DE BUSCA DÍVIDAS PENDENTES (NOVO)
+                    # ================================================================
+                    if cliente.strip() and not edit_mode:
+                        
+                        df_dividas_cliente = df_exibicao[
+                            (df_exibicao["Status"] == "Pendente") &
+                            (df_exibicao["Tipo"] == "Entrada") &
+                            # Filtra as dívidas pendentes que contêm o nome do cliente.
+                            (df_exibicao["Cliente"].astype(str).str.contains(cliente.strip(), case=False, na=False)) 
+                        ].copy()
+                        
+                        if not df_dividas_cliente.empty:
+                            st.warning(f"🚨 **{len(df_dividas_cliente)} DÍVIDAS PENDENTES** encontradas para o cliente '{cliente}'!")
+                            
+                            # Cria uma coluna temporária para o valor em aberto, usando a função que calcula abs(valor)
+                            df_dividas_cliente['Valor_em_Aberto'] = df_dividas_cliente.apply(calcular_valor_em_aberto, axis=1)
+                            
+                            for index, row in df_dividas_cliente.iterrows():
+                                valor_aberto = row['Valor_em_Aberto']
+                                data_venc = row['Data Pagamento'].strftime('%d/%m/%Y') if pd.notna(row['Data Pagamento']) else 'S/ Data'
+                                
+                                with st.container(border=True):
+                                    st.markdown(f"**ID {row['ID Visível']} | R$ {valor_aberto:,.2f}** em aberto. Venc.: {data_venc}")
+                                    
+                                    col_divida_1, col_divida_2 = st.columns(2)
+                                    
+                                    # Opção 1: Concluir (Redireciona para Relatórios/Filtros)
+                                    if col_divida_1.button(
+                                        f"✅ Pagar Dívida R$ {valor_aberto:,.2f}", 
+                                        key=f"concluir_divida_{row['TransactionID']}", 
+                                        type="primary",
+                                        help="Redireciona para a aba de Conclusão de Dívidas (Pagamento Total ou Parcial)."
+                                    ):
+                                        # Define o índice original (para busca no DF) da dívida na sessão e muda para a aba de Relatórios
+                                        st.session_state.divida_parcial_id = row['original_index']
+                                        st.session_state.aba_ativa_livro_caixa = abas_validas[2] # "📈 Relatórios e Filtros"
+                                        st.rerun()
+
+                                    # Opção 2: Adicionar mais produtos (Edita a transação pendente)
+                                    if col_divida_2.button(
+                                        f"➕ Adicionar Produtos/Editar", 
+                                        key=f"add_prod_divida_{row['TransactionID']}",
+                                        type="secondary",
+                                        help="Muda para o modo Edição para adicionar mais itens à transação Pendente."
+                                    ):
+                                        # Entra no modo de edição com o TransactionID da transação pendente
+                                        st.session_state.edit_id = row['TransactionID']
+                                        st.session_state.edit_id_loaded = None # Força o reload da lista de produtos no modo edição
+                                        st.session_state.aba_ativa_livro_caixa = abas_validas[0] # "📝 Nova Movimentação"
+                                        st.rerun(
 
             # ... (código para dívidas pendentes permanece o mesmo) ...
 
@@ -3431,6 +3482,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
