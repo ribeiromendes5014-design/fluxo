@@ -2736,7 +2736,7 @@ def livro_caixa():
                             st.cache_data.clear()
 
 
-                                        novas_movimentacoes = []
+                    novas_movimentacoes = []
                     if is_recorrente and not edit_mode:
                         # [Bloco de geração de recorrência]
                         num_parcelas_int = int(num_parcelas)
@@ -3422,6 +3422,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
