@@ -293,31 +293,33 @@ def salvar_dados_no_github(df_completo: pd.DataFrame, commit_message: str, data_
         return False
 
 
-@st.cache_data(show_spinner="Carregando dados...")
+@st.cache_data(show_spinner="Carregando dados de todos os meses...")
 def carregar_livro_caixa():
-    """Orquestra o carregamento do Livro Caixa (apenas o arquivo do mês/ano atual)."""
-    df = None
+    """
+    Busca todos os arquivos CSV mensais do Livro Caixa no GitHub (padrão: livro_caixa_AAAA_MM.csv),
+    combina-os em um único DataFrame e garante que todas as colunas padrão existam.
+    """
+    all_monthly_dfs = []
     
-    # Define o caminho do arquivo para o mês atual usando a nova função
-    path_arquivo_mensal = get_livro_caixa_path(date.today())
-    
-    # 1. Tenta carregar do GitHub
-    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{path_arquivo_mensal}"
-    df = load_csv_github(url_raw)
-
-    if df is None or df.empty:
-        # 2. Fallback: Cria um DataFrame vazio se o arquivo do mês atual não existir
-        # Usa COLUNAS_PADRAO_COMPLETO para incluir todas as novas colunas
-        df = pd.DataFrame(columns=COLUNAS_PADRAO_COMPLETO)
+    try:
+        # Usamos a biblioteca PyGithub para listar os arquivos do repositório
+        g = Github(TOKEN)
+        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
+        contents = repo.get_contents("", ref=BRANCH) # Pega o conteúdo da pasta raiz
         
-    # Garante que as colunas padrão existam (incluindo RecorrenciaID, TransacaoPaiID, FonteRecurso, TransactionID)
-    for col in COLUNAS_PADRAO_COMPLETO:
-        if col not in df.columns:
-            df[col] = "Realizada" if col == "Status" else "" 
+        # Filtra a lista de conteúdo para encontrar apenas os arquivos CSV do livro caixa
+        csv_files = [c for c in contents if c.name.startswith("livro_caixa_") and c.name.endswith(".csv")]
         
-    # Retorna apenas as colunas padrão na ordem correta
-    cols_to_return = COLUNAS_PADRAO_COMPLETO
-    return df[[col for col in cols_to_return if col in df.columns]]
+        if not csv_files:
+            # Se nenhum arquivo for encontrado, retorna um DataFrame vazio com a estrutura correta
+            return pd.DataFrame(columns=COLUNAS_PADRAO_COMPLETO)
+            
+        # Itera sobre os arquivos encontrados e carrega os dados de cada um
+        for file in csv_files:
+            url_raw = file.download_url
+            df_monthly = load_csv_github(url_raw) # Reutiliza a função de carregamento individual
+            if df_monthly is not None and not df_monthly.empty:
+                all_monthly_dfs.append(df_monthly)
 
 @st.cache_data(show_spinner=False)
 def processar_dataframe(df):
@@ -3287,6 +3289,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
