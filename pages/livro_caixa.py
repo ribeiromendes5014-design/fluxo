@@ -2279,14 +2279,14 @@ def livro_caixa():
         carregar_promocoes.clear()
         inicializar_produtos.clear() # Limpa o cache de produtos também
 
+    # OBTENÇÃO DE DADOS E ESTADOS
     produtos = inicializar_produtos() 
 
     if "df" not in st.session_state: st.session_state.df = carregar_livro_caixa()
-    # NOVO: Inicialização de clientes e cashback
     if "df_clientes" not in st.session_state: st.session_state.df_clientes = carregar_clientes_cash()
     df_clientes = st.session_state.df_clientes # Referência para o DataFrame de clientes
     
-    # Garante que todas as colunas de controle existam
+    # ... (restante da inicialização de session_state e variáveis) ...
     for col in ['RecorrenciaID', 'TransacaoPaiID']:
         if col not in st.session_state.df.columns: st.session_state.df[col] = ''
         
@@ -2308,31 +2308,8 @@ def livro_caixa():
 
     df_dividas = st.session_state.df
     df_exibicao = processar_dataframe(df_dividas)
-    # --- NOVO BLOCO DE CONTROLE DE ABAS ---
-    # Renderiza as tabs, capturando qual foi clicada pelo usuário
-    tab_nova_mov, tab_mov, tab_rel = st.tabs(abas_validas) 
-    
-    # Dicionário de containers para mapear o clique do usuário para a aba que será preenchida
-    tab_map = {
-        abas_validas[0]: tab_nova_mov, 
-        abas_validas[1]: tab_mov, 
-        abas_validas[2]: tab_rel
-    }
 
-    # Detecta o clique do usuário para atualizar a aba_ativa_livro_caixa (para o próximo rerun)
-    # E define o container de destino como a aba ativa no momento.
-    if st.session_state.aba_ativa_livro_caixa not in tab_map:
-        tab_container = tab_nova_mov
-    else:
-        tab_container = tab_map[st.session_state.aba_ativa_livro_caixa]
-        
-    # Verifica qual aba o usuário clicou para atualizar o estado
-    for tab_label, tab_widget in tab_map.items():
-        if tab_widget._provided_label == st.session_state.aba_ativa_livro_caixa:
-            st.session_state.aba_ativa_livro_caixa = tab_label
-            tab_container = tab_widget # Garante que o container de renderização seja o clicado
-            break
-
+    # ... (código para inicialização de variáveis e funções auxiliares) ...
     produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()].copy()
     opcoes_produtos = [""] + produtos_para_venda.apply(
         lambda row: f"{row.ID} | {row.Nome} ({row.Marca}) | Estoque: {row.Quantidade}", axis=1
@@ -2346,17 +2323,12 @@ def livro_caixa():
     
     def encontrar_opcao_por_cb(codigo_barras, produtos_df, opcoes_produtos_list):
         """Busca um produto pelo código de barras e retorna a string da opção correspondente."""
-        if not codigo_barras:
-            return None
-        
+        if not codigo_barras: return None
         produto_encontrado = produtos_df[produtos_df["CodigoBarras"].astype(str) == str(codigo_barras)]
-        
         if not produto_encontrado.empty:
             produto_id = str(produto_encontrado.iloc[0]["ID"])
-            
             for opcao in opcoes_produtos_list:
-                if opcao.startswith(f"{produto_id} |"):
-                    return opcao
+                if opcao.startswith(f"{produto_id} |"): return opcao
         return None
         
     if "input_nome_prod_manual" not in st.session_state: st.session_state.input_nome_prod_manual = ""
@@ -2430,23 +2402,34 @@ def livro_caixa():
         if st.session_state.cliente_selecionado_divida and st.session_state.cliente_selecionado_divida != "CHECKED":
              st.session_state.cliente_selecionado_divida = None
 
-    # ==============================================================================
-    # ESTRUTURA DE ABAS COM CONTROLE DE ESTADO PARA REDIRECIONAMENTO E CONTEÚDO
-    # ==============================================================================
     
-    # Renderiza o st.tabs e usa o estado de sessão para a aba ativa
-    # A variável st.session_state.aba_ativa_livro_caixa é definida no início da função livro_caixa
+    # ==============================================================================
+    # 💥 NOVO: CRIAÇÃO E RENDERIZAÇÃO DAS ABAS 💥
+    # ------------------------------------------------------------------------------
+    
+    # Cria as abas, usando o índice da aba ativa no session_state (se houver)
+    try:
+        active_index = abas_validas.index(st.session_state.aba_ativa_livro_caixa)
+    except ValueError:
+        active_index = 0
+        st.session_state.aba_ativa_livro_caixa = abas_validas[0]
+
+    # Streamlit lida com o estado visual da aba. Usamos o on_change para garantir a persistência
+    # de qual aba o Streamlit deve considerar "ativa" no próximo rerun.
+    def update_aba_state(new_index):
+        st.session_state.aba_ativa_livro_caixa = abas_validas[new_index]
+
+    # Renderiza as abas e armazena os containers
     tab_nova_mov, tab_mov, tab_rel = st.tabs(abas_validas) 
     
     # --- CONTEÚDO DA ABA 📝 NOVA MOVIMENTAÇÃO ---
     if st.session_state.aba_ativa_livro_caixa == abas_validas[0]:
         with tab_nova_mov:
+            # RESTO DO CÓDIGO DA ABA 1...
             if "df_clientes" not in st.session_state:
                 st.session_state.df_clientes = carregar_clientes_cash()
                 
             st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
-
-            # --- (Código para quitar dívida: REMOVIDO pois estava no final do seu código) ---
 
             col_principal_1, col_principal_2 = st.columns([1, 1])
             with col_principal_1:
@@ -2533,7 +2516,7 @@ def livro_caixa():
                                         st.session_state.edit_id = row['TransactionID']
                                         st.session_state.edit_id_loaded = None # Força o reload da lista de produtos no modo edição
                                         st.session_state.aba_ativa_livro_caixa = abas_validas[0] # "📝 Nova Movimentação"
-                                        st.rerun() # CORREÇÃO DE SINTAXE APLICADA AQUI!
+                                        st.rerun() 
                                         
                 
                 # ... (continua o código da tab_nova_mov, como a seção "Detalhes dos Produtos" e o formulário de salvar) ...
@@ -2944,13 +2927,10 @@ def livro_caixa():
                             if salvar_dados_no_github(df_movimentacoes_upd, "Nova saída adicionada", data_input):
                                 st.success("Movimentação salva com sucesso!"); st.session_state.valor_total_saida = 0.0; st.session_state.df = df_movimentacoes_upd; carregar_livro_caixa.clear(); st.rerun()
 
-    # ==============================================================================================
-    # ABA: MOVIMENTAÇÕES E RESUMO (Código COMPLETO e Restaurado)
-    # ==============================================================================================
+    # --- CONTEÚDO DA ABA 📋 MOVIMENTAÇÕES E RESUMO ---
     elif st.session_state.aba_ativa_livro_caixa == abas_validas[1]:
         with tab_mov:
-            # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📋 Movimentações e Resumo"
-            
+            # RESTO DO CÓDIGO DA ABA 2 (MOVIMENTAÇÕES E RESUMO)
             hoje = date.today()
             primeiro_dia_mes = hoje.replace(day=1)
             if hoje.month == 12: proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
@@ -3197,13 +3177,10 @@ def livro_caixa():
                         st.info("Selecione uma movimentação no menu acima para ver detalhes e opções de edição/exclusão.")
 
 
-    # ==============================================================================================
-    # ABA: RELATÓRIOS E FILTROS (Código COMPLETO e Restaurado)
-    # ==============================================================================================
+    # --- CONTEÚDO DA ABA 📈 RELATÓRIOS E FILTROS ---
     elif st.session_state.aba_ativa_livro_caixa == abas_validas[2]:
         with tab_rel:
-            # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📈 Relatórios e Filtros"
-            
+            # RESTO DO CÓDIGO DA ABA 3 (RELATÓRIOS E FILTROS)
             st.subheader("📄 Relatório Detalhado e Comparativo")
             
             # [Conteúdo original da aba tab_rel]
@@ -3513,6 +3490,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
