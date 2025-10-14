@@ -2308,6 +2308,30 @@ def livro_caixa():
 
     df_dividas = st.session_state.df
     df_exibicao = processar_dataframe(df_dividas)
+    # --- NOVO BLOCO DE CONTROLE DE ABAS ---
+    # Renderiza as tabs, capturando qual foi clicada pelo usuário
+    tab_nova_mov, tab_mov, tab_rel = st.tabs(abas_validas) 
+    
+    # Dicionário de containers para mapear o clique do usuário para a aba que será preenchida
+    tab_map = {
+        abas_validas[0]: tab_nova_mov, 
+        abas_validas[1]: tab_mov, 
+        abas_validas[2]: tab_rel
+    }
+
+    # Detecta o clique do usuário para atualizar a aba_ativa_livro_caixa (para o próximo rerun)
+    # E define o container de destino como a aba ativa no momento.
+    if st.session_state.aba_ativa_livro_caixa not in tab_map:
+        tab_container = tab_nova_mov
+    else:
+        tab_container = tab_map[st.session_state.aba_ativa_livro_caixa]
+        
+    # Verifica qual aba o usuário clicou para atualizar o estado
+    for tab_label, tab_widget in tab_map.items():
+        if tab_widget._provided_label == st.session_state.aba_ativa_livro_caixa:
+            st.session_state.aba_ativa_livro_caixa = tab_label
+            tab_container = tab_widget # Garante que o container de renderização seja o clicado
+            break
 
     produtos_para_venda = produtos[produtos["PaiID"].notna() | produtos["PaiID"].isnull()].copy()
     opcoes_produtos = [""] + produtos_para_venda.apply(
@@ -3485,6 +3509,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
