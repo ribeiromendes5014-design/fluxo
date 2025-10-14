@@ -79,7 +79,355 @@ URL_OFERTAS = "https://via.placeholder.com/200x50.png?text=Nossas+Ofertas"
 # Executa a configuração global e injeta o CSS
 render_global_config()
 
- 
+# ==============================================================================
+# FUNÇÕES CORE (Mantidas e verificadas para persistência)
+# ==============================================================================
+
+try:
+    from github import Github
+except ImportError:
+    class Github:
+        def __init__(self, token): pass
+        def get_repo(self, repo_name): return self
+        def update_file(self, path, msg, content, sha, branch): pass
+        def create_file(self, path, msg, content, branch): pass
+
+def get_livro_caixa_path(data_transacao: date) -> str:
+    """Retorna o nome do arquivo CSV formatado como livro_caixa_AAAA_MM.csv."""
+    if isinstance(data_transacao, str):
+        try:
+            data_transacao = datetime.strptime(data_transacao, '%Y-%m-%d').date()
+        except ValueError:
+            data_transacao = date.today()
+    elif not isinstance(data_transacao, date):
+        data_transacao = date.today()
+        
+    ano_mes = data_transacao.strftime('%Y_%m')
+    return f"livro_caixa_{ano_mes}.csv"
+
+
+def ler_codigo_barras_api(image_bytes):
+    """Decodifica códigos de barras usando a API pública ZXing."""
+    URL_DECODER_ZXING = "https://zxing.org/w/decode"
+    
+    try:
+        files = {"f": ("barcode.png", image_bytes, "image/png")}
+        response = requests.post(URL_DECODER_ZXING, files=files, timeout=30)
+        if response.status_code != 200:
+            if 'streamlit' in globals(): st.error(f"❌ Erro na API ZXing. Status HTTP: {response.status_code}")
+            return []
+        text = response.text
+        codigos = []
+        if "<pre>" in text:
+            partes = text.split("<pre>")
+            for p in partes[1:]:
+                codigo = p.split("</pre>")[0].strip()
+                if codigo and not codigo.startswith("Erro na decodificação"):
+                    codigos.append(codigo)
+        if not codigos and 'streamlit' in globals():
+            st.toast("⚠️ API ZXing não retornou nenhum código válido. Tente novamente ou use uma imagem mais clara.")
+        return codigos
+    except Exception as e:
+        if 'streamlit' in globals(): st.error(f"❌ Erro inesperado: {e}")
+        return []
+
+def add_months(d: date, months: int) -> date:
+    """Adiciona um número específico de meses a uma data."""
+    month = d.month + months
+    year = d.year + (month - 1) // 12
+    month = (month - 1) % 12 + 1
+    day = min(d.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+def to_float(valor_str):
+    try:
+        if isinstance(valor_str, (int, float)):
+            return float(valor_str)
+        return float(str(valor_str).replace(",", ".").strip())
+    except:
+        return 0.0
+    
+def prox_id(df, coluna_id="ID"):
+    if df.empty:
+        return "1"
+    else:
+        try:
+            return str(pd.to_numeric(df[coluna_id], errors='coerce').fillna(0).astype(int).max() + 1)
+        except:
+            return str(len(df) + 1)
+
+# =======================================================================
+# 🔑 INSERIR NOVA FUNÇÃO AQUI:
+# =======================================================================
+def get_livro_caixa_path(data_transacao: date) -> str:
+    """Retorna o nome do arquivo CSV formatado como livro_caixa_AAAA_MM.csv."""
+    if isinstance(data_transacao, str):
+        try:
+            data_transacao = datetime.strptime(data_transacao, '%Y-%m-%d').date()
+        except ValueError:
+            data_transacao = date.today()
+    elif not isinstance(data_transacao, date):
+        data_transacao = date.today()
+        
+    ano_mes = data_transacao.strftime('%Y_%m')
+    return f"livro_caixa_{ano_mes}.csv"
+
+def load_csv_github(url: str) -> pd.DataFrame | None:
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        df = pd.read_csv(StringIO(response.text), dtype=str)
+        if df.empty or len(df.columns) < 2:
+            return None
+        return df
+    except Exception:
+        return None
+
+def parse_date_yyyy_mm_dd(date_str):
+    """Tenta converter uma string para objeto date."""
+    if pd.isna(date_str) or not date_str:
+        return None
+    try:
+        return datetime.strptime(str(date_str).split(" ")[0], "%Y-%m-%d").date()
+    except:
+        return None
+
+@st.cache_data(show_spinner="Carregando promoções...")
+def carregar_promocoes():
+    COLUNAS_PROMO = ["ID", "IDProduto", "NomeProduto", "Desconto", "DataInicio", "DataFim"]
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PROMOCOES}"
+    df = load_csv_github(url_raw)
+    if df is None or df.empty:
+        df = pd.DataFrame(columns=COLUNAS_PROMO)
+    for col in COLUNAS_PROMO:
+        if col not in df.columns:
+            df[col] = "" 
+    return df[[col for col in COLUNAS_PROMO if col in df.columns]]
+
+def norm_promocoes(df):
+    """Normaliza o DataFrame de promoções."""
+    if df.empty: return df
+    df = df.copy()
+    df["Desconto"] = pd.to_numeric(df["Desconto"], errors='coerce').fillna(0.0)
+    
+    # 1. Converte para datetime
+    df["DataInicio_dt"] = pd.to_datetime(df["DataInicio"], errors='coerce')
+    df["DataFim_dt"] = pd.to_datetime(df["DataFim"], errors='coerce')
+    
+    # 2. Remove promoções com datas inválidas (NaT) para evitar o TypeError
+    df = df.dropna(subset=["DataInicio_dt", "DataFim_dt"])
+    
+    # 3. Extrai o objeto date (agora sem NaT, evitando o erro de dtype)
+    df["DataInicio"] = df["DataInicio_dt"].dt.date
+    df["DataFim"] = df["DataFim_dt"].dt.date
+    
+    # 4. Filtra promoções expiradas (agora seguro)
+    # Garante que a comparação seja feita com o objeto date extraído (df["DataFim"]) 
+    # ou use df["DataFim_dt"] e pd.Timestamp(date.today()) para mais segurança.
+    df = df[df["DataFim"] >= date.today()] 
+    
+    # Remove colunas auxiliares
+    df.drop(columns=["DataInicio_dt", "DataFim_dt"], errors='ignore', inplace=True)
+    
+    return df
+
+@st.cache_data(show_spinner="Carregando histórico de compras...")
+def carregar_historico_compras():
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_COMPRAS}"
+    df = load_csv_github(url_raw)
+    if df is None or df.empty:
+        df = pd.DataFrame(columns=COLUNAS_COMPRAS)
+    for col in COLUNAS_COMPRAS:
+        if col not in df.columns:
+            df[col] = "" 
+    return df[[col for col in COLUNAS_COMPRAS if col in df.columns]]
+
+def salvar_dados_no_github(df_completo: pd.DataFrame, commit_message: str, data_transacao: date):
+    """
+    Salva os dados do Livro Caixa no arquivo CSV mensal correspondente no GitHub.
+    Esta função determina o arquivo correto com base na data da transação, filtra os dados
+    e cria ou atualiza o arquivo no repositório.
+    """
+    
+    # 1. Determina o nome do arquivo com base na data da transação
+    # Ex: Para uma data em Outubro de 2025, o caminho será "livro_caixa_2025_10.csv"
+    file_path = f"livro_caixa_{data_transacao.year}_{data_transacao.month:02d}.csv"
+    
+    # 2. Filtra o DataFrame completo para conter apenas os dados do mês correto
+    # Isso garante que cada arquivo mensal contenha apenas as transações daquele mês.
+    df_mes_especifico = df_completo[
+        (pd.to_datetime(df_completo['Data']).dt.year == data_transacao.year) &
+        (pd.to_datetime(df_completo['Data']).dt.month == data_transacao.month)
+    ].copy()
+
+    # 3. Prepara as colunas de data do DataFrame filtrado para serem salvas como string
+    for col_date in ['Data', 'Data Pagamento']:
+        if col_date in df_mes_especifico.columns:
+            df_mes_especifico[col_date] = pd.to_datetime(df_mes_especifico[col_date], errors='coerce').apply(
+                lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
+            )
+
+    try:
+        g = Github(TOKEN)
+        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
+        csv_string = df_mes_especifico.to_csv(index=False, encoding="utf-8-sig")
+
+        try:
+            # Tenta obter o conteúdo do arquivo mensal atual
+            contents = repo.get_contents(file_path, ref=BRANCH)
+            # Se o arquivo já existe, atualiza-o
+            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
+            st.success(f"📁 Livro Caixa salvo (atualizado) em '{file_path}' no GitHub!")
+        except Exception:
+            # Se o arquivo não existe (ex: primeiro lançamento do mês), cria um novo
+            repo.create_file(file_path, commit_message, csv_string, branch=BRANCH)
+            st.success(f"📁 Livro Caixa salvo (novo arquivo '{file_path}' criado) no GitHub!")
+
+        # Limpa o cache para forçar a releitura de todos os arquivos na próxima vez
+        carregar_livro_caixa.clear()
+        
+        return True
+
+    except Exception as e:
+        st.error(f"❌ Erro ao salvar no GitHub: {e}")
+        st.error("Verifique se seu 'GITHUB_TOKEN' tem permissões e se o repositório existe.")
+        return False
+
+
+@st.cache_data(show_spinner="Carregando dados de todos os meses...")
+def carregar_livro_caixa():
+    """
+    Busca todos os arquivos CSV mensais do Livro Caixa no GitHub (padrão: livro_caixa_AAAA_MM.csv),
+    combina-os em um único DataFrame e garante que todas as colunas padrão existam.
+    """
+    all_monthly_dfs = []
+    
+    try:
+        # Usamos a biblioteca PyGithub para listar os arquivos do repositório
+        g = Github(TOKEN)
+        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
+        contents = repo.get_contents("", ref=BRANCH) # Pega o conteúdo da pasta raiz
+        
+        # Filtra a lista de conteúdo para encontrar apenas os arquivos CSV do livro caixa
+        csv_files = [c for c in contents if c.name.startswith("livro_caixa_") and c.name.endswith(".csv")]
+        
+        if not csv_files:
+            # Se nenhum arquivo for encontrado, retorna um DataFrame vazio com a estrutura correta
+            return pd.DataFrame(columns=COLUNAS_PADRAO_COMPLETO)
+            
+        # Itera sobre os arquivos encontrados e carrega os dados de cada um
+        for file in csv_files:
+            url_raw = file.download_url
+            df_monthly = load_csv_github(url_raw) # Reutiliza a função de carregamento individual
+            if df_monthly is not None and not df_monthly.empty:
+                all_monthly_dfs.append(df_monthly)
+
+@st.cache_data(show_spinner=False)
+def processar_dataframe(df):
+    for col in COLUNAS_PADRAO:
+        if col not in df.columns: df[col] = ""
+    for col in ["RecorrenciaID", "TransacaoPaiID"]:
+        if col not in df.columns: df[col] = ''
+
+    if df.empty: return pd.DataFrame(columns=COLUNAS_COMPLETAS_PROCESSADAS)
+    df_proc = df.copy()
+    df_proc["Valor"] = pd.to_numeric(df_proc["Valor"], errors="coerce").fillna(0.0)
+    df_proc["Data"] = pd.to_datetime(df_proc["Data"], errors='coerce').dt.date
+    
+    # --- INÍCIO DA CORREÇÃO ---
+    # 1. Converte a coluna 'Data' para datetime
+    df_proc["Data_dt"] = pd.to_datetime(df_proc["Data"], errors='coerce')
+    
+    # 2. Remove a linha que estava descartando os registros (dropna)
+    # df_proc.dropna(subset=['Data_dt'], inplace=True) 
+    
+    # 3. Substitui os valores de data inválidos (NaT) por uma data muito antiga para permitir a ordenação.
+    # Usamos o fillna no Data_dt para evitar erros de ordenação.
+    df_proc["Data_dt"] = df_proc["Data_dt"].fillna(datetime(1900, 1, 1))
+
+    # --- FIM DA CORREÇÃO ---
+    
+    df_proc["Data Pagamento"] = pd.to_datetime(df_proc["Data Pagamento"], errors='coerce').dt.date
+    
+    df_proc = df_proc.reset_index(drop=False)
+    df_proc.rename(columns={'index': 'original_index'}, inplace=True)
+    df_proc['Saldo Acumulado'] = 0.0
+    
+    # A lógica do saldo permanece a mesma, usando apenas 'Realizada' para o cálculo.
+    df_realizadas = df_proc[df_proc['Status'] == 'Realizada'].copy()
+    if not df_realizadas.empty:
+        df_realizadas_sorted_asc = df_realizadas.sort_values(by=['Data_dt', 'original_index'], ascending=[True, True]).reset_index(drop=True)
+        df_realizadas_sorted_asc['TEMP_SALDO'] = df_realizadas_sorted_asc['Valor'].cumsum()
+        df_proc = pd.merge(df_proc, df_realizadas_sorted_asc[['original_index', 'TEMP_SALDO']], on='original_index', how='left')
+        df_proc['Saldo Acumulado'] = df_proc['TEMP_SALDO'].fillna(method='ffill').fillna(0)
+        df_proc.drop(columns=['TEMP_SALDO'], inplace=True, errors='ignore')
+        
+    df_proc = df_proc.sort_values(by="Data_dt", ascending=False).reset_index(drop=True)
+    df_proc.insert(0, 'ID Visível', df_proc.index + 1)
+    df_proc['Cor_Valor'] = df_proc.apply(lambda row: 'green' if row['Tipo'] == 'Entrada' and row['Valor'] >= 0 else 'red', axis=1)
+    
+    # Adiciona TransacaoPaiID para processamento
+    if 'TransacaoPaiID' not in df_proc.columns:
+        df_proc['TransacaoPaiID'] = ''
+        
+    return df_proc
+
+def calcular_resumo(df):
+    df_realizada = df[df['Status'] == 'Realizada']
+    if df_realizada.empty: return 0.0, 0.0, 0.0
+    total_entradas = df_realizada[df_realizada["Tipo"] == "Entrada"]["Valor"].sum()
+    total_saidas = abs(df_realizada[df_realizada["Tipo"] == "Saída"]["Valor"].sum()) 
+    saldo = df_realizada["Valor"].sum()
+    return total_entradas, total_saidas, saldo
+
+def calcular_valor_em_aberto(linha):
+    """Calcula o valor absoluto e arredondado para 2 casas decimais de uma linha do DataFrame."""
+    try:
+        if isinstance(linha, pd.DataFrame) and not linha.empty:
+            valor_raw = pd.to_numeric(linha['Valor'].iloc[0], errors='coerce')
+        elif isinstance(linha, pd.Series):
+            valor_raw = pd.to_numeric(linha['Valor'], errors='coerce')
+        else:
+            return 0.0
+            
+        valor_float = float(valor_raw) if pd.notna(valor_raw) and not isinstance(valor_raw, pd.Series) else 0.0
+        return round(abs(valor_float), 2)
+    except Exception:
+        return 0.0
+
+
+def format_produtos_resumo(produtos_json):
+    if pd.isna(produtos_json) or produtos_json == "": return ""
+    if produtos_json:
+        try:
+            try:
+                produtos = json.loads(produtos_json)
+            except json.JSONDecodeError:
+                produtos = ast.literal_eval(produtos_json)
+            if not isinstance(produtos, list) or not all(isinstance(p, dict) for p in produtos): return "Dados inválidos"
+            count = len(produtos)
+            if count > 0:
+                primeiro = produtos[0].get('Produto', 'Produto Desconhecido')
+                total_custo = 0.0
+                total_venda = 0.0
+                for p in produtos:
+                    try:
+                        qtd = float(p.get('Quantidade', 0))
+                        preco_unitario = float(p.get('Preço Unitário', 0))
+                        custo_unitario = float(p.get('Custo Unitário', 0))
+                        total_custo += custo_unitario * qtd
+                        total_venda += preco_unitario * qtd
+                    except ValueError: continue
+                lucro = total_venda - total_custo
+                lucro_str = f"| Lucro R$ {lucro:,.2f}" if lucro != 0 else ""
+                return f"{count} item(s): {primeiro}... {lucro_str}"
+        except:
+            return "Erro na formatação/JSON InváLido"
+    return ""
+
+def highlight_value(row):
+    color = row['Cor_Valor']
+    return [f'color: {color}' if col == 'Valor' else '' for col in row.index]
 
 # ==============================================================================
 # FUNÇÕES CORE: CLIENTES E CASHBACK (NOVO)
@@ -96,51 +444,38 @@ def calcular_nivel(total_gasto: float) -> str:
     else:
         return "Bronze 🥉"
 
-@st.cache_data(show_spinner="A carregar clientes...")
+@st.cache_data(show_spinner="Carregando clientes e cashback...")
 def carregar_clientes_cash():
-    """
-    Carrega o histórico de clientes e cashback de forma robusta, lidando com
-    ficheiros vazios e renomeando colunas corretamente.
-    """
-    df = load_csv_github(ARQ_CLIENTES_CASH)
+    """Carrega o histórico de clientes e cashback (GitHub primeiro) e renomeia as colunas."""
+    df = None
+    
+    # 1. Tenta carregar do GitHub (fonte principal)
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CLIENTES_CASH}"
+    df = load_csv_github(url_raw)
 
-    # Mapa para renomear as colunas do seu CSV para o padrão interno da aplicação
-    mapa_colunas_para_app = {
+    # 3. Se ainda assim não carregou, cria um DataFrame vazio
+    if df is None or df.empty:
+        df = pd.DataFrame(columns=["Nome", "Cashback", "TotalGasto", "Nivel"])
+
+    # ===================================================================
+    # CORREÇÃO PRINCIPAL: Renomeia as colunas do CSV para o padrão do app
+    # ===================================================================
+    mapa_colunas = {
+        # NOVO: Padroniza a coluna de nome do seu CSV para o padrão do app
         "NOME": "Nome", 
         "CASHBACK_DISPONIVEL": "Cashback",
         "GASTO_ACUMULADO": "TotalGasto",
         "NIVEL_ATUAL": "Nivel"
     }
-    
-    # Colunas internas que a aplicação espera usar
-    colunas_internas_esperadas = ["Nome", "Cashback", "TotalGasto", "Nivel"]
+    df.rename(columns=mapa_colunas, inplace=True)
+    # ===================================================================
 
-    # Caso 1: O ficheiro CSV não foi carregado ou está completamente vazio.
-    if df is None or df.empty:
-        # Tenta um fallback local se o GitHub falhar
-        try:
-            if os.path.exists(ARQ_CLIENTES_CASH):
-                df = pd.read_csv(ARQ_CLIENTES_CASH, dtype=str)
-        except Exception:
-            df = None # Garante que df seja None se o fallback também falhar
-
-        # Se ainda assim não houver dados, cria um DataFrame vazio estruturado
-        if df is None or df.empty:
-            df_final = pd.DataFrame(columns=colunas_internas_esperadas)
-            df_final["Cashback"] = pd.Series(dtype='float64')
-            df_final["TotalGasto"] = pd.Series(dtype='float64')
-            return df_final
-
-    # Caso 2: O ficheiro foi carregado com sucesso (do GitHub ou local).
-    # Renomeia as colunas do CSV para o padrão da app
-    df.rename(columns=mapa_colunas_para_app, inplace=True)
-
-    # Garante que todas as colunas esperadas existam no DataFrame carregado
-    for col in colunas_internas_esperadas:
+    # Garante que as colunas padrão existam após renomear
+    for col in ["Nome", "Cashback", "TotalGasto", "Nivel"]:
         if col not in df.columns:
             df[col] = 0.0 if col in ["Cashback", "TotalGasto"] else ""
 
-    # Converte as colunas numéricas com segurança
+    # Normaliza os tipos
     df["Cashback"] = pd.to_numeric(df["Cashback"], errors='coerce').fillna(0.0)
     df["TotalGasto"] = pd.to_numeric(df["TotalGasto"], errors='coerce').fillna(0.0)
 
@@ -2958,8 +3293,6 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
-
-
 
 
 
