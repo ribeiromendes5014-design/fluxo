@@ -2424,10 +2424,11 @@ def livro_caixa():
     
     # --- CONTEÚDO DA ABA 📝 NOVA MOVIMENTAÇÃO ---
     with tab_nova_mov:
-    if "df_clientes" not in st.session_state:
-        st.session_state.df_clientes = carregar_clientes_cash()
+        st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
+
+        tipo = st.radio("Tipo de Movimentação", ["Entrada", "Saída"], index=0, key="input_tipo", horizontal=True)
                 
-            st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
+            
 
             col_principal_1, col_principal_2 = st.columns([1, 1])
             with col_principal_1:
@@ -3487,6 +3488,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
