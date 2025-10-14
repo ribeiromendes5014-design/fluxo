@@ -12,6 +12,7 @@ import ast
 import plotly.express as px
 import base64
 import calendar 
+from datetime import datetime, date
 
 # Note: Assumindo que constants_and_css está importando render_utils, caso contrário, será necessário corrigir.
 from constants_and_css import * # Importação explícita de funções de renderização para garantir que estão definidas
@@ -3292,6 +3293,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
