@@ -2423,11 +2423,9 @@ def livro_caixa():
     tab_nova_mov, tab_mov, tab_rel = st.tabs(abas_validas) 
     
     # --- CONTEÚDO DA ABA 📝 NOVA MOVIMENTAÇÃO ---
-    if st.session_state.aba_ativa_livro_caixa == abas_validas[0]:
-        with tab_nova_mov:
-            # RESTO DO CÓDIGO DA ABA 1...
-            if "df_clientes" not in st.session_state:
-                st.session_state.df_clientes = carregar_clientes_cash()
+    with tab_nova_mov:
+    if "df_clientes" not in st.session_state:
+        st.session_state.df_clientes = carregar_clientes_cash()
                 
             st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
 
@@ -2928,6 +2926,7 @@ def livro_caixa():
                                 st.success("Movimentação salva com sucesso!"); st.session_state.valor_total_saida = 0.0; st.session_state.df = df_movimentacoes_upd; carregar_livro_caixa.clear(); st.rerun()
 
     # --- CONTEÚDO DA ABA 📋 MOVIMENTAÇÕES E RESUMO ---
+    with tab_mov:
     elif st.session_state.aba_ativa_livro_caixa == abas_validas[1]:
         with tab_mov:
             # RESTO DO CÓDIGO DA ABA 2 (MOVIMENTAÇÕES E RESUMO)
@@ -3178,6 +3177,7 @@ def livro_caixa():
 
 
     # --- CONTEÚDO DA ABA 📈 RELATÓRIOS E FILTROS ---
+    with tab_rel:
     elif st.session_state.aba_ativa_livro_caixa == abas_validas[2]:
         with tab_rel:
             # RESTO DO CÓDIGO DA ABA 3 (RELATÓRIOS E FILTROS)
@@ -3490,6 +3490,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
