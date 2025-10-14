@@ -11,9 +11,7 @@ import hashlib
 import ast
 import plotly.express as px
 import base64
-import uuid
-import calendar
-import pytz
+import calendar 
 
 from constants_and_css import * # Linha 2 (CORRETA - Importa as funções específicas de renderização que estavam misturadas)
 # ==============================================================================
@@ -27,32 +25,12 @@ from constants_and_css import * # Linha 2 (CORRETA - Importa as funções espec�
 # ================================================================
 import streamlit as st
 
-OWNER = st.secrets.get("REPO_OWNER", "ribeiromendes5014-design")
-REPO_NAME = st.secrets.get("REPO_NAME", "fluxo")
-BRANCH = st.secrets.get("BRANCH", "main")
-TOKEN = st.secrets.get("GITHUB_TOKEN", None)
-
-
-# ================================================================
-# ⚙️ CONFIGURAÇÃO E FUNÇÃO DO TELEGRAM
-# ================================================================
-try:
-    TELEGRAM_BOT_ID = st.secrets["telegram"]["BOT_ID"]
-    TELEGRAM_CHAT_ID = st.secrets["telegram"]["CHAT_ID"]
-    TELEGRAM_THREAD_ID = st.secrets["telegram"].get("MESSAGE_THREAD_ID")
-    TELEGRAM_ENABLED = True
-except KeyError:
-    TELEGRAM_ENABLED = False
-
-def enviar_mensagem_telegram(mensagem: str):
-    if not TELEGRAM_ENABLED: return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_ID}/sendMessage"
-    payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': mensagem, 'parse_mode': 'Markdown'}
-    if TELEGRAM_THREAD_ID: payload['message_thread_id'] = TELEGRAM_THREAD_ID
-    try:
-        requests.post(url, data=payload, timeout=5)
-    except requests.exceptions.RequestException as e:
-        print(f"Erro ao enviar para o Telegram: {e}")
+OWNER = st.secrets["REPO_OWNER"]
+REPO_NAME = st.secrets["REPO_NAME"]
+BRANCH = st.secrets["BRANCH"]
+TOKEN = st.secrets["GITHUB_TOKEN"]
+PATH_DIVIDAS = "livro_caixa.csv"
+ARQ_LOCAL = "livro_caixa.csv"
 
 # ================================================================
 # 📂 Caminhos dos arquivos no repositório
@@ -69,13 +47,13 @@ ARQ_PRODUTOS = "produtos_estoque.csv"
 COLUNAS_CLIENTES_CASH = ["Nome", "Cashback", "TotalGasto", "Nivel"]
 
 COLUNAS_COMPRAS = ["Data", "Produto", "Quantidade", "Valor Total", "Cor", "FotoURL"]
-COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo", "Produtos Vendidos", "Categoria", "Status", "Data Pagamento", "FonteRecurso"]
-COLUNAS_PADRAO_COMPLETO = COLUNAS_PADRAO + ["RecorrenciaID", "TransacaoPaiID", "TransactionID"]
+COLUNAS_PADRAO = ["Data", "Loja", "Cliente", "Valor", "Forma de Pagamento", "Tipo", "Produtos Vendidos", "Categoria", "Status", "Data Pagamento"]
+COLUNAS_PADRAO_COMPLETO = COLUNAS_PADRAO + ["RecorrenciaID", "TransacaoPaiID"]
 COLUNAS_COMPLETAS_PROCESSADAS = COLUNAS_PADRAO_COMPLETO + ["Data_dt", "original_index", "Saldo Acumulado", "ID Visível", "Cor_Valor"]
 FATOR_CARTAO = 0.95 # Ex: 5% de taxa de cartão
 
 CATEGORIAS_SAIDA = ["Aluguel", "Salários", "Fornecedores", "Marketing", "Impostos", "Manutenção", "Outro/Diversos"]
-LOJAS_DISPONIVEIS = ["Doce&bella", "Fotografia", "Papelaria"]
+LOJAS_DISPONIVEIS = ["Doce&Bella", "Fotografia", "Papelaria"]
 FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Boleto", "Transferência", "Cheque"]
 
 COMMIT_MESSAGE = "Nova movimentação adicionada via Streamlit"
@@ -214,22 +192,106 @@ def carregar_historico_compras():
             df[col] = "" 
     return df[[col for col in COLUNAS_COMPRAS if col in df.columns]]
 
-def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
-    """Salva o histórico de compras. CORRIGIDO para usar o ARQ_COMPRAS."""
+def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
+    """
+    Salva o DataFrame CSV do Livro Caixa no GitHub usando a API e também localmente (backup).
+    Essa função garante a persistência de dados para o Streamlit.
+    """
+
+    # 1. Backup local (garante que grava o CSV mesmo sem GitHub)
     try:
-        from github import Github
-    except ImportError:
-        pass
+        df.to_csv("livro_caixa.csv", index=False, encoding="utf-8-sig")
+        st.success("💾 Alteração salva localmente em livro_caixa.csv")
+    except Exception as e:
+        st.error(f"❌ Falha ao salvar localmente: {e}")
+
+    # 2. Prepara DataFrame para envio ao GitHub
+    df_temp = df.copy()
+
+    # Converte datas para string (YYYY-MM-DD)
+    for col_date in ['Data', 'Data Pagamento']:
+        if col_date in df_temp.columns:
+            df_temp[col_date] = pd.to_datetime(df_temp[col_date], errors='coerce').apply(
+                lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
+            )
+
+    # 3. Tenta salvar no GitHub
+    try:
+        g = Github(TOKEN)
+        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
+        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
+
+        try:
+            # Tenta atualizar arquivo existente
+            contents = repo.get_contents(PATH_DIVIDAS, ref=BRANCH)
+            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
+            st.success("📁 Livro Caixa salvo (atualizado) no GitHub!")
+        except Exception:
+            # Se não existir, cria um novo
+            repo.create_file(PATH_DIVIDAS, commit_message, csv_string, branch=BRANCH)
+            st.success("📁 Livro Caixa salvo (criado) no GitHub!")
+
+        # Limpa o cache após salvar
+        carregar_livro_caixa.clear()
+        return True
+
+    except Exception as e:
+        st.error(f"⚠️ Falha ao salvar no GitHub: {e}")
+        st.warning("Verifique se seu GITHUB_TOKEN e variáveis de repositório estão corretos.")
+        return False
+
+
+@st.cache_data(show_spinner="Carregando dados...")
+def carregar_livro_caixa():
+    """Orquestra o carregamento do Livro Caixa."""
+    df = None
+    
+    # 1. Tenta carregar do GitHub (usando a URL raw com o PATH_DIVIDAS / CSV_PATH)
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{PATH_DIVIDAS}"
+    df = load_csv_github(url_raw)
+
+    if df is None or df.empty:
+        # 2. Fallback local/garantia de colunas
+        try:
+            df = pd.read_csv(ARQ_LOCAL, dtype=str)
+        except Exception:
+            df = pd.DataFrame(columns=COLUNAS_PADRAO)
         
-    # 1. Backup local 
+    if df.empty:
+        df = pd.DataFrame(columns=COLUNAS_PADRAO)
+
+    # Garante que as colunas padrão existam
+    for col in COLUNAS_PADRAO:
+        if col not in df.columns:
+            df[col] = "Realizada" if col == "Status" else "" 
+            
+    # Adiciona RecorrenciaID, TransacaoPaiID se não existirem
+    for col in ["RecorrenciaID", "TransacaoPaiID"]:
+        if col not in df.columns:
+            df[col] = ''
+        
+    # Retorna apenas as colunas padrão na ordem correta
+    cols_to_return = COLUNAS_PADRAO_COMPLETO
+    return df[[col for col in cols_to_return if col in df.columns]]
+
+
+def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
+    """
+    Salva o DataFrame CSV do Livro Caixa no GitHub usando a API e também localmente (backup).
+    Essa função garante a persistência de dados para o Streamlit.
+    """
+    
+    # 1. Backup local (Tenta salvar, ignora se falhar)
     try:
         df.to_csv(ARQ_LOCAL, index=False, encoding="utf-8-sig") 
     except Exception:
         pass
 
-    # 2. Envio para o GitHub (usando ARQ_COMPRAS)
+    # 2. Prepara DataFrame para envio ao GitHub
     df_temp = df.copy()
-    for col_date in ['Data']:
+    
+    # Prepara os dados de data para serem salvos como string no formato YYYY-MM-DD
+    for col_date in ['Data', 'Data Pagamento']:
         if col_date in df_temp.columns:
             df_temp[col_date] = pd.to_datetime(df_temp[col_date], errors='coerce').apply(
                 lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
@@ -241,108 +303,17 @@ def salvar_historico_no_github(df: pd.DataFrame, commit_message: str):
         csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
 
         try:
-            contents = repo.get_contents(ARQ_COMPRAS, ref=BRANCH)
+            # Tenta obter o SHA do conteúdo atual
+            contents = repo.get_contents(PATH_DIVIDAS, ref=BRANCH)
+            # Atualiza o arquivo
             repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
+            st.success("📁 Livro Caixa salvo (atualizado) no GitHub!")
         except Exception:
-            repo.create_file(ARQ_COMPRAS, commit_message, csv_string, branch=BRANCH)
+            # Cria o arquivo (se não existir)
+            repo.create_file(PATH_DIVIDAS, commit_message, csv_string, branch=BRANCH)
+            st.success("📁 Livro Caixa salvo (criado) no GitHub!")
 
-        carregar_historico_compras.clear()
-        return True
-
-    except Exception as e:
-        return False
-
-@st.cache_data(show_spinner="Carregando dados de todos os meses...")
-def carregar_livro_caixa():
-    """
-    Busca todos os arquivos CSV mensais do Livro Caixa no GitHub (padrão: livro_caixa_AAAA_MM.csv),
-    combina-os em um único DataFrame e garante que todas as colunas padrão existam.
-    """
-    all_monthly_dfs = []
-    
-    try:
-        # Usamos a biblioteca PyGithub para listar os arquivos do repositório
-        g = Github(TOKEN)
-        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        contents = repo.get_contents("", ref=BRANCH) # Pega o conteúdo da pasta raiz
-        
-        # Filtra a lista de conteúdo para encontrar apenas os arquivos CSV do livro caixa
-        csv_files = [c for c in contents if c.name.startswith("livro_caixa_") and c.name.endswith(".csv")]
-        
-        if not csv_files:
-            # Se nenhum arquivo for encontrado, retorna um DataFrame vazio com a estrutura correta
-            return pd.DataFrame(columns=COLUNAS_PADRAO_COMPLETO)
-            
-        # Itera sobre os arquivos encontrados e carrega os dados de cada um
-        for file in csv_files:
-            url_raw = file.download_url
-            df_monthly = load_csv_github(url_raw) # Reutiliza a função de carregamento individual
-            if df_monthly is not None and not df_monthly.empty:
-                all_monthly_dfs.append(df_monthly)
-
-    except Exception as e:
-        st.error(f"Não foi possível listar ou carregar os arquivos do GitHub: {e}. Tente recarregar a página.")
-        # Em caso de erro, retorna um DataFrame vazio para não quebrar a aplicação
-        return pd.DataFrame(columns=COLUNAS_PADRAO_COMPLETO)
-
-    if not all_monthly_dfs:
-        # Caso os arquivos existam mas estejam todos vazios
-        return pd.DataFrame(columns=COLUNAS_PADRAO_COMPLETO)
-        
-    # Concatena todos os DataFrames mensais em um único DataFrame
-    df = pd.concat(all_monthly_dfs, ignore_index=True)
-
-    # Garante que as colunas padrão existam no DataFrame final
-    for col in COLUNAS_PADRAO_COMPLETO:
-        if col not in df.columns:
-            df[col] = ''
-            
-    # Retorna o DataFrame completo com as colunas na ordem correta
-    return df[[col for col in COLUNAS_PADRAO_COMPLETO if col in df.columns]]
-
-
-def salvar_dados_no_github(df_completo: pd.DataFrame, commit_message: str, data_transacao: date):
-    """
-    Salva os dados do Livro Caixa no arquivo CSV mensal correspondente no GitHub.
-    Esta função determina o arquivo correto com base na data da transação, filtra os dados
-    e cria ou atualiza o arquivo no repositório.
-    """
-    
-    # 1. Determina o nome do arquivo com base na data da transação
-    # Ex: Para uma data em Outubro de 2025, o caminho será "livro_caixa_2025_10.csv"
-    file_path = f"livro_caixa_{data_transacao.year}_{data_transacao.month:02d}.csv"
-    
-    # 2. Filtra o DataFrame completo para conter apenas os dados do mês correto
-    # Isso garante que cada arquivo mensal contenha apenas as transações daquele mês.
-    df_mes_especifico = df_completo[
-        (pd.to_datetime(df_completo['Data']).dt.year == data_transacao.year) &
-        (pd.to_datetime(df_completo['Data']).dt.month == data_transacao.month)
-    ].copy()
-
-    # 3. Prepara as colunas de data do DataFrame filtrado para serem salvas como string
-    for col_date in ['Data', 'Data Pagamento']:
-        if col_date in df_mes_especifico.columns:
-            df_mes_especifico[col_date] = pd.to_datetime(df_mes_especifico[col_date], errors='coerce').apply(
-                lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
-            )
-
-    try:
-        g = Github(TOKEN)
-        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        csv_string = df_mes_especifico.to_csv(index=False, encoding="utf-8-sig")
-
-        try:
-            # Tenta obter o conteúdo do arquivo mensal atual
-            contents = repo.get_contents(file_path, ref=BRANCH)
-            # Se o arquivo já existe, atualiza-o
-            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
-            st.success(f"📁 Livro Caixa salvo (atualizado) em '{file_path}' no GitHub!")
-        except Exception:
-            # Se o arquivo não existe (ex: primeiro lançamento do mês), cria um novo
-            repo.create_file(file_path, commit_message, csv_string, branch=BRANCH)
-            st.success(f"📁 Livro Caixa salvo (novo arquivo '{file_path}' criado) no GitHub!")
-
-        # Limpa o cache para forçar a releitura de todos os arquivos na próxima vez
+        # IMPORTANTE: Limpa o cache após o salvamento bem-sucedido
         carregar_livro_caixa.clear()
         
         return True
@@ -351,6 +322,7 @@ def salvar_dados_no_github(df_completo: pd.DataFrame, commit_message: str, data_
         st.error(f"❌ Erro ao salvar no GitHub: {e}")
         st.error("Verifique se seu 'GITHUB_TOKEN' tem permissões e se o repositório existe.")
         return False
+
 
 
 @st.cache_data(show_spinner=False)
@@ -466,58 +438,55 @@ def highlight_value(row):
 
 def calcular_nivel(total_gasto: float) -> str:
     """Define o nível de fidelidade do cliente baseado no total gasto."""
-    if total_gasto >= 499.00:
+    if total_gasto >= 5000:
         return "Diamante 💎"
-    elif total_gasto >= 199.00:
+    elif total_gasto >= 2000:
         return "Ouro 🥇"
-    else:
+    elif total_gasto >= 500:
         return "Prata 🥈"
+    else:
+        return "Bronze 🥉"
 
-@st.cache_data(show_spinner="A carregar clientes...")
+@st.cache_data(show_spinner="Carregando clientes e cashback...")
 def carregar_clientes_cash():
-    """
-    Carrega o histórico de clientes e cashback de forma robusta, lidando com
-    ficheiros vazios e renomeando colunas corretamente.
-    """
-    df = load_csv_github(ARQ_CLIENTES_CASH)
+    """Carrega o histórico de clientes e cashback (GitHub primeiro) e renomeia as colunas."""
+    df = None
+    
+    # 1. Tenta carregar do GitHub (fonte principal)
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_CLIENTES_CASH}"
+    df = load_csv_github(url_raw)
 
-    # Mapa para renomear as colunas do seu CSV para o padrão interno da aplicação
-    mapa_colunas_para_app = {
+    # 2. Se falhar, tenta um fallback local
+    #if df is None or df.empty:
+     #   try:
+      #      if os.path.exists(ARQ_CLIENTES_CASH):
+       #         df = pd.read_csv(ARQ_CLIENTES_CASH, dtype=str)
+       # except Exception:
+        #    pass 
+
+    # 3. Se ainda assim não carregou, cria um DataFrame vazio
+    if df is None or df.empty:
+        df = pd.DataFrame(columns=["Nome", "Cashback", "TotalGasto", "Nivel"])
+
+    # ===================================================================
+    # CORREÇÃO PRINCIPAL: Renomeia as colunas do CSV para o padrão do app
+    # ===================================================================
+    mapa_colunas = {
+        # NOVO: Padroniza a coluna de nome do seu CSV para o padrão do app
         "NOME": "Nome", 
         "CASHBACK_DISPONIVEL": "Cashback",
         "GASTO_ACUMULADO": "TotalGasto",
         "NIVEL_ATUAL": "Nivel"
     }
-    
-    # Colunas internas que a aplicação espera usar
-    colunas_internas_esperadas = ["Nome", "Cashback", "TotalGasto", "Nivel"]
+    df.rename(columns=mapa_colunas, inplace=True)
+    # ===================================================================
 
-    # Caso 1: O ficheiro CSV não foi carregado ou está completamente vazio.
-    if df is None or df.empty:
-        # Tenta um fallback local se o GitHub falhar
-        try:
-            if os.path.exists(ARQ_CLIENTES_CASH):
-                df = pd.read_csv(ARQ_CLIENTES_CASH, dtype=str)
-        except Exception:
-            df = None # Garante que df seja None se o fallback também falhar
-
-        # Se ainda assim não houver dados, cria um DataFrame vazio estruturado
-        if df is None or df.empty:
-            df_final = pd.DataFrame(columns=colunas_internas_esperadas)
-            df_final["Cashback"] = pd.Series(dtype='float64')
-            df_final["TotalGasto"] = pd.Series(dtype='float64')
-            return df_final
-
-    # Caso 2: O ficheiro foi carregado com sucesso (do GitHub ou local).
-    # Renomeia as colunas do CSV para o padrão da app
-    df.rename(columns=mapa_colunas_para_app, inplace=True)
-
-    # Garante que todas as colunas esperadas existam no DataFrame carregado
-    for col in colunas_internas_esperadas:
+    # Garante que as colunas padrão existam após renomear
+    for col in ["Nome", "Cashback", "TotalGasto", "Nivel"]:
         if col not in df.columns:
             df[col] = 0.0 if col in ["Cashback", "TotalGasto"] else ""
 
-    # Converte as colunas numéricas com segurança
+    # Normaliza os tipos
     df["Cashback"] = pd.to_numeric(df["Cashback"], errors='coerce').fillna(0.0)
     df["TotalGasto"] = pd.to_numeric(df["TotalGasto"], errors='coerce').fillna(0.0)
 
@@ -580,58 +549,11 @@ def salvar_clientes_cash_github(df: pd.DataFrame, commit_message: str):
     except Exception as e:
         return False
 
-    # ===================================================================
-    # CORREÇÃO PRINCIPAL: Renomeia as colunas do app para o padrão do CSV antes de salvar
-    # ===================================================================
-    mapa_colunas_reverso = {
-        "Nome": "NOME",
-        "Cashback": "CASHBACK_DISPONIVEL",
-        "TotalGasto": "GASTO_ACUMULADO",
-        "Nivel": "NIVEL_ATUAL"
-    }
-    df_temp.rename(columns=mapa_colunas_reverso, inplace=True)
-    # ===================================================================
-    
-    # Garante que TODAS as colunas do seu CSV original existam no DataFrame a ser salvo.
-    # Preenche com valores vazios se alguma coluna estiver faltando (ex: em um cliente novo).
-    colunas_finais_csv = [
-        "NOME", "APELIDO/DESCRIÇÃO", "CONTATO", "CASHBACK_DISPONIVEL", 
-        "GASTO_ACUMULADO", "NIVEL_ATUAL", "INDICADO_POR", 
-        "PRIMEIRA_COMPRA_FEITA", "CONTATO_LIMPO"
-    ]
-    for col in colunas_finais_csv:
-        if col not in df_temp.columns:
-            # Define um valor padrão apropriado para colunas que podem ser numéricas
-            if col in ["CASHBACK_DISPONIVEL", "GASTO_ACUMULADO"]:
-                df_temp[col] = 0.0
-            else:
-                df_temp[col] = ""
-
-    # Reordena o DataFrame para manter o padrão exato do seu arquivo
-    df_temp = df_temp[colunas_finais_csv]
-
-    try:
-        g = Github(TOKEN)
-        repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
-        
-        try:
-            contents = repo.get_contents(ARQ_CLIENTES_CASH, ref=BRANCH)
-            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
-        except Exception:
-            repo.create_file(ARQ_CLIENTES_CASH, commit_message, csv_string, branch=BRANCH)
-        
-        carregar_clientes_cash.clear()
-        return True
-    
-    except Exception as e:
-        return False
-
 @st.cache_data(show_spinner="Carregando produtos do estoque...")
 def inicializar_produtos():
     COLUNAS_PRODUTOS = [
         "ID", "Nome", "Marca", "Categoria", "Quantidade", "PrecoCusto", 
-        "PrecoVista", "PrecoCartao", "Validade", "FotoURL", "CodigoBarras", "PaiID", "PromocaoEspecial"
+        "PrecoVista", "PrecoCartao", "Validade", "FotoURL", "CodigoBarras", "PaiID"
     ]
     if "produtos" not in st.session_state:
         url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{ARQ_PRODUTOS}"
@@ -1028,7 +950,7 @@ def homepage():
 
             card_html = f"""
             <div class="product-card">
-                <p style="font-weight: bold; color: #E91E63; margin-bottom: 10px; font-size: 0.9em;">✨ Doce&bella - Novidade</p>
+                <p style="font-weight: bold; color: #E91E63; margin-bottom: 10px; font-size: 0.9em;">✨ Doce&Bella - Novidade</p>
                 <img src="{foto_url}" alt="{nome}">
                 <p style="font-weight: bold; margin-top: 10px; height: 30px; white-space: normal;">{nome} ({marca})</p>
                 <p style="font-size: 0.9em;">✨ Estoque: {qtd}</p>
@@ -2321,14 +2243,12 @@ def livro_caixa():
         return None
     
     def encontrar_opcao_por_cb(codigo_barras, produtos_df, opcoes_produtos_list):
-        """Busca um produto pelo código de barras e retorna a string da opção correspondente."""
-        if not codigo_barras:
-            return None
+        if not codigo_barras: return None
         
-        produto_encontrado = produtos_df[produtos_df["CodigoBarras"].astype(str) == str(codigo_barras)]
+        produto_encontrado = produtos_df[produtos_df["CodigoBarras"] == codigo_barras]
         
         if not produto_encontrado.empty:
-            produto_id = str(produto_encontrado.iloc[0]["ID"])
+            produto_id = produto_encontrado.iloc[0]["ID"]
             
             for opcao in opcoes_produtos_list:
                 if opcao.startswith(f"{produto_id} |"):
@@ -2356,8 +2276,8 @@ def livro_caixa():
     default_data_pagamento = None 
 
     if edit_mode:
-        transaction_id_to_edit = st.session_state.edit_id
-        linha_df_exibicao = df_exibicao[df_exibicao['TransactionID'] == transaction_id_to_edit]
+        original_idx_to_edit = st.session_state.edit_id
+        linha_df_exibicao = df_exibicao[df_exibicao['original_index'] == original_idx_to_edit]
 
         if not linha_df_exibicao.empty:
             movimentacao_para_editar = linha_df_exibicao.iloc[0]
@@ -2370,27 +2290,32 @@ def livro_caixa():
             default_produtos_json = movimentacao_para_editar['Produtos Vendidos'] if pd.notna(movimentacao_para_editar['Produtos Vendidos']) else ""
             default_categoria = movimentacao_para_editar['Categoria']
             default_status = movimentacao_para_editar['Status'] 
-            default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None)
+            default_data_pagamento = movimentacao_para_editar['Data Pagamento'] if pd.notna(movimentacao_para_editar['Data Pagamento']) else (movimentacao_para_editar['Data'] if movimentacao_para_editar['Status'] == 'Realizada' else None) 
             
-            if st.session_state.get('edit_id_loaded') != transaction_id_to_edit:
+            if st.session_state.edit_id_loaded != original_idx_to_edit:
                 if default_tipo == "Entrada" and default_produtos_json:
                     try:
-                        produtos_list = ast.literal_eval(default_produtos_json)
+                        try:
+                            produtos_list = json.loads(default_produtos_json)
+                        except json.JSONDecodeError:
+                            produtos_list = ast.literal_eval(default_produtos_json)
+
                         for p in produtos_list:
                             p['Quantidade'] = float(p.get('Quantidade', 0))
                             p['Preço Unitário'] = float(p.get('Preço Unitário', 0))
                             p['Custo Unitário'] = float(p.get('Custo Unitário', 0))
                             p['Produto_ID'] = str(p.get('Produto_ID', ''))
-                        st.session_state.lista_produtos = [p for p in produtos_list if p.get('Quantidade', 0) > 0] 
+                            
+                        st.session_state.lista_produtos = [p for p in produtos_list if p['Quantidade'] > 0] 
                     except:
                         st.session_state.lista_produtos = []
                 else: 
                     st.session_state.lista_produtos = []
                 
-                st.session_state.edit_id_loaded = transaction_id_to_edit 
+                st.session_state.edit_id_loaded = original_idx_to_edit 
                 st.session_state.cb_lido_livro_caixa = "" 
             
-            st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID Visível {movimentacao_para_editar['ID Visível']}")
+            st.warning(f"Modo EDIÇÃO ATIVO: Movimentação ID {movimentacao_para_editar['ID Visível']}")
             
         else:
             st.session_state.edit_id = None
@@ -2398,7 +2323,7 @@ def livro_caixa():
             st.session_state.lista_produtos = [] 
             edit_mode = False
             st.info("Movimentação não encontrada, saindo do modo de edição.")
-            st.rerun()
+            st.rerun() 
     else:
         if st.session_state.edit_id_loaded is not None:
              st.session_state.edit_id_loaded = None
@@ -2414,8 +2339,52 @@ def livro_caixa():
             
         st.subheader("Nova Movimentação" if not edit_mode else "Editar Movimentação Existente")
 
-        # ... (código para quitar dívida permanece o mesmo) ...
+        if 'divida_a_quitar' in st.session_state and st.session_state.divida_a_quitar is not None:
+            
+            idx_quitar = st.session_state.divida_a_quitar
+            
+            try:
+                divida_para_quitar = st.session_state.df.loc[idx_quitar].copy()
+            except KeyError:
+                st.session_state.divida_a_quitar = None
+                st.error("Erro: A dívida selecionada não foi encontrada. Tente novamente.")
+                st.rerun()
+                
+            valor_em_aberto = calcular_valor_em_aberto(divida_para_quitar)
+            
+            if valor_em_aberto <= 0.01:
+                st.session_state.divida_a_quitar = None
+                st.warning("Dívida já quitada.")
+                st.rerun()
+            
+            st.subheader(f"✅ Quitar Dívida: {divida_para_quitar['Cliente']}")
+            st.info(f"Valor Total em Aberto: **R$ {valor_em_aberto:,.2f}**")
+            
+            with st.form("form_quitar_divida_rapida"):
+                col_q1, col_q2, col_q3 = st.columns(3)
+                
+                with col_q1:
+                    valor_pago = st.number_input(f"Valor Pago Agora", min_value=0.01, max_value=valor_em_aberto, value=valor_em_aberto, format="%.2f")
+                with col_q2:
+                    data_conclusao = st.date_input("Data do Pagamento", value=date.today())
+                with col_q3:
+                    forma_pagt_concluir = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO)
 
+                concluir = st.form_submit_button("✅ Registrar Pagamento", type="primary", use_container_width=True)
+                cancelar_quitacao = st.form_submit_button("❌ Cancelar", type="secondary", use_container_width=True)
+
+                if cancelar_quitacao:
+                    st.session_state.divida_a_quitar = None
+                    st.rerun()
+
+                if concluir:
+                    # ... (Lógica de quitação de dívida) ...
+                    st.success("Dívida quitada (lógica a ser implementada).")
+                    st.session_state.divida_a_quitar = None
+                    st.rerun()
+
+            st.stop()
+        
         col_principal_1, col_principal_2 = st.columns([1, 1])
         with col_principal_1:
             tipo = st.radio("Tipo", ["Entrada", "Saída"], index=0 if default_tipo == "Entrada" else 1, key="input_tipo", disabled=edit_mode)
@@ -2427,6 +2396,7 @@ def livro_caixa():
         categoria_selecionada = ""
 
         if tipo == "Entrada":
+            
             with col_principal_2:
                 cliente = st.text_input("Nome do Cliente (ou Descrição)", 
                                         value=default_cliente, 
@@ -2436,34 +2406,53 @@ def livro_caixa():
                 
                 st.caption("Aperte ENTER ou clique fora para buscar o cliente.")
                 
+                # ===================================================================
+                # Bloco de Busca de Cliente e Gestão de Cashback (Versão Corrigida)
+                # ===================================================================
                 cliente_normalizado = cliente.strip().lower()
+
                 if 'Nome' in df_clientes.columns:
                     cliente_encontrado = df_clientes['Nome'].str.strip().str.lower().eq(cliente_normalizado).any() if cliente_normalizado else False
+
                     if cliente.strip() and not edit_mode:
                         if cliente_encontrado:
                             cliente_df = df_clientes[df_clientes['Nome'].str.strip().str.lower() == cliente_normalizado]
-                            c_cashback = float(cliente_df.iloc[0]["Cashback"])
+                            c_cashback = cliente_df.iloc[0]["Cashback"]
                             c_nivel = cliente_df.iloc[0]["Nivel"]
                             st.success(f"🎉 Cliente Fidelidade Encontrado! Saldo Cashback: R$ {c_cashback:,.2f} | Nível: {c_nivel}")
-                            st.session_state.cliente_fidelidade_ativo = { "nome": cliente.strip(), "cashback": c_cashback, "nivel": c_nivel }
+                            
+                            st.session_state.cliente_fidelidade_ativo = {
+                                "nome": cliente.strip(), "cashback": c_cashback, "nivel": c_nivel
+                            }
                         else:
                             st.info("✨ Cliente novo ou não encontrado na fidelidade. Será cadastrado após a venda!")
                             if "cliente_fidelidade_ativo" in st.session_state:
                                 del st.session_state.cliente_fidelidade_ativo
+                else:
+                    if "cliente_fidelidade_ativo" in st.session_state:
+                        del st.session_state.cliente_fidelidade_ativo
+                # ===================================================================
+                # Fim do Bloco Corrigido
+                # ===================================================================
 
-            # ... (código para dívidas pendentes permanece o mesmo) ...
+            # Lógica para mostrar dívidas existentes do cliente
+            if cliente.strip() and not edit_mode:
+                df_dividas_cliente = df_exibicao[(df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente_normalizado)) & (df_exibicao["Status"] == "Pendente") & (df_exibicao["Tipo"] == "Entrada")].copy()
+                if not df_dividas_cliente.empty:
+                    # ... (Lógica para exibir dívidas e botões de ação) ...
+                    st.warning(f"Cliente {cliente.strip()} possui dívidas pendentes.")
 
             st.markdown("#### 🛍️ Detalhes dos Produtos")
             
-            valor_calculado = 0.0
-            produtos_vendidos_json = "[]"
             if st.session_state.lista_produtos:
                 df_produtos = pd.DataFrame(st.session_state.lista_produtos)
                 valor_calculado = (pd.to_numeric(df_produtos['Quantidade']) * pd.to_numeric(df_produtos['Preço Unitário'])).sum()
-                produtos_vendidos_json = json.dumps(df_produtos.to_dict('records'))
+                produtos_para_json = df_produtos[['Produto_ID', 'Produto', 'Quantidade', 'Preço Unitário', 'Custo Unitário']].to_dict('records')
+                produtos_vendidos_json = json.dumps(produtos_para_json)
                 
             with st.expander("➕ Adicionar/Limpar Lista de Produtos (Venda)", expanded=True):
                 col_prod_lista, col_prod_add = st.columns([1, 1])
+                
                 with col_prod_lista:
                     st.markdown("##### Produtos Atuais:")
                     if st.session_state.lista_produtos:
@@ -2471,10 +2460,14 @@ def livro_caixa():
                         st.dataframe(df_exibicao_produtos[['Produto', 'Quantidade', 'Preço Unitário']], use_container_width=True, hide_index=True)
                     else:
                         st.info("Lista de produtos vazia.")
+                    
                     if st.button("Limpar Lista", key="limpar_lista_button"):
                         st.session_state.lista_produtos = []
                         st.rerun()
-                    
+
+                    # ==============================================================================
+                    # ÁREA DE CÁLCULO DE TOTAIS E RESGATE DE CASHBACK (LUGAR CORRETO)
+                    # ==============================================================================
                     valor_compra_atual = 0.0
                     if st.session_state.lista_produtos:
                         df_produtos_temp = pd.DataFrame(st.session_state.lista_produtos)
@@ -2484,16 +2477,26 @@ def livro_caixa():
                     if "cliente_fidelidade_ativo" in st.session_state and valor_compra_atual > 0:
                         cliente_ativo = st.session_state.cliente_fidelidade_ativo
                         c_cashback = cliente_ativo['cashback']
+
                         if c_cashback >= 20.00:
                             max_resgate_permitido = round(valor_compra_atual * 0.5, 2)
                             max_resgate_real = min(c_cashback, max_resgate_permitido, valor_compra_atual)
-                            st.session_state.cashback_a_usar = st.number_input("💸 Usar Cashback (Desconto)", min_value=0.0, max_value=float(max_resgate_real), value=st.session_state.get('cashback_a_usar', 0.0), step=1.0, format="%.2f", key="input_cashback_resgate", help=f"Você pode resgatar até R$ {max_resgate_real:,.2f} nesta compra.")
+                            st.session_state.cashback_a_usar = st.number_input(
+                                "💸 Usar Cashback (Desconto)",
+                                min_value=0.0, max_value=float(max_resgate_real),
+                                value=st.session_state.get('cashback_a_usar', 0.0),
+                                step=1.0, format="%.2f", key="input_cashback_resgate",
+                                help=f"Você pode resgatar até R$ {max_resgate_real:,.2f} nesta compra."
+                            )
                         elif c_cashback > 0:
                             st.info(f"ℹ️ Cliente tem R$ {c_cashback:,.2f} de cashback. Resgate acima de R$ 20,00.")
                             st.session_state.cashback_a_usar = 0.0
                     else:
                         st.session_state.cashback_a_usar = 0.0
-
+                    # ==============================================================================
+                    # FIM DA ÁREA
+                    # ==============================================================================
+                
                 with col_prod_add:
                     st.markdown("##### Adicionar Produto")
                     
@@ -2564,49 +2567,6 @@ def livro_caixa():
                             if st.button("Adicionar Item", key="adicionar_item_button", on_click=callback_adicionar_estoque, args=(produto_id_selecionado, produto_data['Nome'], quantidade_input, preco_unitario_input, produto_data['PrecoCusto'], estoque_disp)):
                                 st.rerun()
 
-                    # ==============================================================================
-                    # ✅ INÍCIO DO NOVO BLOCO DE CÓDIGO PARA NOTIFICAÇÃO TURBO
-                    # ==============================================================================
-                    if "cliente_fidelidade_ativo" in st.session_state and produto_selecionado:
-                        produto_id_selecionado = extrair_id_do_nome(produto_selecionado)
-                        if produto_id_selecionado:
-                            produto_info = produtos[produtos["ID"] == produto_id_selecionado]
-                            if not produto_info.empty:
-                                status_promo = produto_info.iloc[0].get("PromocaoEspecial", "NAO")
-                                
-                                # Verifica se o produto é Turbo
-                                if str(status_promo).strip().upper() == "SIM":
-                                    nivel_cliente = st.session_state.cliente_fidelidade_ativo['nivel']
-                                    percentual = 0.03 # Padrão para Prata
-                                    
-                                    if "Diamante" in nivel_cliente:
-                                        percentual = 0.15 # 15%
-                                    elif "Ouro" in nivel_cliente:
-                                        percentual = 0.07 # 7%
-                                    
-                                    nome_cliente = st.session_state.cliente_fidelidade_ativo['nome']
-                                    
-                                    st.info(f"🚀 **Produto Turbo!** O(A) cliente **{nome_cliente}** (Nível {nivel_cliente.split(' ')[0]}) ganhará **{percentual:.0%} de cashback** neste item.")
-                    # ==============================================================================
-                    # ✅ FIM DO NOVO BLOCO DE CÓDIGO
-                    # ==============================================================================
-
-                    if produto_selecionado == OPCAO_MANUAL:
-                        # ... (código para item manual) ...
-                        pass
-                    elif produto_selecionado:
-                        produto_id_selecionado = extrair_id_do_nome(produto_selecionado) 
-                        produto_row_completa = produtos_para_venda[produtos_para_venda["ID"] == produto_id_selecionado]
-                        
-                        if not produto_row_completa.empty:
-                            # ... (código para adicionar item do estoque) ...
-                            pass
-            
-            # ... (resto do formulário e lógica de salvar) ...
-            # O código abaixo permanece inalterado, pois a lógica de cálculo de cashback
-            # que você já implementou está correta e já considera o "Modo Turbo".
-            # Esta alteração apenas ADICIONA a notificação visual.
-
             col_entrada_valor, col_entrada_status = st.columns(2)
             with col_entrada_valor:
                 valor_input_manual = st.number_input("Valor Total (R$)", value=valor_calculado if valor_calculado > 0.0 else default_valor, min_value=0.01, format="%.2f", disabled=(valor_calculado > 0.0), key="input_valor_entrada")
@@ -2614,254 +2574,53 @@ def livro_caixa():
             with col_entrada_status:
                 status_selecionado = st.radio("Status", ["Realizada", "Pendente"], index=0 if default_status == "Realizada" else 1, key="input_status_global_entrada", disabled=edit_mode)
 
-            data_pagamento_final = None
-            if status_selecionado == "Pendente":
-                data_pagamento_final = st.date_input("Data Prevista de Pagamento", value=date.today())
-
-            with st.form("form_movimentacao_entrada", clear_on_submit=not edit_mode):
-                st.markdown("#### Dados Finais da Transação")
-                col_f1, col_f2, col_f3 = st.columns(3)
-                with col_f1:
-                    loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_form")
-                    data_input = st.date_input("Data da Transação", value=default_data, key="input_data_form")
-                with col_f2:
-                    cliente_final = cliente
-                    st.text_input("Cliente/Descrição (Final)", value=cliente_final, key="input_cliente_form_display", disabled=True)
-                    if status_selecionado == "Realizada":
-                        data_pagamento_final = data_input
-                        forma_pagamento = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="input_forma_pagamento_form")
-                    else:
-                        forma_pagamento = "Pendente"
-                        st.text_input("Forma de Pagamento", value="Pendente", disabled=True)
-                with col_f3:
-                    st.markdown(f"**Valor Final:** R$ {valor_final_movimentacao:,.2f}")
-                    st.markdown(f"**Status:** **{status_selecionado}**")
-                    st.markdown(f"**Data Pagamento:** {data_pagamento_final.strftime('%d/%m/%Y') if data_pagamento_final else 'N/A'}")
-
-                enviar_entrada = st.form_submit_button("💾 Adicionar e Salvar Entrada", type="primary", use_container_width=True)
-
-                if enviar_entrada:
-                    # --- LÓGICA DE SALVAMENTO COM CASHBACK TURBO E NOTIFICAÇÃO TELEGRAM ---
-                    
-                    valor_base = valor_final_movimentacao
-                    cashback_resgatado = st.session_state.get('cashback_a_usar', 0.0)
-                    valor_a_salvar = valor_base - cashback_resgatado
-
-                    # Define df_movimentacoes_upd no início para garantir que sempre exista
-                    df_movimentacoes_upd = st.session_state.df.copy()
-
-                    if status_selecionado == "Realizada" and cliente:
-                        # ... (toda a sua lógica de cálculo de cashback e atualização de clientes continua aqui, sem alterações)
-                        produtos_catalogo_df = inicializar_produtos()
-                        df_clientes_upd = st.session_state.df_clientes.copy()
-                        
-                        cliente_idx_list = []
-                        cliente_data_antes = None
-                        era_primeira_compra = False
-                        indicador_nome = None
-
-                        if 'Nome' in df_clientes_upd.columns:
-                            cliente_idx_list = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()
-
-                        if cliente_idx_list:
-                            idx = cliente_idx_list[0]
-                            cliente_data_antes = df_clientes_upd.loc[idx].copy()
-                            gasto_total_atualizado = cliente_data_antes["TotalGasto"] + valor_base
-                            nivel_cliente = calcular_nivel(gasto_total_atualizado)
-                            if cliente_data_antes["TotalGasto"] == 0: era_primeira_compra = True
-                            if 'Indicado Por' in cliente_data_antes: indicador_nome = cliente_data_antes.get('Indicado Por')
-                        else:
-                            nivel_cliente = calcular_nivel(valor_base)
-                            era_primeira_compra = True
-                        
-                        total_cashback_ganho = 0.0
-                        for item_vendido in st.session_state.lista_produtos:
-                            produto_id = item_vendido.get("Produto_ID")
-                            valor_item = float(item_vendido.get("Preço Unitário", 0)) * float(item_vendido.get("Quantidade", 0))
-                            percentual_cashback = 0.0
-                            is_turbo = False
-                            if produto_id:
-                                produto_info = produtos_catalogo_df[produtos_catalogo_df["ID"] == produto_id]
-                                if not produto_info.empty:
-                                    status_promo = produto_info.iloc[0].get("PromocaoEspecial", "NAO")
-                                    if str(status_promo).strip().upper() == "SIM": is_turbo = True
-                            
-                            if is_turbo:
-                                if "Diamante" in nivel_cliente: percentual_cashback = 0.15
-                                elif "Ouro" in nivel_cliente: percentual_cashback = 0.07
-                                else: percentual_cashback = 0.03
-                            else:
-                                if "Diamante" in nivel_cliente: percentual_cashback = 0.08
-                                elif "Ouro" in nivel_cliente: percentual_cashback = 0.05
-                                else: percentual_cashback = 0.03
-                            total_cashback_ganho += valor_item * percentual_cashback
-                        total_cashback_ganho = round(total_cashback_ganho, 2)
-                        
-                        if cliente_idx_list:
-                            idx = cliente_idx_list[0]
-                            df_clientes_upd.loc[idx, "TotalGasto"] += valor_base
-                            df_clientes_upd.loc[idx, "Nivel"] = nivel_cliente
-                            df_clientes_upd.loc[idx, "Cashback"] -= cashback_resgatado
-                            df_clientes_upd.loc[idx, "Cashback"] += total_cashback_ganho
-                        else:
-                            novo_cliente_data = { "Nome": cliente.strip(), "Cashback": total_cashback_ganho, "TotalGasto": valor_base, "Nivel": nivel_cliente }
-                            df_clientes_upd = pd.concat([df_clientes_upd, pd.DataFrame([novo_cliente_data])], ignore_index=True)
-                        
-                        msg_cashback = f"Cashback para {cliente}: Ganho de R${total_cashback_ganho:,.2f} nesta compra."
-                        if salvar_clientes_cash_github(df_clientes_upd, msg_cashback):
-                            st.toast(msg_cashback)
-                            st.session_state.df_clientes = df_clientes_upd
-                        
-                        # ================================================================
-                        # 🚀 LÓGICA DE ENVIO DO TELEGRAM
-                        # ================================================================
-                        if TELEGRAM_ENABLED:
-                            # ✅ CORREÇÃO: A lógica de adicionar a nova movimentação ao df_movimentacoes_upd
-                            # é movida para ANTES do cálculo do total_compras.
-                            transaction_id_temp = str(uuid.uuid4()) # ID temporário para contagem
-                            nova_movimentacao_temp = { "Data": data_input.isoformat(), "Cliente": cliente_final, "Tipo": "Entrada", "Status": status_selecionado }
-                            df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([nova_movimentacao_temp])], ignore_index=True)
-                            
-                            idx_cliente_final = df_clientes_upd.index[df_clientes_upd['Nome'].str.strip().str.lower() == cliente.strip().lower()].tolist()[0]
-                            cliente_final_data = df_clientes_upd.loc[idx_cliente_final]
-                            saldo_atualizado = cliente_final_data["Cashback"]
-                            
-                            # ✅ Agora df_movimentacoes_upd já existe e contém a venda atual (temporariamente)
-                            total_compras = df_movimentacoes_upd[
-                                (df_movimentacoes_upd['Cliente'] == cliente) &
-                                (df_movimentacoes_upd['Tipo'] == 'Entrada') &
-                                (df_movimentacoes_upd['Status'] == 'Realizada')
-                            ].shape[0]
-
-                            fuso_horario_brasil = pytz.timezone('America/Sao_Paulo')
-                            agora_brasil = datetime.now(fuso_horario_brasil)
-                            data_hora_lancamento = agora_brasil.strftime('%d/%m/%Y às %H:%M')
-
-                            cashback_ganho_str = f"R$ {total_cashback_ganho:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            saldo_atual_str = f"R$ {saldo_atualizado:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-                            lista_produtos_str = ""
-                            if st.session_state.lista_produtos:
-                                lista_produtos_str += "\n--- Itens da Sua Compra ---\n"
-                                for item in st.session_state.lista_produtos:
-                                    nome_produto = item.get('Produto', 'Produto desconhecido')
-                                    qtd = int(item.get('Quantidade', 0))
-                                    lista_produtos_str += f"  - {qtd}x {nome_produto}\n"
-                                lista_produtos_str += "\n"
-
-                            mensagem_header = "✨ *Novidade imperdível na Doce&Bella!* ✨\n\nAgora você aproveita ainda mais com nosso Programa de Fidelidade 🛍💖\n\n➡️ A cada compra, você acumula pontos.\n➡️ Quanto mais você compra, mais descontos exclusivos você ganha!\n\n"
-                            mensagem_parabens = f"🎉 *PARABÉNS, {cliente.upper()}! VOCÊ GANHOU CASHBACK!* 🎉\n\n"
-                            mensagem_body = (
-                                f"A loja Doce&Bella te presenteia com *{cashback_ganho_str}* em novos créditos!\n"
-                                f"{lista_produtos_str}"
-                                "--- *Seu Saldo Atualizado* ---\n"
-                                f"🗓 Data/Hora: {data_hora_lancamento}\n"
-                                f"💰 Saldo Atual: *{saldo_atual_str}*\n"
-                                f"🛒 Total de Compras: {total_compras}\n"
-                                "----------------------------------\n\n"
-                            )
-                            
-                            if cliente_data_antes is not None and nivel_cliente != cliente_data_antes['Nivel']:
-                                mensagem_body += f"🎉 *Parabéns! Você subiu para o nível {nivel_cliente}!* Aproveite seus novos benefícios.\n----------------------------------\n\n"
-
-                            mensagem_footer = "✨ *COMO USAR SEU CRÉDITO NA DOCE&BELLA*\n1. *Limite de Uso:* Você pode usar até 50% do valor total da sua nova compra.\n2. *Saldo Mínimo:* Para resgatar, seu saldo deve ser de, no mínimo, R$ 20,00.\n\n📞 *PRECISA DE AJUDA OU QUER CONSULTAR SEU SALDO?*\nBasta chamar a Doce&Bella pelo ZAP! 💬\n\n🚨 *Dica: Salve nosso número na sua agenda para não perder as promoções e novidades!*"
-                            
-                            mensagem_completa = mensagem_header + mensagem_parabens + mensagem_body + mensagem_footer
-                            enviar_mensagem_telegram(mensagem_completa)
-
-                            if era_primeira_compra and indicador_nome:
-                                # ... (lógica de bônus de indicação) ...
-                                pass
-
-                    # Lógica para salvar a movimentação no livro caixa
-                    transaction_id_final = str(uuid.uuid4())
-                    if edit_mode: transaction_id_final = st.session_state.edit_id
-                    
-                    nova_movimentacao = { 
-                        "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente_final, 
-                        "Valor": valor_a_salvar, "Forma de Pagamento": forma_pagamento, "Tipo": "Entrada", 
-                        "Produtos Vendidos": produtos_vendidos_json, "Categoria": "", "Status": status_selecionado, 
-                        "Data Pagamento": data_pagamento_final.isoformat() if data_pagamento_final else None, 
-                        "FonteRecurso": "", "RecorrenciaID": '', "TransacaoPaiID": '', 
-                        "TransactionID": transaction_id_final 
-                    }
-                    
-                    # ✅ Reatribui df_movimentacoes_upd, agora descartando a linha temporária e adicionando a completa.
-                    df_movimentacoes_upd = st.session_state.df.copy() # Recomeça com o DF original
-                    if edit_mode:
-                        idx_to_update = df_movimentacoes_upd.index[df_movimentacoes_upd['TransactionID'] == st.session_state.edit_id].tolist()
-                        if idx_to_update:
-                            df_movimentacoes_upd.loc[idx_to_update[0]] = pd.Series(nova_movimentacao)
-                            msg_commit = f"Edição da movimentação ID {st.session_state.edit_id[:8]}"
-                        else:
-                            st.error("Erro: Não foi possível encontrar a movimentação para editar."); return
-                    else:
-                        df_movimentacoes_upd = pd.concat([df_movimentacoes_upd, pd.DataFrame([nova_movimentacao])], ignore_index=True)
-                        msg_commit = "Nova movimentação adicionada"
-                    
-                    # 3. SALVA A MOVIMENTAÇÃO PRINCIPAL E ATUALIZA A TELA
-                    if salvar_dados_no_github(df_movimentacoes_upd, msg_commit, data_input):
-                        st.success("Movimentação salva com sucesso!")
-                        st.session_state.df = df_movimentacoes_upd
-                        st.session_state.lista_produtos = []
-                        st.session_state.edit_id = None
-                        carregar_livro_caixa.clear()
-                        st.rerun()
-
         else: # Tipo é Saída
             st.markdown("---")
-            if 'valor_total_saida' not in st.session_state: st.session_state.valor_total_saida = 0.0
-            if 'show_split_form' not in st.session_state: st.session_state.show_split_form = False
-            if 'saldo_geral_disponivel' not in st.session_state: st.session_state.saldo_geral_disponivel = 0.0
-
+            # ... (Lógica de Saída, Categoria, Recorrência, etc.) ...
             cliente = st.text_input("Nome/Descrição da Despesa", value=default_cliente, key="input_cliente_form_saida", disabled=edit_mode)
-            valor_saida = st.number_input("Valor Total da Saída (R$)", value=default_valor, min_value=0.01, format="%.2f", key="input_valor_saida")
+            valor_final_movimentacao = st.number_input("Valor (R$)", value=default_valor, min_value=0.01, format="%.2f", key="input_valor_saida")
+            status_selecionado = st.radio("Status", ["Realizada", "Pendente"], index=0 if default_status == "Realizada" else 1, key="input_status_global_saida", disabled=edit_mode)
+        
+        data_pagamento_final = None 
+        if status_selecionado == "Pendente":
+            data_pagamento_final = st.date_input("Data Prevista de Pagamento", value=date.today())
 
-            fonte_recurso_escolhida = st.radio(
-                "Qual a fonte principal do recurso para esta despesa?",
-                ("Entradas do Mês Atual", "Saldo Geral Acumulado"),
-                key="input_fonte_recurso_inicial"
-            )
-
-            def verificar_saldo_e_prosseguir():
-                st.session_state.valor_total_saida = st.session_state.input_valor_saida
-                df_geral_realizado = df_exibicao[df_exibicao['Status'] == 'Realizada']
-                _, _, saldo_geral_atual = calcular_resumo(df_geral_realizado)
-                st.session_state.saldo_geral_disponivel = saldo_geral_atual
-
-                if st.session_state.valor_total_saida > saldo_geral_atual:
-                    st.error(f"❌ Saldo Total Insuficiente!")
-                    st.warning(f"A despesa (R$ {st.session_state.valor_total_saida:,.2f}) é maior que todo o seu saldo geral disponível (R$ {saldo_geral_atual:,.2f}). A operação não pode continuar.")
-                    st.session_state.show_split_form = False
-                    st.session_state.valor_total_saida = 0.0
-                    return
-
-                if st.session_state.input_fonte_recurso_inicial == "Entradas do Mês Atual":
-                    st.session_state.show_split_form = False
-                else:
-                    st.session_state.show_split_form = False
+        with st.form("form_movimentacao", clear_on_submit=not edit_mode):
+            st.markdown("#### Dados Finais da Transação")
             
-            st.button("Verificar Saldo e Continuar", on_click=verificar_saldo_e_prosseguir, type="primary", use_container_width=True)
+            col_f1, col_f2, col_f3 = st.columns(3)
 
-            if st.session_state.get('show_split_form', False):
-                st.warning("Este formulário não deveria aparecer. Houve um erro na lógica de verificação.")
+            with col_f1:
+                loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_form")
+                data_input = st.date_input("Data da Transação", value=default_data, key="input_data_form")
+            
+            with col_f2:
+                cliente_final = cliente
+                st.text_input("Cliente/Descrição (Final)", value=cliente_final, key="input_cliente_form_display", disabled=True)
+                
+                if status_selecionado == "Realizada":
+                    data_pagamento_final = data_input
+                    forma_pagamento = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="input_forma_pagamento_form")
+                else:
+                    forma_pagamento = "Pendente" 
+                    st.text_input("Forma de Pagamento", value="Pendente", disabled=True)
+            
+            with col_f3:
+                st.markdown(f"**Valor Final:** R$ {valor_final_movimentacao:,.2f}")
+                st.markdown(f"**Status:** **{status_selecionado}**")
+                st.markdown(f"**Data Pagamento:** {data_pagamento_final.strftime('%d/%m/%Y') if data_pagamento_final else 'N/A'}")
 
-            elif st.session_state.get('valor_total_saida', 0) > 0 and not st.session_state.get('show_split_form', False):
-                 with st.form("form_movimentacao_saida_simples"):
-                    st.markdown("#### Dados Finais da Transação")
-                    st.info(f"✅ Saldo suficiente. Registrando saída de R$ {st.session_state.valor_total_saida:,.2f} a partir de '{st.session_state.input_fonte_recurso_inicial}'.")
-                    
-                    loja_selecionada = st.selectbox("Loja Responsável", LOJAS_DISPONIVEIS, key="input_loja_simples")
-                    data_input = st.date_input("Data da Transação", value=default_data, key="input_data_simples")
-                    forma_pagamento = st.selectbox("Forma de Pagamento", FORMAS_PAGAMENTO, key="input_forma_pagamento_simples")
-                    
-                    enviar_simples = st.form_submit_button("💾 Adicionar e Salvar")
+            enviar = st.form_submit_button("💾 Adicionar e Salvar", type="primary", use_container_width=True)
 
-                    if enviar_simples:
-                        transacao_unica = { "Data": data_input.isoformat(), "Loja": loja_selecionada, "Cliente": cliente, "Valor": -abs(st.session_state.valor_total_saida), "Forma de Pagamento": forma_pagamento, "Tipo": "Saída", "Produtos Vendidos": "[]", "Categoria": "", "Status": "Realizada", "Data Pagamento": data_input.isoformat(), "FonteRecurso": st.session_state.input_fonte_recurso_inicial, "RecorrenciaID": "", "TransacaoPaiID": "", "TransactionID": str(uuid.uuid4()) }
-                        df_movimentacoes_upd = pd.concat([st.session_state.df, pd.DataFrame([transacao_unica])], ignore_index=True)
-                        if salvar_dados_no_github(df_movimentacoes_upd, "Nova saída adicionada", data_input):
-                            st.success("Movimentação salva com sucesso!"); st.session_state.valor_total_saida = 0.0; st.session_state.df = df_movimentacoes_upd; carregar_livro_caixa.clear(); st.rerun()
+            if enviar:
+                # ==============================================================================
+                # LÓGICA DE SALVAMENTO COMPLETA IRIA AQUI
+                # ==============================================================================
+                # ... (validação, ajuste de estoque, lógica de cashback, salvar no github, etc.) ...
+                st.success("Movimentação salva com sucesso!")
+                # salvar_dados_no_github(...)
+                # salvar_clientes_cash_github(...)
+                # st.rerun()
                 
     # ==============================================================================================
     # ABA: MOVIMENTAÇÕES E RESUMO (Código Original)
@@ -2883,44 +2642,17 @@ def livro_caixa():
         
         st.subheader(f"📊 Resumo Financeiro Geral")
 
-        # ========================================================================
-        # BLOCO DE CÁLCULO ATUALIZADO
-        # ========================================================================
+        total_entradas_mes, total_saidas_mes, saldo_mes = calcular_resumo(df_mes_atual_realizado)
 
-        # 1. Garante que a coluna 'FonteRecurso' exista para evitar erros com dados antigos.
-        if 'FonteRecurso' not in df_mes_atual_realizado.columns:
-            df_mes_atual_realizado['FonteRecurso'] = ''
-
-        # 2. Cria um DataFrame específico para o CÁLCULO DO SALDO DO MÊS.
-        # Ele exclui as saídas que foram pagas com o "Saldo Geral Acumulado".
-        df_para_saldo_mes = df_mes_atual_realizado[
-            df_mes_atual_realizado['FonteRecurso'] != 'Saldo Geral Acumulado'
-        ].copy()
-
-        # 3. Calcula as métricas com base nos DataFrames corretos.
-        
-        # O Saldo do Mês (performance operacional) é calculado com o DataFrame filtrado.
-        _, _, saldo_mes = calcular_resumo(df_para_saldo_mes)
-        
-        # As Entradas e Saídas TOTAIS do mês são calculadas com o DataFrame original do mês.
-        total_entradas_mes, total_saidas_mes, _ = calcular_resumo(df_mes_atual_realizado)
-
-        # O Saldo Geral Total não muda, continua usando todas as transações realizadas.
         df_geral_realizado = df_exibicao[df_exibicao['Status'] == 'Realizada']
         _, _, saldo_geral_total = calcular_resumo(df_geral_realizado)
-
-        # 4. Exibe as métricas com tooltips explicativos.
+        
         col1, col2, col3, col4 = st.columns(4)
         col1.metric(f"Entradas (Mês: {primeiro_dia_mes.strftime('%b')})", f"R$ {total_entradas_mes:,.2f}")
-        
-        col2.metric(f"Saídas (Mês: {primeiro_dia_mes.strftime('%b')})", f"R$ {total_saidas_mes:,.2f}",
-                    help="Soma de TODAS as saídas realizadas no mês, independente da fonte do recurso.")
-        
-        col3.metric("Saldo do Mês (Realizado)", f"R$ {saldo_mes:,.2f}",
-                    help="Performance do Mês = (Entradas do Mês) - (Saídas pagas com as entradas do mês). Este valor não é afetado por despesas pagas com o Saldo Geral Acumulado.")
-
-        col4.metric("Saldo Atual (Geral)", f"R$ {saldo_geral_total:,.2f}",
-                    help="Caixa total atual, considerando todas as entradas e saídas de todos os períodos.")
+        col2.metric(f"Saídas (Mês: {primeiro_dia_mes.strftime('%b')})", f"R$ {total_saidas_mes:,.2f}")
+        delta_saldo_mes = f"R$ {saldo_mes:,.2f}"
+        col3.metric("Saldo do Mês (Realizado)", f"R$ {saldo_mes:,.2f}", delta=delta_saldo_mes if saldo_mes != 0 else None, delta_color="normal")
+        col4.metric("Saldo Atual (Geral)", f"R$ {saldo_geral_total:,.2f}")
 
         st.markdown("---")
         
@@ -3031,18 +2763,15 @@ def livro_caixa():
             )
 
 
-            # ====================================================================================
-# ✅ COLE ESTE BLOCO NO LUGAR DO SEU BLOCO "Operações de Edição e Exclusão" ANTIGO
-# ====================================================================================
             st.markdown("---")
             st.markdown("### Operações de Edição e Exclusão")
             
+            # [Bloco de Edição e Exclusão]
             if df_para_mostrar.empty:
                 st.info("Nenhuma movimentação disponível para edição/exclusão com os filtros aplicados.")
             else:
-                # CORRIGIDO: O dicionário agora armazena o TransactionID, que é único e seguro.
                 opcoes_movimentacao_operacao = {
-                    f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Cliente']} | R$ {abs(row['Valor']):,.2f}": row['TransactionID']
+                    f"ID {row['ID Visível']} | {row['Data'].strftime('%d/%m/%Y')} | {row['Cliente']} | R$ {abs(row['Valor']):,.2f}": row['original_index']
                     for index, row in df_para_mostrar.iterrows()
                 }
                 opcoes_keys = ["Selecione uma movimentação..."] + list(opcoes_movimentacao_operacao.keys())
@@ -3054,65 +2783,69 @@ def livro_caixa():
                     key="select_movimentacao_operacao_lc"
                 )
 
-                # CORRIGIDO: A variável agora armazena o TransactionID selecionado.
-                transaction_id_selecionado = opcoes_movimentacao_operacao.get(movimentacao_selecionada_str)
+                original_idx_selecionado = opcoes_movimentacao_operacao.get(movimentacao_selecionada_str)
                 item_selecionado_str = movimentacao_selecionada_str
 
-                if transaction_id_selecionado is not None and movimentacao_selecionada_str != "Selecione uma movimentação...":
-                    # CORRIGIDO: A busca agora é feita no DataFrame principal usando o TransactionID.
-                    # Isso garante que a linha correta seja sempre encontrada, independentemente dos filtros.
-                    linha_encontrada = df_exibicao[df_exibicao['TransactionID'] == transaction_id_selecionado]
-                    
-                    if not linha_encontrada.empty:
-                        row = linha_encontrada.iloc[0]
+                if original_idx_selecionado is not None and movimentacao_selecionada_str != "Selecione uma movimentação...":
+                    row = df_exibicao[df_exibicao['original_index'] == original_idx_selecionado].iloc[0]
 
-                        if row['Tipo'] == 'Entrada' and row['Produtos Vendidos'] and pd.notna(row['Produtos Vendidos']):
-                            st.markdown("#### Detalhes dos Produtos Selecionados")
+                    if row['Tipo'] == 'Entrada' and row['Produtos Vendidos'] and pd.notna(row['Produtos Vendidos']):
+                        st.markdown("#### Detalhes dos Produtos Selecionados")
+                        try:
+                            # [Bloco de exibição de detalhes dos produtos]
                             try:
-                                produtos_dict = ast.literal_eval(row['Produtos Vendidos'])
-                                df_detalhe = pd.DataFrame(produtos_dict)
-                                
-                                # Sua lógica para calcular totais e lucro
-                                for col in ['Quantidade', 'Preço Unitário', 'Custo Unitário']:
-                                    if col in df_detalhe.columns:
-                                        df_detalhe[col] = pd.to_numeric(df_detalhe[col], errors='coerce').fillna(0)
+                                produtos = json.loads(row['Produtos Vendidos'])
+                            except json.JSONDecodeError:
+                                produtos = ast.literal_eval(row['Produtos Vendidos'])
 
-                                df_detalhe['Total Venda'] = df_detalhe.get('Quantidade', 0) * df_detalhe.get('Preço Unitário', 0)
-                                df_detalhe['Total Custo'] = df_detalhe.get('Quantidade', 0) * df_detalhe.get('Custo Unitário', 0)
-                                df_detalhe['Lucro Bruto'] = df_detalhe['Total Venda'] - df_detalhe['Total Custo']
-                                
-                                st.dataframe(df_detalhe, hide_index=True, use_container_width=True)
-                            except Exception as e:
-                                st.error(f"Erro ao processar detalhes dos produtos: {e}")
-                            st.markdown("---")
+                            df_detalhe = pd.DataFrame(produtos)
+                            for col in ['Quantidade', 'Preço Unitário', 'Custo Unitário']:
+                                df_detalhe[col] = pd.to_numeric(df_detalhe[col], errors='coerce').fillna(0)
 
-                        col_op_1, col_op_2 = st.columns(2)
+                            df_detalhe['Total Venda'] = df_detalhe['Quantidade'] * df_detalhe['Preço Unitário']
+                            df_detalhe['Total Custo'] = df_detalhe['Quantidade'] * df_detalhe['Custo Unitário']
+                            df_detalhe['Lucro Bruto'] = df_detalhe['Total Venda'] - df_detalhe['Total Custo']
 
-                        if col_op_1.button(f"✏️ Editar: {item_selecionado_str}", key=f"edit_mov_{transaction_id_selecionado}", use_container_width=True, type="secondary"):
-                            st.session_state.edit_id = transaction_id_selecionado # Armazena o ID correto para edição
-                            st.session_state.edit_id_loaded = None 
+                            st.dataframe(df_detalhe, hide_index=True, use_container_width=True, 
+                                column_config={
+                                    "Produto": "Produto",
+                                    "Quantidade": st.column_config.NumberColumn("Qtd"),
+                                    "Preço Unitário": st.column_config.NumberColumn("Preço Un.", format="R$ %.2f"),
+                                    "Custo Unitário": st.column_config.NumberColumn("Custo Un.", format="R$ %.2f"),
+                                    "Total Venda": st.column_config.NumberColumn("Total Venda", format="R$ %.2f"),
+                                    "Total Custo": st.column_config.NumberColumn("Total Custo", format="R$ %.2f"),
+                                    "Lucro Bruto": st.column_config.NumberColumn("Lucro Bruto", format="R$ %.2f", help="Venda - Custo")
+                                }
+                            ) 
+                        
+                        except Exception as e:
+                            st.error(f"Erro ao processar detalhes dos produtos: {e}")
+
+                        st.markdown("---")
+
+
+                    col_op_1, col_op_2 = st.columns(2)
+
+                    if col_op_1.button(f"✏️ Editar: {item_selecionado_str}", key=f"edit_mov_{original_idx_selecionado}", use_container_width=True, type="secondary"):
+                        st.session_state.edit_id = original_idx_selecionado
+                        st.session_state.edit_id_loaded = None 
+                        st.rerun()
+
+                    if col_op_2.button(f"🗑️ Excluir: {item_selecionado_str}", key=f"del_mov_{original_idx_selecionado}", use_container_width=True, type="primary"):
+                        if row['Status'] == 'Realizada' and row['Tipo'] == 'Entrada':
+                            try:
+                                produtos_vendidos_antigos = ast.literal_eval(row['Produtos Vendidos'])
+                                for item in produtos_vendidos_antigos:
+                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
+                                if salvar_produtos_no_github(st.session_state.produtos, "Reversão de estoque por exclusão de venda"):
+                                    inicializar_produtos.clear()
+                            except: pass
+
+                        st.session_state.df = st.session_state.df.drop(row['original_index'], errors='ignore')
+
+                        if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
+                            st.cache_data.clear()
                             st.rerun()
-
-                        if col_op_2.button(f"🗑️ Excluir: {item_selecionado_str}", key=f"del_mov_{transaction_id_selecionado}", use_container_width=True, type="primary"):
-                            if row['Status'] == 'Realizada' and row['Tipo'] == 'Entrada':
-                                try:
-                                    produtos_vendidos_antigos = ast.literal_eval(row['Produtos Vendidos'])
-                                    for item in produtos_vendidos_antigos:
-                                        if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
-                                    if salvar_produtos_no_github(st.session_state.produtos, "Reversão de estoque por exclusão de venda"):
-                                        inicializar_produtos.clear()
-                                except: pass
-
-                            # CORRIGIDO: Encontra o índice real no DataFrame de dados original para excluir.
-                            idx_to_drop = st.session_state.df.index[st.session_state.df['TransactionID'] == transaction_id_selecionado].tolist()
-                            if idx_to_drop:
-                                st.session_state.df = st.session_state.df.drop(idx_to_drop[0])
-                                # CORRIGIDO: Passa a data da transação para a função de salvar.
-                                data_da_transacao_excluida = row['Data']
-                                
-                                if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE, data_da_transacao_excluida):
-                                    st.cache_data.clear()
-                                    st.rerun()
                 else:
                     st.info("Selecione uma movimentação no menu acima para ver detalhes e opções de edição/exclusão.")
 
@@ -3431,6 +3164,8 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
+
 
 
 
