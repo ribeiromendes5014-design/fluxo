@@ -2793,6 +2793,16 @@ def livro_caixa():
                         else:
                             st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
                             commit_msg = COMMIT_MESSAGE
+                        try:
+                           sucesso = salvar_dados_no_github(st.session_state.df, commit_msg)
+                           if sucesso:
+                               st.success("💾 Movimentação salva com sucesso no Livro Caixa!")
+                               carregar_livro_caixa.clear()  # Limpa o cache para refletir a mudança
+                               st.rerun()
+                            else:
+                                st.warning("⚠️ A movimentação foi salva apenas localmente. Verifique conexão com o GitHub.")
+                        except Exception as e:
+                            st.error(f"❌ Erro ao salvar movimentação no GitHub: {e}")
                         
                         
                         # ==============================================================================
@@ -3409,6 +3419,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
