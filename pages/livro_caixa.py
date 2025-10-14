@@ -2815,35 +2815,6 @@ else:
     else:
         st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
         commit_msg = COMMIT_MESSAGE
-    
-else:
-    # CORREÇÃO DA CATEGORIA: Define a categoria como Loja (ou "") se for Entrada
-    categoria_final = categoria_selecionada
-    if tipo == "Entrada":
-        categoria_final = loja_selecionada # Correção: usa a Loja como Categoria, não a categoria de Saída.
-    
-    # [Bloco de adição/edição de item único]
-    nova_linha_data = {
-        "Data": data_input,
-        "Loja": loja_selecionada, 
-        "Cliente": cliente_final,
-        "Valor": valor_armazenado, 
-        "Forma de Pagamento": forma_pagamento,
-        "Tipo": tipo,
-        "Produtos Vendidos": produtos_vendidos_json,
-        "Categoria": categoria_final, # Usa a categoria corrigida
-        "Status": status_selecionado, 
-        "Data Pagamento": data_pagamento_final,
-        "RecorrenciaID": "",
-        "TransacaoPaiID": "" 
-    }
-    
-    if edit_mode:
-        st.session_state.df.loc[st.session_state.edit_id] = pd.Series(nova_linha_data)
-        commit_msg = COMMIT_MESSAGE_EDIT
-    else:
-        st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
-        commit_msg = COMMIT_MESSAGE
                         
                         
 # ==============================================================================
@@ -3465,6 +3436,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
