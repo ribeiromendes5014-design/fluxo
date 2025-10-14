@@ -86,6 +86,20 @@ except ImportError:
         def update_file(self, path, msg, content, sha, branch): pass
         def create_file(self, path, msg, content, branch): pass
 
+def get_livro_caixa_path(data_transacao: date) -> str:
+    """Retorna o nome do arquivo CSV formatado como livro_caixa_AAAA_MM.csv."""
+    if isinstance(data_transacao, str):
+        try:
+            data_transacao = datetime.strptime(data_transacao, '%Y-%m-%d').date()
+        except ValueError:
+            data_transacao = date.today()
+    elif not isinstance(data_transacao, date):
+        data_transacao = date.today()
+        
+    ano_mes = data_transacao.strftime('%Y_%m')
+    return f"livro_caixa_{ano_mes}.csv"
+
+
 def ler_codigo_barras_api(image_bytes):
     """Decodifica códigos de barras usando a API pública ZXing."""
     URL_DECODER_ZXING = "https://zxing.org/w/decode"
@@ -3368,5 +3382,6 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
