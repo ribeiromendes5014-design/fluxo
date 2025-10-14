@@ -304,6 +304,7 @@ def carregar_livro_caixa():
     
     try:
         # Usamos a biblioteca PyGithub para listar os arquivos do repositório
+        # ... (restante do código de busca do GitHub) ...
         g = Github(TOKEN)
         repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
         contents = repo.get_contents("", ref=BRANCH) # Pega o conteúdo da pasta raiz
@@ -321,6 +322,29 @@ def carregar_livro_caixa():
             df_monthly = load_csv_github(url_raw) # Reutiliza a função de carregamento individual
             if df_monthly is not None and not df_monthly.empty:
                 all_monthly_dfs.append(df_monthly)
+
+    except Exception as e:
+        # 1. Trata a exceção (opcional: pode logar ou mostrar um erro no Streamlit)
+        # st.error(f"Erro ao carregar arquivos do GitHub: {e}")
+        pass # Apenas ignora o erro e tenta continuar/retornar um DF vazio.
+
+    # 2. Lógica de RETORNO da função (DEVE ESTAR FORA DO 'try/except')
+    if not all_monthly_dfs:
+        # Retorna um DataFrame vazio se a busca falhar ou não encontrar nada.
+        df_final = pd.DataFrame(columns=COLUNAS_PADRAO_COMPLETO)
+    else:
+        # Combina todos os DataFrames mensais
+        df_final = pd.concat(all_monthly_dfs, ignore_index=True)
+
+    # 3. Garante que todas as colunas padrão existam no DataFrame final
+    for col in COLUNAS_PADRAO_COMPLETO:
+        if col not in df_final.columns:
+            # Garante tipo string para consistência antes do processamento
+            df_final[col] = '' 
+    
+    # 4. Retorna as colunas na ordem correta
+    cols_to_return = COLUNAS_PADRAO_COMPLETO
+    return df_final[[col for col in cols_to_return if col in df_final.columns]]
 
 @st.cache_data(show_spinner=False)
 def processar_dataframe(df):
@@ -3293,6 +3317,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
