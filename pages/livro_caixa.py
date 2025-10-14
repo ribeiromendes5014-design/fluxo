@@ -2693,55 +2693,74 @@ def livro_caixa():
                     valor_armazenado = valor_final_com_desconto if tipo == "Entrada" else -valor_final_com_desconto
                     
                     # Lógica de ajuste de estoque (reversão e débito)
-                    if edit_mode:
-                        original_row = df_dividas.loc[st.session_state.edit_id]
-                        
-                        # 1. Reversão de estoque se o status da Entrada mudar para Pendente
-                        if original_row["Status"] == "Realizada" and status_selecionado == "Pendente" and original_row["Tipo"] == "Entrada":
-                            try:
-                                produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
-                                for item in produtos_vendidos_antigos:
-                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
-                            except: pass
-                            
-                        # 2. Reversão e novo débito se for uma edição de Entrada Realizada
-                        elif original_row["Status"] == "Realizada" and status_selecionado == "Realizada" and original_row["Tipo"] == "Entrada":
-                            try:
-                                # Reverte o estoque da venda original
-                                produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
-                                for item in produtos_vendidos_antigos:
-                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
-                            except: pass
-                            
-                            # Aplica o débito do novo estado (st.session_state.lista_produtos)
-                            if produtos_vendidos_json:
-                                produtos_vendidos_novos = json.loads(produtos_vendidos_json)
-                                for item in produtos_vendidos_novos:
-                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                            
-                            if salvar_produtos_no_github(st.session_state.produtos, "Ajuste de estoque por edição de venda"):
-                                inicializar_produtos.clear()
-                                st.cache_data.clear()
-                        
-                        # 3. Débito se for uma conclusão de Entrada Pendente
-                        elif original_row["Status"] == "Pendente" and status_selecionado == "Realizada" and original_row["Tipo"] == "Entrada":
-                            if produtos_vendidos_json:
-                                produtos_vendidos_novos = json.loads(produtos_vendidos_json)
-                                for item in produtos_vendidos_novos:
-                                    if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                            if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por conclusão de venda"):
-                                inicializar_produtos.clear()
-                                st.cache_data.clear()
-                                
-                    # 4. Novo Débito se for uma nova Entrada Realizada
-                    elif not edit_mode and tipo == "Entrada" and status_selecionado == "Realizada" and st.session_state.lista_produtos:
-                        if produtos_vendidos_json:
-                            produtos_vendidos_novos = json.loads(produtos_vendidos_json)
-                            for item in produtos_vendidos_novos:
-                                if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
-                        if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por nova venda"):
-                            inicializar_produtos.clear()
-                            st.cache_data.clear()
+if edit_mode:
+    # 🔑 CORREÇÃO DE SEGURANÇA: Garante que 'df_dividas' tem a linha e a isola como Series.
+    # df_dividas está definido como st.session_state.df, cujo índice é sequencial (Corrigido no início de livro_caixa()).
+    
+    if st.session_state.edit_id not in df_dividas.index:
+        st.error("Erro interno: ID de edição perdido após recarregamento. Cancelando edição.")
+        st.session_state.edit_id = None
+        st.rerun()
+        return
+
+    # Acesso seguro usando .loc para obter a linha
+    linha_original_df = df_dividas.loc[[st.session_state.edit_id]]
+
+    if linha_original_df.empty:
+        st.error("Erro interno: Movimentação original não encontrada. Cancelando edição.")
+        st.session_state.edit_id = None
+        st.rerun()
+        return
+        
+    # original_row agora é garantidamente uma Series (a linha de dados)
+    original_row = linha_original_df.iloc[0]
+    
+    # 1. Reversão de estoque se o status da Entrada mudar para Pendente
+    if original_row["Status"] == "Realizada" and status_selecionado == "Pendente" and original_row["Tipo"] == "Entrada":
+        try:
+            produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
+            for item in produtos_vendidos_antigos:
+                if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
+        except: pass
+        
+    # 2. Reversão e novo débito se for uma edição de Entrada Realizada
+    elif original_row["Status"] == "Realizada" and status_selecionado == "Realizada" and original_row["Tipo"] == "Entrada":
+        try:
+            # Reverte o estoque da venda original
+            produtos_vendidos_antigos = ast.literal_eval(original_row['Produtos Vendidos'])
+            for item in produtos_vendidos_antigos:
+                if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
+        except: pass
+        
+        # Aplica o débito do novo estado (st.session_state.lista_produtos)
+        if produtos_vendidos_json:
+            produtos_vendidos_novos = json.loads(produtos_vendidos_json)
+            for item in produtos_vendidos_novos:
+                if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+        
+        if salvar_produtos_no_github(st.session_state.produtos, "Ajuste de estoque por edição de venda"):
+            inicializar_produtos.clear()
+            st.cache_data.clear()
+    
+    # 3. Débito se for uma conclusão de Entrada Pendente
+    elif original_row["Status"] == "Pendente" and status_selecionado == "Realizada" and original_row["Tipo"] == "Entrada":
+        if produtos_vendidos_json:
+            produtos_vendidos_novos = json.loads(produtos_vendidos_json)
+            for item in produtos_vendidos_novos:
+                if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+        if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por conclusão de venda"):
+            inicializar_produtos.clear()
+            st.cache_data.clear()
+            
+# 4. Novo Débito se for uma nova Entrada Realizada
+elif not edit_mode and tipo == "Entrada" and status_selecionado == "Realizada" and st.session_state.lista_produtos:
+    if produtos_vendidos_json:
+        produtos_vendidos_novos = json.loads(produtos_vendidos_json)
+        for item in produtos_vendidos_novos:
+            if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "debitar")
+    if salvar_produtos_no_github(st.session_state.produtos, "Débito de estoque por nova venda"):
+        inicializar_produtos.clear()
+        st.cache_data.clear()
 
 
                     novas_movimentacoes = []
@@ -3421,6 +3440,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
