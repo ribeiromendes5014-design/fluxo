@@ -2435,12 +2435,67 @@ def livro_caixa():
                 # Fim do Bloco Corrigido
                 # ===================================================================
 
-            # Lógica para mostrar dívidas existentes do cliente
-            if cliente.strip() and not edit_mode:
-                df_dividas_cliente = df_exibicao[(df_exibicao["Cliente"].astype(str).str.lower().str.startswith(cliente_normalizado)) & (df_exibicao["Status"] == "Pendente") & (df_exibicao["Tipo"] == "Entrada")].copy()
+            # --- Lógica de Verificação de Dívidas Pendentes ---
+            if 'modo_quitar_divida' not in st.session_state:
+                st.session_state.modo_quitar_divida = False
+            if 'dividas_encontradas' not in st.session_state:
+                st.session_state.dividas_encontradas = None
+                
+            # Verifica dívidas SE o gatilho de busca foi ativado E não estamos já no modo de quitação
+            if cliente.strip() and not edit_mode and st.session_state.get('search_trigger') and not st.session_state.modo_quitar_divida:
+                
+                # Busca por dívidas pendentes para este cliente (Apenas Entradas/Vendas)
+                df_dividas_cliente = df_exibicao[
+                    (df_exibicao["Cliente"].str.strip().str.lower() == cliente.strip().lower()) &
+                    (df_exibicao["Status"] == "Pendente") &
+                    (df_exibicao["Tipo"] == "Entrada") 
+                ]
+                
+                total_divida = 0.0
                 if not df_dividas_cliente.empty:
-                    # ... (Lógica para exibir dívidas e botões de ação) ...
-                    st.warning(f"Cliente {cliente.strip()} possui dívidas pendentes.")
+                    # Usa a função calcular_valor_em_aberto para somar corretamente
+                    total_divida = df_dividas_cliente.apply(calcular_valor_em_aberto, axis=1).sum()
+
+                # Se encontrou dívidas, para o fluxo e mostra as opções
+                if not df_dividas_cliente.empty and total_divida > 0.01:
+                    # Salva as dívidas encontradas no estado da sessão
+                    st.session_state.dividas_encontradas = df_dividas_cliente
+                    
+                    # Container de aviso (igual ao da sua imagem, mas com botões)
+                    with st.container(border=True):
+                        st.warning(f"Cliente {cliente} possui {len(df_dividas_cliente)} dívida(s) pendente(s), totalizando R$ {total_divida:,.2f}.")
+                        
+                        # Botões de ação
+                        col_divida_1, col_divida_2 = st.columns(2)
+                        
+                        with col_divida_1:
+                            if st.button("💸 Quitar/Pagar Dívida", use_container_width=True, type="primary", key="btn_quitar_divida_agora"):
+                                # 1. Ativa o modo de quitação
+                                st.session_state.modo_quitar_divida = True 
+                                # 2. Limpa o gatilho de busca
+                                st.session_state.search_trigger = ""
+                                st.rerun()
+
+                        with col_divida_2:
+                            if st.button("🛒 Continuar Nova Venda (Ignorar Dívida)", use_container_width=True, type="secondary", key="btn_ignorar_divida"):
+                                # 1. Limpa os estados de dívida
+                                st.session_state.dividas_encontradas = None
+                                st.session_state.modo_quitar_divida = False
+                                # 2. Limpa o gatilho de busca para não mostrar este bloco novamente
+                                st.session_state.search_trigger = "" 
+                                st.rerun()
+                                
+                    # Interrompe a renderização do resto do formulário de "Nova Venda"
+                    # até que o usuário escolha uma ação.
+                    st.stop()
+                
+                else:
+                    # Se não achou dívidas, limpa o gatilho e continua
+                    st.session_state.search_trigger = ""
+                    st.session_state.dividas_encontradas = None
+                    st.session_state.modo_quitar_divida = False
+
+            # --- Fim da Lógica de Dívidas ---
 
             st.markdown("#### 🛍️ Detalhes dos Produtos")
             
@@ -3164,6 +3219,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
