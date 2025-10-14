@@ -2736,7 +2736,7 @@ def livro_caixa():
                             st.cache_data.clear()
 
 
-                    novas_movimentacoes = []
+                                        novas_movimentacoes = []
                     if is_recorrente and not edit_mode:
                         # [Bloco de geração de recorrência]
                         num_parcelas_int = int(num_parcelas)
@@ -2769,7 +2769,7 @@ def livro_caixa():
                         # CORREÇÃO DA CATEGORIA: Define a categoria como Loja (ou "") se for Entrada
                         categoria_final = categoria_selecionada
                         if tipo == "Entrada":
-                            categoria_final = loja_selecionada # Correção: usa a Loja como Categoria, não a categoria de Saída.
+                            categoria_final = loja_selecionada  # Correção: usa a Loja como Categoria, não a categoria de Saída.
                         
                         # [Bloco de adição/edição de item único]
                         nova_linha_data = {
@@ -2780,7 +2780,7 @@ def livro_caixa():
                             "Forma de Pagamento": forma_pagamento,
                             "Tipo": tipo,
                             "Produtos Vendidos": produtos_vendidos_json,
-                            "Categoria": categoria_final, # Usa a categoria corrigida
+                            "Categoria": categoria_final,  # Usa a categoria corrigida
                             "Status": status_selecionado, 
                             "Data Pagamento": data_pagamento_final,
                             "RecorrenciaID": "",
@@ -2793,16 +2793,19 @@ def livro_caixa():
                         else:
                             st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
                             commit_msg = COMMIT_MESSAGE
+
+                        # 🔹 SALVAR ALTERAÇÕES NO GITHUB / CSV LOCAL
                         try:
-                           sucesso = salvar_dados_no_github(st.session_state.df, commit_msg)
-                           if sucesso:
-                               st.success("💾 Movimentação salva com sucesso no Livro Caixa!")
-                               carregar_livro_caixa.clear()  # Limpa o cache para refletir a mudança
-                               st.rerun()
+                            sucesso = salvar_dados_no_github(st.session_state.df, commit_msg)
+                            if sucesso:
+                                st.success("💾 Movimentação salva com sucesso no Livro Caixa!")
+                                carregar_livro_caixa.clear()  # Limpa o cache para refletir a mudança
+                                st.rerun()
                             else:
                                 st.warning("⚠️ A movimentação foi salva apenas localmente. Verifique conexão com o GitHub.")
                         except Exception as e:
                             st.error(f"❌ Erro ao salvar movimentação no GitHub: {e}")
+
                         
                         
                         # ==============================================================================
@@ -3419,6 +3422,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
