@@ -206,13 +206,27 @@ def carregar_historico_compras():
 
 def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
     """
-    Salva o DataFrame CSV do Livro Caixa no GitHub usando a API e também localmente (backup).
-    Essa função garante a persistência de dados para o Streamlit.
+    Salva o DataFrame CSV no GitHub usando a API, determinando o nome do arquivo
+    com base na data do primeiro registro (livro_caixa_AAAA_MM.csv).
     """
+    
+    # 0. Determina o nome do arquivo de destino (Mensal)
+    if df.empty:
+        st.error("❌ DataFrame vazio. Não há dados para salvar.")
+        return False
+        
+    # Usa a data do primeiro registro para determinar o arquivo (melhor para edição/adição)
+    try:
+        # A coluna 'Data' em st.session_state.df deve ser um objeto date ou string 'YYYY-MM-DD'
+        data_referencia = pd.to_datetime(df['Data'].iloc[0], errors='coerce').date()
+    except Exception:
+        data_referencia = date.today()
+        
+    path_arquivo_mensal = get_livro_caixa_path(data_referencia)
     
     # 1. Backup local (Tenta salvar, ignora se falhar)
     try:
-        df.to_csv(ARQ_LOCAL, index=False, encoding="utf-8-sig") 
+        df.to_csv(path_arquivo_mensal, index=False, encoding="utf-8-sig") 
     except Exception:
         pass
 
@@ -232,15 +246,15 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
         csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
 
         try:
-            # Tenta obter o SHA do conteúdo atual
-            contents = repo.get_contents(PATH_DIVIDAS, ref=BRANCH)
+            # Tenta obter o SHA do conteúdo atual (usa o path_arquivo_mensal)
+            contents = repo.get_contents(path_arquivo_mensal, ref=BRANCH)
             # Atualiza o arquivo
             repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
-            st.success("📁 Livro Caixa salvo (atualizado) no GitHub!")
+            st.success(f"📁 Livro Caixa salvo (atualizado) no GitHub em {path_arquivo_mensal}!")
         except Exception:
             # Cria o arquivo (se não existir)
-            repo.create_file(PATH_DIVIDAS, commit_message, csv_string, branch=BRANCH)
-            st.success("📁 Livro Caixa salvo (criado) no GitHub!")
+            repo.create_file(path_arquivo_mensal, commit_message, csv_string, branch=BRANCH)
+            st.success(f"📁 Livro Caixa salvo (criado) no GitHub em {path_arquivo_mensal}!")
 
         # IMPORTANTE: Limpa o cache após o salvamento bem-sucedido
         carregar_livro_caixa.clear()
@@ -3374,6 +3388,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
