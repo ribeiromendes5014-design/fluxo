@@ -85,3 +85,89 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-10-13,Fotografia,Loja,20.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Ensaio restante "", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 20.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-10-13,,,ec88c4f8-ccea-423d-a698-a13be2091593
 2025-10-13,Doce&bella,Compra de mercadoria ,-24.53,PIX,Saída,[],,Realizada,2025-10-13,,,deed6423-41fd-4ee8-a020-a62a73e57811
 2025-10-13,Doce&bella,Andrea,45.0,Dinheiro,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Chinelo"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 45.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-10-13,,,371ee969-9e26-40bf-953b-70e0697d4039
+2025-09-01,Doce&bella,Venda,96.0,PIX,Entrada,,,Realizada,2025-09-01,,,ebf0246b-42e9-49f4-8f15-938c53835df4
+2025-09-01,Doce&bella,venda,50.0,PIX,Entrada,,,Realizada,2025-09-01,,,eed40006-0efe-44b7-9988-0220d8c30ab3
+2025-09-01,Doce&bella,venda,24.0,PIX,Entrada,,,Realizada,2025-09-01,,,add71476-977d-48f2-afb3-918580c35cf0
+2025-09-03,Doce&bella,venda,40.0,PIX,Entrada,,,Realizada,2025-09-03,,,c8558fd0-7ec8-49e5-912e-c78e2b560a26
+2025-09-03,Doce&bella,venda,31.9,PIX,Entrada,,,Realizada,2025-09-03,,,a828eb3f-a8ea-438c-82ef-4b73654619af
+2025-09-03,Fotografia,ensaio,100.0,PIX,Entrada,,,Realizada,2025-09-03,,,3f2f7332-12ca-4292-908f-86809831079a
+2025-09-04,Doce&bella,vanessa,85.0,PIX,Entrada,,,Realizada,2025-09-04,,,a447d8bf-d430-428b-9d4b-c7f401b3b653
+2025-09-04,Doce&bella,venda,15.0,PIX,Entrada,,,Realizada,2025-09-04,,,883a404d-e715-423a-a170-c07b334f4dea
+2025-09-04,Doce&bella,venda,10.0,PIX,Entrada,,,Realizada,2025-09-04,,,eb7ece1c-573c-45e4-8432-fde304fc1c9f
+2025-09-05,Doce&bella,venda,20.0,PIX,Entrada,,,Realizada,2025-09-05,,,a9715a02-109d-4a16-a431-df5e64eaf8f1
+2025-09-07,Doce&bella,venda,30.0,PIX,Entrada,,,Realizada,2025-09-07,,,5d69803d-e045-44fb-84e7-dfb53fc443af
+2025-09-07,Doce&bella,venda,20.0,PIX,Entrada,,,Realizada,2025-09-07,,,83423621-8f9d-4758-8114-5d3c07be3970
+2025-09-08,Doce&bella,venda,61.9,PIX,Entrada,,,Realizada,2025-09-08,,,672889c2-817f-4d8e-bb0e-5f69d58f84c0
+2025-09-08,Doce&bella,venda,40.0,PIX,Entrada,,,Realizada,2025-09-08,,,46e8dcb4-2808-4b1a-9a97-10739f8b9c6c
+2025-09-11,Doce&bella,venda,70.0,PIX,Entrada,,,Realizada,2025-09-11,,,a9df62b9-df88-4eed-aa0f-91c2870165ed
+2025-09-12,Doce&bella,venda,62.0,PIX,Entrada,,,Realizada,2025-09-12,,,a60a7cbe-6ed4-481c-9397-32e8ef5f48a8
+2025-09-12,Doce&bella,venda,28.0,PIX,Entrada,,,Realizada,2025-09-12,,,e50191a6-9063-48d2-8b2f-12f22fd0bc79
+2025-09-13,Doce&bella,venda,27.0,PIX,Entrada,,,Realizada,2025-09-13,,,251a1769-1723-4d77-a09c-70af2b5a876e
+2025-09-15,Doce&bella,venda,95.0,PIX,Entrada,,,Realizada,2025-09-15,,,515c8462-25c9-4aa2-b2e0-5ba2ebbdb7fb
+2025-09-16,Doce&bella,venda,49.0,PIX,Entrada,,,Realizada,2025-09-16,,,e3c4e830-9e52-4bdf-bd8d-a43549f5e685
+2025-09-17,Doce&bella,venda,24.0,PIX,Entrada,,,Realizada,2025-09-17,,,d58fa1e4-e759-4eb3-9392-21e9dabeae25
+2025-09-17,Doce&bella,venda,75.0,PIX,Entrada,,,Realizada,2025-09-17,,,74aad2a4-2b1a-48d6-9a99-304fd468803a
+2025-09-17,Doce&bella,venda,30.0,PIX,Entrada,,,Realizada,2025-09-17,,,d6996b21-9d0b-4893-a1ff-e428dcb47b71
+2025-09-19,Doce&bella,venda,30.0,PIX,Entrada,,,Realizada,2025-09-19,,,7b3a4925-7ec5-4897-9254-052861e4cfec
+2025-09-19,Doce&bella,venda,55.0,PIX,Entrada,,,Realizada,2025-09-19,,,46752602-9098-4859-b291-79e311d50991
+2025-09-20,Doce&bella,venda,50.0,PIX,Entrada,,,Realizada,2025-09-20,,,a8344c5f-237e-4480-a3b2-436f789d6489
+2025-09-23,Doce&bella,venda,80.0,PIX,Entrada,,,Realizada,2025-09-23,,,877c6be2-7182-4830-924f-71bd473920ac
+2025-09-23,Doce&bella,venda,20.0,PIX,Entrada,,,Realizada,2025-09-23,,,89658a1b-9419-478c-811f-15eaecc373e7
+2025-09-23,Doce&bella,venda,36.0,PIX,Entrada,,,Realizada,2025-09-23,,,f7856dc4-43f4-47ba-9616-b465ce0bf3bd
+2025-09-24,Doce&bella,venda,39.9,PIX,Entrada,,,Realizada,2025-09-24,,,032ac67b-a7ff-478a-8da3-81fc57203a4b
+2025-09-24,Fotografia,entrada,50.0,PIX,Entrada,,,Realizada,2025-09-24,,,5dd3f4e1-3916-41ac-b875-8e785474d9c4
+2025-09-25,Fotografia,entrada,50.0,PIX,Entrada,,,Realizada,2025-09-25,,,51d6b391-ad8a-4767-b7cd-f07eb9bf95a9
+2025-09-25,Doce&bella,venda,52.0,PIX,Entrada,,,Realizada,2025-09-25,,,b5a0a39a-60a8-4dbf-b95a-230b88649331
+2025-09-26,Doce&bella,venda,15.0,PIX,Entrada,,,Realizada,2025-09-26,,,8a47cbe0-baea-4a60-bb07-5103bac6cb2e
+2025-09-26,Doce&bella,venda,15.0,PIX,Entrada,,,Realizada,2025-09-26,,,d15ee5b0-a0ed-4f20-a72e-67b486050b96
+2025-09-27,Doce&bella,venda,25.9,PIX,Entrada,,,Realizada,2025-09-27,,,748ee653-ce28-438c-bce9-466083ec91ec
+2025-09-29,Doce&bella,debora,90.0,PIX,Entrada,,,Realizada,2025-09-29,,,75010bc9-8c21-4112-8d77-0ffe85df3b1c
+2025-09-22,Doce&bella,compra de produtos,-655.5,PIX,Saída,,Não Categorizado,Realizada,2025-09-22,,,1fb4d700-4faf-48fe-86df-1903672148c3
+2025-09-30,Doce&bella,Compra de produtos (Parc. 1/5),-77.87,Pendente,Saída,,Não Categorizado,Pendente,2025-12-21,12e5ccd904,,81507d6e-88ab-4bee-988d-a2083211179a
+2025-09-30,Doce&bella,Compra de produtos (Parc. 2/5),-77.87,Pendente,Saída,,Não Categorizado,Pendente,2026-01-21,12e5ccd904,,8a532a9a-207d-4cfc-9656-929902ccfa5f
+2025-09-30,Doce&bella,Compra de produtos (Parc. 3/5),-77.87,Pendente,Saída,,Não Categorizado,Pendente,2026-02-21,12e5ccd904,,ca2d9ccc-c814-483e-afdd-cdcb97176a23
+2025-09-30,Doce&bella,Compra de produtos (Parc. 4/5),-77.87,Pendente,Saída,,Não Categorizado,Pendente,2026-03-21,12e5ccd904,,40743944-97c0-4519-b37e-cf5c6692e4bf
+2025-09-30,Doce&bella,Compra de produtos (Parc. 5/5),-77.87,Pendente,Saída,,Não Categorizado,Pendente,2026-04-21,12e5ccd904,,a6d62f2b-4ddd-4d66-a09a-e71aade374fe
+2025-09-30,Doce&bella,Tininha,70.0,PIX,Entrada,,,Realizada,2025-09-30,,,9f590592-2e44-494f-85e0-ea10ec7556cb
+2025-09-30,Doce&bella,Andriele,16.9,PIX,Entrada,,,Realizada,2025-09-30,,,7254cc35-9e04-48bd-912d-f7a99542e814
+2025-09-30,Doce&bella,Jenifer,30.0,PIX,Entrada,,,Realizada,2025-09-30,,,f1658935-e633-43f4-9dbb-87090612e8eb
+2025-09-12,Doce&bella,Mae,56.0,Pendente,Entrada,,,Pendente,,,,9c38b0d9-ac83-4d70-bc7d-4b339e9e9954
+2025-09-28,Doce&bella,venda,20.0,PIX,Entrada,,,Realizada,2025-09-28,,,8a6e38ed-9a4f-409c-97a2-4bdc5c1205bb
+2025-09-28,Doce&bella,lais,55.0,PIX,Entrada,,,Realizada,2025-09-28,,,8dba257c-ca0f-4431-ad31-78fee8b9a272
+2025-09-28,Doce&bella,venda,35.0,PIX,Entrada,,,Realizada,2025-09-28,,,2dd7cc6c-78dc-4a73-9906-c8b8958d7b8b
+2025-09-25,Doce&bella,compra de produtos,-614.4,PIX,Saída,,Fornecedores/Matéria Prima,Realizada,2025-09-25,,,f489477a-7781-4d15-9f20-c544697e118d
+2025-09-30,Doce&bella,Compra de produtos ,-243.49,PIX,Saída,,Fornecedores/Matéria Prima,Realizada,2025-09-30,,,69e42a85-c76a-4f0a-b19c-e021362f8b33
+2025-09-30,Doce&bella,Mara,30.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Creme nivea"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 30.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-09-30,,,21a8c3c8-f65f-4400-829d-2216eb419e19
+2025-09-16,Doce&bella,venda,25.0,PIX,Entrada,,,Realizada,2025-09-16,,,d2e5b2aa-3ff3-49cf-a8c8-e10bae48942c
+2025-09-30,Doce&bella,Compra de produtos ,-88.7,PIX,Saída,,Fornecedores/Matéria Prima,Realizada,2025-09-30,,,0922d290-717a-44d6-a21b-d293ebb90010
+2025-09-30,Doce&bella,,-33.89,PIX,Saída,,Fornecedores/Matéria Prima,Realizada,2025-09-30,,,18e0fff5-e534-417e-864b-5be8609959b0
+2025-09-17,Doce&bella,,-259.29,PIX,Saída,,Outro: correção,Realizada,2025-09-17,,,c397a117-98e7-45b0-a1be-1bbf1c6f9304
+2025-10-11,Doce&bella,Leticia,88.7,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""Venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":88.7,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,2b911320-3bdf-4de4-b605-0a6512d1becf
+2025-10-11,Doce&bella,Tais Agostinho,25.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":25.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,3525071c-d380-40b4-92a1-affe882e7bcf
+2025-10-11,Doce&bella,Isabelly Santos,55.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""Venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":55.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,f0c4810d-89a4-4e98-8f41-980b7ed19e29
+2025-10-11,Doce&bella,odair,10.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":10.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,10f1c4b0-2eac-4568-b8fd-730f92cf8265
+2025-10-11,Doce&bella,Thamiris Agostinho,7.5,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":7.5,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,bd0b7f88-a477-46d7-a114-4a8031623e41
+2025-10-11,Doce&bella,loja,30.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":30.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,fad9e76b-eeaf-4ca1-9561-def6c75a3366
+2025-10-11,Doce&bella,Luandra,60.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":60.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,8bf80f97-dba5-49c4-84e5-2cc3a704e3e7
+2025-10-11,Doce&bella,loja,35.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":35.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,9a726bca-4426-4acd-8e66-cf6f304fd693
+2025-10-11,Doce&bella,Marle,74.8,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":74.8,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,4c087e72-285b-42f1-8858-bc39453e2ea7
+2025-10-11,Doce&bella,Terezinha,10.5,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":10.5,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,8e40f5be-f3d3-4cc7-827d-9aaa47ec4cb5
+2025-10-11,Doce&bella,Andica,50.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":50.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,09442a84-b40a-4cfb-89bb-0c0c4686163c
+2025-10-11,Doce&bella,loja,20.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":20.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,74d75e2b-4930-4e0a-b0d0-4f62accec783
+2025-10-11,Doce&bella,Marina,35.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":35.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,d794233c-a8bb-4f14-a01e-34c95d4c8848
+2025-10-11,Doce&bella,Vitoria Barbosa Lima,45.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":45.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,2927434e-caf3-495d-bc84-dbb4be996a33
+2025-10-11,Doce&bella,Sonia,32.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":32.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,c49a17b1-1236-42d8-83f1-7ff99e94ebbb
+2025-10-11,Doce&bella,Leticia,128.8,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":128.8,""Custo Unit\u00e1rio"":0.0}]",,Realizada,,,,094af16e-27df-4837-a280-f0c337044f27
+2025-10-11,Doce&bella,Tais Agostinho,19.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":19.0,""Custo Unit\u00e1rio"":0.0}]",,Pendente,,,,2e8e4692-5958-4a6c-958b-31b0f2a5b725
+2025-10-11,Fotografia,ensaio,280.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""ensaio"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":280.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-11,,,d4e4cf1b-df84-478c-b7dc-6a323e16b28c
+2025-10-07,Doce&bella,mercadoria,-218.0,PIX,Saída,[],,Realizada,2025-10-07,,,6feeb56f-0d03-4645-b739-14745deaa0e1
+2025-10-10,Doce&bella,mercadoria,-142.77,PIX,Saída,[],,Realizada,2025-10-10,,,6853fe85-aa94-4ac8-b31d-58a5571bebd8
+2025-10-10,Doce&bella,mercadoria,-50.0,PIX,Saída,[],,Realizada,2025-10-10,,,b90558d6-6f74-4da2-9f4e-88905cbb3fee
+2025-10-11,Doce&bella,Ana de Rafael ,60.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Venda"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 60.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-10-11,,,a2a8af62-ce45-419c-b3af-17841c6f247c
+2025-10-11,Doce&bella,Compra de mercadoria ,-145.3,PIX,Saída,[],,Realizada,2025-10-11,,,0a4daf03-acde-488c-9e2b-f675c3352a60
+2025-10-12,Doce&bella,Venda,31.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Venda"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 31.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-10-12,,,977da874-e98f-4957-acb1-45b568e4c419
+2025-10-13,Doce&bella,Angela,24.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Len\u00e7o umedecido "", ""Quantidade"": 2.0, ""Pre\u00e7o Unit\u00e1rio"": 12.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-10-13,,,27b08688-d6bc-433b-bc65-7527dbda73d5
+2025-10-13,Fotografia,Loja,20.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Ensaio restante "", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 20.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-10-13,,,ec88c4f8-ccea-423d-a698-a13be2091593
+2025-10-13,Doce&bella,Compra de mercadoria ,-24.53,PIX,Saída,[],,Realizada,2025-10-13,,,deed6423-41fd-4ee8-a020-a62a73e57811
+2025-10-13,Doce&bella,Andrea,45.0,Dinheiro,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Chinelo"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 45.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-10-13,,,371ee969-9e26-40bf-953b-70e0697d4039
+2025-10-14,Doce&Bella,renan,31.0,Dinheiro,Entrada,"[{""Produto_ID"":""4"",""Produto"":""Kit Shampoo babasoul"",""Quantidade"":1,""Pre\u00e7o Unit\u00e1rio"":31.0,""Custo Unit\u00e1rio"":17.0}]",,Realizada,2025-10-14,,,
