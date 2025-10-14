@@ -2376,12 +2376,14 @@ def livro_caixa():
                 if cancelar_quitacao:
                     st.session_state.divida_a_quitar = None
                     st.rerun()
-
-                if concluir:
-                    # ... (Lógica de quitação de dívida) ...
-                    st.success("Dívida quitada (lógica a ser implementada).")
-                    st.session_state.divida_a_quitar = None
-                    st.rerun()
+          # 3. SALVA A MOVIMENTAÇÃO PRINCIPAL E ATUALIZA A TELA
+                if salvar_dados_no_github(df_movimentacoes_upd, msg_commit, data_input):
+                        st.success("Movimentação salva com sucesso!")
+                        st.session_state.df = df_movimentacoes_upd
+                        st.session_state.lista_produtos = []
+                        st.session_state.edit_id = None
+                        carregar_livro_caixa.clear()
+                        st.rerun()
 
             st.stop()
         
