@@ -2362,7 +2362,7 @@ def livro_caixa():
                         st.session_state.lista_produtos = []
                         st.session_state.edit_id = None
                         carregar_livro_caixa.clear()
-                        st.rerun(
+                        st.rerun()
 
             st.stop()
         
@@ -3404,6 +3404,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
