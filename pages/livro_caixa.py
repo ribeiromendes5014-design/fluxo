@@ -3178,123 +3178,127 @@ def livro_caixa():
 
 
     # --- CONTEÚDO DA ABA 📈 RELATÓRIOS E FILTROS ---
-    with tab_rel:
+with tab_rel:
     
-            st.subheader("📄 Relatório Detalhado e Comparativo")
+    st.subheader("📄 Relatório Detalhado e Comparativo")
+    
+    # [Conteúdo original da aba tab_rel]
+    with st.container(border=True):
+        st.markdown("#### Filtros do Relatório")
+        
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            lojas_selecionadas = st.multiselect(
+                "Selecione uma ou mais lojas/empresas",
+                options=LOJAS_DISPONIVEIS,
+                default=LOJAS_DISPONIVEIS
+            )
             
-            # [Conteúdo original da aba tab_rel]
-            with st.container(border=True):
-                st.markdown("#### Filtros do Relatório")
-                
-                col_f1, col_f2 = st.columns(2)
-                with col_f1:
-                    lojas_selecionadas = st.multiselect(
-                        "Selecione uma ou mais lojas/empresas",
-                        options=LOJAS_DISPONIVEIS,
-                        default=LOJAS_DISPONIVEIS
-                    )
-                    
-                    tipo_movimentacao = st.radio(
-                        "Tipo de Movimentação",
-                        ["Ambos", "Entrada", "Saída"],
-                        horizontal=True,
-                        key="rel_tipo"
-                    )
-                
-                with col_f2:
-                    min_date_geral = df_exibicao["Data"].min() if not df_exibicao.empty and pd.notna(df_exibicao["Data"].min()) else date.today()
-                    max_date_geral = df_exibicao["Data"].max() if not df_exibicao.empty and pd.notna(df_exibicao["Data"].max()) else date.today()
+            tipo_movimentacao = st.radio(
+                "Tipo de Movimentação",
+                ["Ambos", "Entrada", "Saída"],
+                horizontal=True,
+                key="rel_tipo"
+            )
+        
+        with col_f2:
+            min_date_geral = df_exibicao["Data"].min() if not df_exibicao.empty and pd.notna(df_exibicao["Data"].min()) else date.today()
+            max_date_geral = df_exibicao["Data"].max() if not df_exibicao.empty and pd.notna(df_exibicao["Data"].max()) else date.today()
 
-                    data_inicio_rel = st.date_input("Data de Início", value=min_date_geral, min_value=min_date_geral, max_value=max_date_geral, key="rel_data_ini")
-                    data_fim_rel = st.date_input("Data de Fim", value=max_date_geral, min_value=min_date_geral, max_value=max_date_geral, key="rel_data_fim")
+            data_inicio_rel = st.date_input("Data de Início", value=min_date_geral, min_value=min_date_geral, max_value=max_date_geral, key="rel_data_ini")
+            data_fim_rel = st.date_input("Data de Fim", value=max_date_geral, min_value=min_date_geral, max_value=max_date_geral, key="rel_data_fim")
 
-                if st.button("📊 Gerar Relatório Comparativo", use_container_width=True, type="primary"):
-                    
-                    df_relatorio = df_exibicao[
-                        (df_exibicao['Status'] == 'Realizada') &
-                        (df_exibicao['Loja'].isin(lojas_selecionadas)) &
-                        (df_exibicao['Data'] >= data_inicio_rel) &
-                        (df_exibicao['Data'] <= data_fim_rel)
-                    ].copy()
-
-                    if tipo_movimentacao != "Ambos":
-                        df_relatorio = df_relatorio[df_relatorio['Tipo'] == tipo_movimentacao]
-                    
-                    if df_relatorio.empty:
-                        st.warning("Nenhum dado encontrado com os filtros selecionados.")
-                    else:
-                        df_relatorio['MesAno'] = df_relatorio['Data_dt'].dt.to_period('M').astype(str)
-                        
-                        df_agrupado = df_relatorio.groupby('MesAno').apply(lambda x: pd.Series({
-                            'Entradas': x[x['Valor'] > 0]['Valor'].sum(),
-                            'Saídas': abs(x[x['Valor'] < 0]['Valor'].sum())
-                        })).reset_index()
-
-                        df_agrupado['Saldo'] = df_agrupado['Entradas'] - df_agrupado['Saídas']
-                        
-                        df_agrupado = df_agrupado.sort_values(by='MesAno').reset_index(drop=True)
-                        df_agrupado['Crescimento Entradas (%)'] = (df_agrupado['Entradas'].pct_change() * 100).fillna(0)
-                        df_agrupado['Crescimento Saídas (%)'] = (df_agrupado['Saídas'].pct_change() * 100).fillna(0)
-                        
-                        st.markdown("---")
-                        st.subheader("Resultados do Relatório")
-
-                        st.markdown("##### 🗓️ Tabela Comparativa Mensal")
-                        st.dataframe(df_agrupado, use_container_width=True,
-                            column_config={"MesAno": "Mês/Ano","Entradas": st.column_config.NumberColumn("Entradas (R$)", format="R$ %.2f"),
-                                "Saídas": st.column_config.NumberColumn("Saídas (R$)", format="R$ %.2f"),
-                                "Saldo": st.column_config.NumberColumn("Saldo (R$)", format="R$ %.2f"),
-                                "Crescimento Entradas (%)": st.column_config.NumberColumn("Cresc. Entradas", format="%.2f%%"),
-                                "Crescimento Saídas (%)": st.column_config.NumberColumn("Cresc. Saídas", format="%.2f%%")}
-                        )
-
-                        fig_comp = px.bar(df_agrupado, x='MesAno', y=['Entradas', 'Saídas'], title="Comparativo de Entradas vs. Saídas por Mês",
-                            labels={'value': 'Valor (R$)', 'variable': 'Tipo', 'MesAno': 'Mês/Ano'}, barmode='group', color_discrete_map={'Entradas': 'green', 'Saídas': 'red'})
-                        st.plotly_chart(fig_comp, use_container_width=True)
-
-                        fig_cresc = px.line(df_agrupado, x='MesAno', y=['Crescimento Entradas (%)', 'Crescimento Saídas (%)'],
-                            title="Crescimento Percentual Mensal (Entradas e Saídas)",
-                            labels={'value': '% de Crescimento', 'variable': 'Métrica', 'MesAno': 'Mês/Ano'}, markers=True)
-                        st.plotly_chart(fig_cresc, use_container_width=True)
-
-                        if 'Entradas' in df_agrupado.columns and not df_agrupado[df_agrupado['Entradas'] > 0].empty:
-                            st.markdown("##### 🏆 Ranking de Vendas (Entradas) por Mês")
-                            df_ranking = df_agrupado[['MesAno', 'Entradas']].sort_values(by='Entradas', ascending=False).reset_index(drop=True)
-                            df_ranking.index += 1
-                            st.dataframe(df_ranking, use_container_width=True,
-                                column_config={"MesAno": "Mês/Ano","Entradas": st.column_config.NumberColumn("Total de Entradas (R$)", format="R$ %.2f")}
-                            )
-
-            st.markdown("---")
-
-            st.subheader("🚩 Dívidas Pendentes (A Pagar e A Receber)")
+        if st.button("📊 Gerar Relatório Comparativo", use_container_width=True, type="primary"):
             
-            df_pendentes = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
+            df_relatorio = df_exibicao[
+                (df_exibicao['Status'] == 'Realizada') &
+                (df_exibicao['Loja'].isin(lojas_selecionadas)) &
+                (df_exibicao['Data'] >= data_inicio_rel) &
+                (df_exibicao['Data'] <= data_fim_rel)
+            ].copy()
+
+            if tipo_movimentacao != "Ambos":
+                df_relatorio = df_relatorio[df_relatorio['Tipo'] == tipo_movimentacao]
             
-            if df_pendentes.empty:
-                st.info("Parabéns! Não há dívidas pendentes registradas.")
+            if df_relatorio.empty:
+                st.warning("Nenhum dado encontrado com os filtros selecionados.")
             else:
-                df_pendentes["Data Pagamento"] = pd.to_datetime(df_pendentes["Data Pagamento"], errors='coerce').dt.date
-                df_pendentes_ordenado = df_pendentes.sort_values(by=["Data Pagamento", "Tipo", "Data"], ascending=[True, True, True]).reset_index(drop=True)
-                hoje_date = date.today()
-                df_pendentes_ordenado['Dias Até/Atraso'] = df_pendentes_ordenado['Data Pagamento'].apply(
-                    lambda x: (x - hoje_date).days if pd.notna(x) else float('inf') 
-                )
+                df_relatorio['MesAno'] = df_relatorio['Data_dt'].dt.to_period('M').astype(str)
                 
-                total_receber = df_pendentes_ordenado[df_pendentes_ordenado["Tipo"] == "Entrada"]["Valor"].abs().sum()
-                total_pagar = df_pendentes_ordenado[df_pendentes_ordenado["Tipo"] == "Saída"]["Valor"].abs().sum()
+                df_agrupado = df_relatorio.groupby('MesAno').apply(lambda x: pd.Series({
+                    'Entradas': x[x['Valor'] > 0]['Valor'].sum(),
+                    'Saídas': abs(x[x['Valor'] < 0]['Valor'].sum())
+                })).reset_index()
+
+                df_agrupado['Saldo'] = df_agrupado['Entradas'] - df_agrupado['Saídas']
                 
-                col_res_1, col_res_2 = st.columns(2)
-                col_res_1.metric("Total a Receber", f"R$ {total_receber:,.2f}")
-                col_res_2.metric("Total a Pagar", f"R$ {total_pagar:,.2f}")
+                df_agrupado = df_agrupado.sort_values(by='MesAno').reset_index(drop=True)
+                df_agrupado['Crescimento Entradas (%)'] = (df_agrupado['Entradas'].pct_change() * 100).fillna(0)
+                df_agrupado['Crescimento Saídas (%)'] = (df_agrupado['Saídas'].pct_change() * 100).fillna(0)
                 
                 st.markdown("---")
-                
-                def highlight_pendentes(row):
-                    dias = row['Dias Até/Atraso']
-                    if dias < 0: return ['background-color: #fcece9' if col in ['Status', 'Data Pagamento'] else '' for col in row.index]
-                    elif dias <= 7: return ['background-color: #fffac9' if col in ['Status', 'Data Pagamento'] else '' for col in row.index]
-                    return ['' for col in row.index]
+                st.subheader("Resultados do Relatório")
+
+                st.markdown("##### 🗓️ Tabela Comparativa Mensal")
+                st.dataframe(df_agrupado, use_container_width=True,
+                    column_config={"MesAno": "Mês/Ano","Entradas": st.column_config.NumberColumn("Entradas (R$)", format="R$ %.2f"),
+                        "Saídas": st.column_config.NumberColumn("Saídas (R$)", format="R$ %.2f"),
+                        "Saldo": st.column_config.NumberColumn("Saldo (R$)", format="R$ %.2f"),
+                        "Crescimento Entradas (%)": st.column_config.NumberColumn("Cresc. Entradas", format="%.2f%%"),
+                        "Crescimento Saídas (%)": st.column_config.NumberColumn("Cresc. Saídas", format="%.2f%%")}
+                )
+
+                fig_comp = px.bar(df_agrupado, x='MesAno', y=['Entradas', 'Saídas'], title="Comparativo de Entradas vs. Saídas por Mês",
+                    labels={'value': 'Valor (R$)', 'variable': 'Tipo', 'MesAno': 'Mês/Ano'}, barmode='group', color_discrete_map={'Entradas': 'green', 'Saídas': 'red'})
+                st.plotly_chart(fig_comp, use_container_width=True)
+
+                fig_cresc = px.line(df_agrupado, x='MesAno', y=['Crescimento Entradas (%)', 'Crescimento Saídas (%)'],
+                    title="Crescimento Percentual Mensal (Entradas e Saídas)",
+                    labels={'value': '% de Crescimento', 'variable': 'Métrica', 'MesAno': 'Mês/Ano'}, markers=True)
+                st.plotly_chart(fig_cresc, use_container_width=True)
+
+                if 'Entradas' in df_agrupado.columns and not df_agrupado[df_agrupado['Entradas'] > 0].empty:
+                    st.markdown("##### 🏆 Ranking de Vendas (Entradas) por Mês")
+                    df_ranking = df_agrupado[['MesAno', 'Entradas']].sort_values(by='Entradas', ascending=False).reset_index(drop=True)
+                    df_ranking.index += 1
+                    st.dataframe(df_ranking, use_container_width=True,
+                        column_config={"MesAno": "Mês/Ano","Entradas": st.column_config.NumberColumn("Total de Entradas (R$)", format="R$ %.2f")}
+                    )
+
+    st.markdown("---")
+
+    st.subheader("🚩 Dívidas Pendentes (A Pagar e A Receber)")
+    
+    df_pendentes = df_exibicao[df_exibicao["Status"] == "Pendente"].copy()
+    
+    if df_pendentes.empty:
+        st.info("Parabéns! Não há dívidas pendentes registradas.")
+    else:
+        df_pendentes["Data Pagamento"] = pd.to_datetime(df_pendentes["Data Pagamento"], errors='coerce').dt.date
+        df_pendentes_ordenado = df_pendentes.sort_values(by=["Data Pagamento", "Tipo", "Data"], ascending=[True, True, True]).reset_index(drop=True)
+        hoje_date = date.today()
+        df_pendentes_ordenado['Dias Até/Atraso'] = df_pendentes_ordenado['Data Pagamento'].apply(
+            lambda x: (x - hoje_date).days if pd.notna(x) else float('inf') 
+        )
+        
+        total_receber = df_pendentes_ordenado[df_pendentes_ordenado["Tipo"] == "Entrada"]["Valor"].abs().sum()
+        total_pagar = df_pendentes_ordenado[df_pendentes_ordenado["Tipo"] == "Saída"]["Valor"].abs().sum()
+        
+        col_res_1, col_res_2 = st.columns(2)
+        col_res_1.metric("Total a Receber", f"R$ {total_receber:,.2f}")
+        col_res_2.metric("Total a Pagar", f"R$ {total_pagar:,.2f}")
+        
+        st.markdown("---")
+        
+        # O BLOCO ABAIXO FOI CORRIGIDO PARA GARANTIR QUE A FUNÇÃO ESTÁ COMPLETA
+        def highlight_pendentes(row):
+            dias = row['Dias Até/Atraso']
+            if dias < 0: 
+                return ['background-color: #fcece9' if col in ['Status', 'Data Pagamento'] else '' for col in row.index]
+            elif dias <= 7: 
+                return ['background-color: #fffac9' if col in ['Status', 'Data Pagamento'] else '' for col in row.index]
+            # É CRUCIAL TER UM RETORNO PADRÃO PARA EVITAR O SyntaxError: 'return' outside function
+            return ['' for col in row.index]
 
                 # NOVO: Início do Formulário de Pagamento Parcial/Total
 with st.form("form_concluir_divida"):
@@ -3485,6 +3489,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
