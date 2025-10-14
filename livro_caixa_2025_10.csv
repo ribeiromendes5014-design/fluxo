@@ -27,3 +27,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-10-13,Fotografia,Loja,20.0,PIX,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Ensaio restante "", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 20.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-10-13,,,,ec88c4f8-ccea-423d-a698-a13be2091593
 2025-10-13,Doce&bella,Compra de mercadoria ,-24.53,PIX,Saída,[],,Realizada,2025-10-13,Saldo Geral Acumulado,,,deed6423-41fd-4ee8-a020-a62a73e57811
 2025-10-13,Doce&bella,Andrea,45.0,Dinheiro,Entrada,"[{""Produto_ID"": """", ""Produto"": ""Chinelo"", ""Quantidade"": 1.0, ""Pre\u00e7o Unit\u00e1rio"": 45.0, ""Custo Unit\u00e1rio"": 0.0}]",,Realizada,2025-10-13,,,,371ee969-9e26-40bf-953b-70e0697d4039
+2025-10-14,Doce&Bella,renan,31.0,Dinheiro,Entrada,"[{""Produto_ID"":""4"",""Produto"":""Kit Shampoo babasoul"",""Quantidade"":1,""Pre\u00e7o Unit\u00e1rio"":31.0,""Custo Unit\u00e1rio"":17.0}]",,Realizada,2025-10-14,,,,
