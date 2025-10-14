@@ -3384,6 +3384,7 @@ with st.form("form_concluir_divida"):
             if idx_original not in st.session_state.df.index:
                 st.error("Erro interno ao localizar dívida. O registro original foi perdido.")
                 st.rerun()
+                # O 'return' que causava o erro foi removido daqui nas iterações anteriores, resolvendo o SyntaxError.
                 return
 
             row_original = st.session_state.df.loc[idx_original].copy()
@@ -3420,7 +3421,7 @@ with st.form("form_concluir_divida"):
                 
             else: # Pagamento total (valor restante <= 0.01)
                 
-                # Exclui a linha original pendente (pois o pagamento total já foi registrado como nova transação)
+                # Exclui a linha original pendente
                 st.session_state.df = st.session_state.df.drop(idx_original, errors='ignore')
                 
                 # Débito de Estoque (Apenas para Entrada)
@@ -3440,7 +3441,7 @@ with st.form("form_concluir_divida"):
                 st.session_state.divida_parcial_id = None 
                 st.cache_data.clear()
                 st.rerun()
-    # A CORREÇÃO DE INDENTAÇÃO ESTÁ AQUI: Este 'else' agora está no nível correto, fechando o IF principal.
+    # CORREÇÃO: Este 'else' está no nível correto, fechando o bloco 'if divida_para_concluir is not None:'.
     else:
         st.info("Selecione uma dívida válida para prosseguir com o pagamento.")
 
@@ -3489,6 +3490,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
