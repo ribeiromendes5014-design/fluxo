@@ -2944,7 +2944,9 @@ def livro_caixa():
                             if salvar_dados_no_github(df_movimentacoes_upd, "Nova saída adicionada", data_input):
                                 st.success("Movimentação salva com sucesso!"); st.session_state.valor_total_saida = 0.0; st.session_state.df = df_movimentacoes_upd; carregar_livro_caixa.clear(); st.rerun()
 
-    # --- CONTEÚDO DA ABA 📋 MOVIMENTAÇÕES E RESUMO ---
+    # ==============================================================================================
+    # ABA: MOVIMENTAÇÕES E RESUMO (Código COMPLETO e Restaurado)
+    # ==============================================================================================
     elif st.session_state.aba_ativa_livro_caixa == abas_validas[1]:
         with tab_mov:
             # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📋 Movimentações e Resumo"
@@ -3195,7 +3197,9 @@ def livro_caixa():
                         st.info("Selecione uma movimentação no menu acima para ver detalhes e opções de edição/exclusão.")
 
 
-    # --- CONTEÚDO DA ABA 📈 RELATÓRIOS E FILTROS ---
+    # ==============================================================================================
+    # ABA: RELATÓRIOS E FILTROS (Código COMPLETO e Restaurado)
+    # ==============================================================================================
     elif st.session_state.aba_ativa_livro_caixa == abas_validas[2]:
         with tab_rel:
             # REMOVIDO: st.session_state.aba_ativa_livro_caixa = "📈 Relatórios e Filtros"
@@ -3372,9 +3376,9 @@ def livro_caixa():
 
 
                     if divida_para_concluir is not None:
-                        # >> USO DA NOVA FUNÇÃO PARA GARANTIR VALOR CORRETO E ARREDONDADO <<
+                        # >> USO DA NOVA FUNÇÃO PARA GARANTIR VALOR CORRETO E ARREDONDADO <<<
                         valor_em_aberto = calcular_valor_em_aberto(divida_para_concluir)
-                        # << FIM DO USO DA NOVA FUNÇÃO >>
+                        # << FIM DO USO DA NOVA FUNÇÃO >><
 
                         st.markdown(f"**Valor em Aberto:** R$ {valor_em_aberto:,.2f}")
                         
@@ -3509,6 +3513,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
