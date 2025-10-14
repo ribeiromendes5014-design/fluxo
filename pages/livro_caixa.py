@@ -2695,23 +2695,17 @@ def livro_caixa():
                     # Lógica de ajuste de estoque (reversão e débito)
 if edit_mode:
     # 🔑 CORREÇÃO DE SEGURANÇA: Garante que 'df_dividas' tem a linha e a isola como Series.
-    # df_dividas está definido como st.session_state.df, cujo índice é sequencial (Corrigido no início de livro_caixa()).
     
+    # Verifica se o ID de edição ainda existe no DataFrame (índice sequencial garantido)
     if st.session_state.edit_id not in df_dividas.index:
         st.error("Erro interno: ID de edição perdido após recarregamento. Cancelando edição.")
         st.session_state.edit_id = None
         st.rerun()
         return
 
-    # Acesso seguro usando .loc para obter a linha
+    # Acesso seguro usando .loc para obter a linha como um DataFrame de uma linha
     linha_original_df = df_dividas.loc[[st.session_state.edit_id]]
-
-    if linha_original_df.empty:
-        st.error("Erro interno: Movimentação original não encontrada. Cancelando edição.")
-        st.session_state.edit_id = None
-        st.rerun()
-        return
-        
+    
     # original_row agora é garantidamente uma Series (a linha de dados)
     original_row = linha_original_df.iloc[0]
     
@@ -2762,64 +2756,66 @@ elif not edit_mode and tipo == "Entrada" and status_selecionado == "Realizada" a
         inicializar_produtos.clear()
         st.cache_data.clear()
 
+# --- FIM DO BLOCO DE AJUSTE DE ESTOQUE ---
+# O código continua com a lógica de Recorrência e Salvamento
 
-                    novas_movimentacoes = []
-                    if is_recorrente and not edit_mode:
-                        # [Bloco de geração de recorrência]
-                        num_parcelas_int = int(num_parcelas)
-                        valor_parcela_float = float(valor_parcela)
-                        recorrencia_seed = f"{nome_despesa_recorrente}{data_primeira_parcela}{num_parcelas_int}{valor_parcela_float}{categoria_selecionada}{loja_selecionada}"
-                        recorrencia_id = hashlib.md5(recorrencia_seed.encode('utf-8')).hexdigest()[:10]
-                        
-                        for i in range(1, num_parcelas_int + 1):
-                            data_vencimento_parcela = add_months(data_primeira_parcela, i - 1)
-                            nova_linha_parcela = {
-                                "Data": data_input, 
-                                "Loja": loja_selecionada, 
-                                "Cliente": f"{nome_despesa_recorrente} (Parc. {i}/{num_parcelas_int})",
-                                "Valor": -valor_parcela_float,
-                                "Forma de Pagamento": "Pendente", 
-                                "Tipo": "Saída",
-                                "Produtos Vendidos": "",
-                                "Categoria": categoria_selecionada,
-                                "Status": "Pendente",
-                                "Data Pagamento": data_vencimento_parcela, 
-                                "RecorrenciaID": recorrencia_id,
-                                "TransacaoPaiID": "" 
-                            }
-                            novas_movimentacoes.append(nova_linha_parcela)
-                        
-                        st.session_state.df = pd.concat([df_dividas, pd.DataFrame(novas_movimentacoes)], ignore_index=True)
-                        commit_msg = f"Cadastro de Dívida Recorrente ({num_parcelas_int} parcelas)"
-                        
-                    else:
-                        # CORREÇÃO DA CATEGORIA: Define a categoria como Loja (ou "") se for Entrada
-                        categoria_final = categoria_selecionada
-                        if tipo == "Entrada":
-                            categoria_final = loja_selecionada # Correção: usa a Loja como Categoria, não a categoria de Saída.
-                        
-                        # [Bloco de adição/edição de item único]
-                        nova_linha_data = {
-                            "Data": data_input,
-                            "Loja": loja_selecionada, 
-                            "Cliente": cliente_final,
-                            "Valor": valor_armazenado, 
-                            "Forma de Pagamento": forma_pagamento,
-                            "Tipo": tipo,
-                            "Produtos Vendidos": produtos_vendidos_json,
-                            "Categoria": categoria_final, # Usa a categoria corrigida
-                            "Status": status_selecionado, 
-                            "Data Pagamento": data_pagamento_final,
-                            "RecorrenciaID": "",
-                            "TransacaoPaiID": "" 
-                        }
-                        
-                        if edit_mode:
-                            st.session_state.df.loc[st.session_state.edit_id] = pd.Series(nova_linha_data)
-                            commit_msg = COMMIT_MESSAGE_EDIT
-                        else:
-                            st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
-                            commit_msg = COMMIT_MESSAGE
+novas_movimentacoes = []
+if is_recorrente and not edit_mode:
+    # [Bloco de geração de recorrência]
+    num_parcelas_int = int(num_parcelas)
+    valor_parcela_float = float(valor_parcela)
+    recorrencia_seed = f"{nome_despesa_recorrente}{data_primeira_parcela}{num_parcelas_int}{valor_parcela_float}{categoria_selecionada}{loja_selecionada}"
+    recorrencia_id = hashlib.md5(recorrencia_seed.encode('utf-8')).hexdigest()[:10]
+    
+    for i in range(1, num_parcelas_int + 1):
+        data_vencimento_parcela = add_months(data_primeira_parcela, i - 1)
+        nova_linha_parcela = {
+            "Data": data_input, 
+            "Loja": loja_selecionada, 
+            "Cliente": f"{nome_despesa_recorrente} (Parc. {i}/{num_parcelas_int})",
+            "Valor": -valor_parcela_float,
+            "Forma de Pagamento": "Pendente", 
+            "Tipo": "Saída",
+            "Produtos Vendidos": "",
+            "Categoria": categoria_selecionada,
+            "Status": "Pendente",
+            "Data Pagamento": data_vencimento_parcela, 
+            "RecorrenciaID": recorrencia_id,
+            "TransacaoPaiID": "" 
+        }
+        novas_movimentacoes.append(nova_linha_parcela)
+    
+    st.session_state.df = pd.concat([df_dividas, pd.DataFrame(novas_movimentacoes)], ignore_index=True)
+    commit_msg = f"Cadastro de Dívida Recorrente ({num_parcelas_int} parcelas)"
+    
+else:
+    # CORREÇÃO DA CATEGORIA: Define a categoria como Loja (ou "") se for Entrada
+    categoria_final = categoria_selecionada
+    if tipo == "Entrada":
+        categoria_final = loja_selecionada # Correção: usa a Loja como Categoria, não a categoria de Saída.
+    
+    # [Bloco de adição/edição de item único]
+    nova_linha_data = {
+        "Data": data_input,
+        "Loja": loja_selecionada, 
+        "Cliente": cliente_final,
+        "Valor": valor_armazenado, 
+        "Forma de Pagamento": forma_pagamento,
+        "Tipo": tipo,
+        "Produtos Vendidos": produtos_vendidos_json,
+        "Categoria": categoria_final, # Usa a categoria corrigida
+        "Status": status_selecionado, 
+        "Data Pagamento": data_pagamento_final,
+        "RecorrenciaID": "",
+        "TransacaoPaiID": "" 
+    }
+    
+    if edit_mode:
+        st.session_state.df.loc[st.session_state.edit_id] = pd.Series(nova_linha_data)
+        commit_msg = COMMIT_MESSAGE_EDIT
+    else:
+        st.session_state.df = pd.concat([df_dividas, pd.DataFrame([nova_linha_data])], ignore_index=True)
+        commit_msg = COMMIT_MESSAGE
                         
                         
                         # ==============================================================================
@@ -3440,6 +3436,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
