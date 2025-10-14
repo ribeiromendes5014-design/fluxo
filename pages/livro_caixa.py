@@ -3177,9 +3177,7 @@ def livro_caixa():
 
     # --- CONTEÚDO DA ABA 📈 RELATÓRIOS E FILTROS ---
     with tab_rel:
-    elif st.session_state.aba_ativa_livro_caixa == abas_validas[2]:
-        with tab_rel:
-            # RESTO DO CÓDIGO DA ABA 3 (RELATÓRIOS E FILTROS)
+    
             st.subheader("📄 Relatório Detalhado e Comparativo")
             
             # [Conteúdo original da aba tab_rel]
@@ -3489,6 +3487,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
