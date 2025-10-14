@@ -2858,24 +2858,21 @@ def livro_caixa():
                             
                             df_clientes_to_update.drop(columns=["Nome_Norm"], errors="ignore", inplace=True)
                                 
-                            if salvar_clientes_cash_github(df_clientes_to_update, commit_msg_cashback):
-                                st.session_state.df_clientes = df_clientes_to_update
-                                carregar_clientes_cash.clear()
-                                st.toast(commit_msg_cashback) # Mensagem rápida de confirmação
-                            else:
-                                st.error("❌ Falha ao salvar os dados de cashback no GitHub.")
+                            if salvar_clientes_cash_github(df_clientes_upd, msg_cashback):
+                            st.toast(msg_cashback)
+                            st.session_state.df_clientes = df_clientes_upd
                         
                         # ==============================================================================
                         # FIM DO BLOCO MODIFICADO
                         # ==============================================================================
                         
                     # A persistência agora está correta e limpa o cache (no salvar_dados_no_github)
-                    if salvar_dados_no_github(st.session_state.df, commit_msg):
+                    if salvar_dados_no_github(df_movimentacoes_upd, msg_commit, data_input):
+                        st.success("Movimentação salva com sucesso!")
+                        st.session_state.df = df_movimentacoes_upd
+                        st.session_state.lista_produtos = []
                         st.session_state.edit_id = None
-                        st.session_state.edit_id_loaded = None 
-                        st.session_state.lista_produtos = [] 
-                        st.session_state.divida_a_quitar = None # Limpa a chave de quitação
-                        st.cache_data.clear()
+                        carregar_livro_caixa.clear()
                         st.rerun()
 
 
@@ -3422,6 +3419,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
