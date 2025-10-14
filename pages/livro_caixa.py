@@ -337,7 +337,10 @@ def processar_dataframe(df):
     # 1. Converte a coluna 'Data' para datetime
     df_proc["Data_dt"] = pd.to_datetime(df_proc["Data"], errors='coerce')
     
-    # 2. Substitui os valores de data inválidos (NaT) por uma data muito antiga para permitir a ordenação.
+    # 2. Remove a linha que estava descartando os registros (dropna)
+    # df_proc.dropna(subset=['Data_dt'], inplace=True) 
+    
+    # 3. Substitui os valores de data inválidos (NaT) por uma data muito antiga para permitir a ordenação.
     # Usamos o fillna no Data_dt para evitar erros de ordenação.
     df_proc["Data_dt"] = df_proc["Data_dt"].fillna(datetime(1900, 1, 1))
 
@@ -3289,6 +3292,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
