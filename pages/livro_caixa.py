@@ -2825,11 +2825,6 @@ def livro_caixa():
                         st.rerun()
 
 
-            if cancelar:
-                st.session_state.edit_id = None
-                st.session_state.edit_id_loaded = None 
-                st.session_state.lista_produtos = []
-                st.rerun()
                 
     # ==============================================================================================
     # ABA: MOVIMENTAÇÕES E RESUMO (Código Original)
@@ -3373,3 +3368,4 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
