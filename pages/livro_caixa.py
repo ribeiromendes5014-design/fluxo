@@ -2846,7 +2846,7 @@ else:
         commit_msg = COMMIT_MESSAGE
                         
                         
-                        # ==============================================================================
+# ==============================================================================
 # BLOCO MODIFICADO: LÓGICA DE CASHBACK (GANHO E RESGATE)
 # ==============================================================================
 if tipo == "Entrada" and status_selecionado == "Realizada":
@@ -3465,6 +3465,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
