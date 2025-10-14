@@ -2208,9 +2208,10 @@ def livro_caixa():
     if "df_clientes" not in st.session_state: st.session_state.df_clientes = carregar_clientes_cash()
     df_clientes = st.session_state.df_clientes # Referência para o DataFrame de clientes
     
-    # Garante que todas as colunas de controle existam
-    for col in ['RecorrenciaID', 'TransacaoPaiID']:
-        if col not in st.session_state.df.columns: st.session_state.df[col] = ''
+    # 🔑 CORREÇÃO CRÍTICA: Assegura que o DataFrame principal sempre tenha um índice sequencial.
+    # Isso evita problemas com .loc[index_original] após drop ou concat.
+    if not st.session_state.df.empty:
+        st.session_state.df = st.session_state.df.reset_index(drop=True)
         
     if "produtos" not in st.session_state: st.session_state.produtos = produtos
     if "lista_produtos" not in st.session_state: st.session_state.lista_produtos = []
@@ -3420,6 +3421,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
