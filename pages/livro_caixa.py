@@ -208,10 +208,26 @@ def norm_promocoes(df):
     if df.empty: return df
     df = df.copy()
     df["Desconto"] = pd.to_numeric(df["Desconto"], errors='coerce').fillna(0.0)
-    df["DataInicio"] = pd.to_datetime(df["DataInicio"], errors='coerce').dt.date
-    df["DataFim"] = pd.to_datetime(df["DataFim"], errors='coerce').dt.date
-    # Filtra promoções expiradas
+    
+    # 1. Converte para datetime
+    df["DataInicio_dt"] = pd.to_datetime(df["DataInicio"], errors='coerce')
+    df["DataFim_dt"] = pd.to_datetime(df["DataFim"], errors='coerce')
+    
+    # 2. Remove promoções com datas inválidas (NaT) para evitar o TypeError
+    df = df.dropna(subset=["DataInicio_dt", "DataFim_dt"])
+    
+    # 3. Extrai o objeto date (agora sem NaT, evitando o erro de dtype)
+    df["DataInicio"] = df["DataInicio_dt"].dt.date
+    df["DataFim"] = df["DataFim_dt"].dt.date
+    
+    # 4. Filtra promoções expiradas (agora seguro)
+    # Garante que a comparação seja feita com o objeto date extraído (df["DataFim"]) 
+    # ou use df["DataFim_dt"] e pd.Timestamp(date.today()) para mais segurança.
     df = df[df["DataFim"] >= date.today()] 
+    
+    # Remove colunas auxiliares
+    df.drop(columns=["DataInicio_dt", "DataFim_dt"], errors='ignore', inplace=True)
+    
     return df
 
 @st.cache_data(show_spinner="Carregando histórico de compras...")
@@ -3282,6 +3298,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
