@@ -255,37 +255,29 @@ def salvar_dados_no_github(df: pd.DataFrame, commit_message: str):
 
 @st.cache_data(show_spinner="Carregando dados...")
 def carregar_livro_caixa():
-    """Orquestra o carregamento do Livro Caixa."""
+    """Orquestra o carregamento do Livro Caixa (apenas o arquivo do mês/ano atual)."""
     df = None
     
-    # 1. Tenta carregar do GitHub (usando a URL raw com o PATH_DIVIDAS / CSV_PATH)
-    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{PATH_DIVIDAS}"
+    # Define o caminho do arquivo para o mês atual usando a nova função
+    path_arquivo_mensal = get_livro_caixa_path(date.today())
+    
+    # 1. Tenta carregar do GitHub
+    url_raw = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/{path_arquivo_mensal}"
     df = load_csv_github(url_raw)
 
     if df is None or df.empty:
-        # 2. Fallback local/garantia de colunas
-        try:
-            df = pd.read_csv(ARQ_LOCAL, dtype=str)
-        except Exception:
-            df = pd.DataFrame(columns=COLUNAS_PADRAO)
+        # 2. Fallback: Cria um DataFrame vazio se o arquivo do mês atual não existir
+        # Usa COLUNAS_PADRAO_COMPLETO para incluir todas as novas colunas
+        df = pd.DataFrame(columns=COLUNAS_PADRAO_COMPLETO)
         
-    if df.empty:
-        df = pd.DataFrame(columns=COLUNAS_PADRAO)
-
-    # Garante que as colunas padrão existam
-    for col in COLUNAS_PADRAO:
+    # Garante que as colunas padrão existam (incluindo RecorrenciaID, TransacaoPaiID, FonteRecurso, TransactionID)
+    for col in COLUNAS_PADRAO_COMPLETO:
         if col not in df.columns:
             df[col] = "Realizada" if col == "Status" else "" 
-            
-    # Adiciona RecorrenciaID, TransacaoPaiID se não existirem
-    for col in ["RecorrenciaID", "TransacaoPaiID"]:
-        if col not in df.columns:
-            df[col] = ''
         
     # Retorna apenas as colunas padrão na ordem correta
     cols_to_return = COLUNAS_PADRAO_COMPLETO
     return df[[col for col in cols_to_return if col in df.columns]]
-
 
 @st.cache_data(show_spinner=False)
 def processar_dataframe(df):
@@ -3382,6 +3374,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
