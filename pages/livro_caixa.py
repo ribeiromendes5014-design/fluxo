@@ -3385,7 +3385,6 @@ with st.form("form_concluir_divida"):
             row_original = st.session_state.df.loc[idx_original].copy()
             
             # 1. Cria a transação de pagamento (Realizada)
-            # O valor deve ter o sinal correto (Entrada é positivo, Saída é negativo)
             valor_pagamento_com_sinal = valor_pago if row_original['Tipo'] == 'Entrada' else -valor_pago
             
             nova_transacao_pagamento = {
@@ -3408,8 +3407,6 @@ with st.form("form_concluir_divida"):
             
             # 2. Atualiza a dívida original
             if valor_restante > 0.01: # Pagamento parcial: atualiza a dívida original
-                
-                # Atualiza o valor restante (o sinal já foi definido no processamento)
                 novo_valor_restante_com_sinal = valor_restante if row_original['Tipo'] == 'Entrada' else -valor_restante
 
                 st.session_state.df.loc[idx_original, 'Valor'] = novo_valor_restante_com_sinal
@@ -3423,7 +3420,6 @@ with st.form("form_concluir_divida"):
                 st.session_state.df = st.session_state.df.drop(idx_original, errors='ignore')
                 
                 # Débito de Estoque (Apenas para Entrada)
-                # O débito de estoque só deve ocorrer se a transação original for a venda (Tipo Entrada)
                 if row_original["Tipo"] == "Entrada" and row_original["Produtos Vendidos"]:
                     try:
                         produtos_vendidos = ast.literal_eval(row_original['Produtos Vendidos'])
@@ -3440,20 +3436,21 @@ with st.form("form_concluir_divida"):
                 st.session_state.divida_parcial_id = None 
                 st.cache_data.clear()
                 st.rerun()
-                    else:
-                        st.info("Selecione uma dívida válida para prosseguir com o pagamento.")
+    # A CORREÇÃO DE INDENTAÇÃO ESTÁ AQUI: Este 'else' agora está no nível correto, fechando o IF principal.
+    else:
+        st.info("Selecione uma dívida válida para prosseguir com o pagamento.")
 
 
-                st.markdown("---")
+    st.markdown("---")
 
-                st.markdown("##### Tabela Detalhada de Dívidas Pendentes")
-                df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
-                df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(
-                    lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
-                )
-                df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
+    st.markdown("##### Tabela Detalhada de Dívidas Pendentes")
+    df_para_mostrar_pendentes = df_pendentes_ordenado.copy()
+    df_para_mostrar_pendentes['Status Vencimento'] = df_para_mostrar_pendentes['Dias Até/Atraso'].apply(
+        lambda x: f"Atrasado {-x} dias" if x < 0 else (f"Vence em {x} dias" if x > 0 else "Vence Hoje")
+    )
+    df_styling_pendentes = df_para_mostrar_pendentes.style.apply(highlight_pendentes, axis=1)
 
-                st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
+    st.dataframe(df_styling_pendentes, use_container_width=True, hide_index=True)
 
 
 # ==============================================================================
@@ -3488,6 +3485,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
