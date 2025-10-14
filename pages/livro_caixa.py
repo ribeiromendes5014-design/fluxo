@@ -2879,20 +2879,21 @@ if tipo == "Entrada" and status_selecionado == "Realizada":
 # ==============================================================================
                         
                     # A persistência agora está correta e limpa o cache (no salvar_dados_no_github)
-                    if salvar_dados_no_github(st.session_state.df, commit_msg):
-                        st.session_state.edit_id = None
-                        st.session_state.edit_id_loaded = None 
-                        st.session_state.lista_produtos = [] 
-                        st.session_state.divida_a_quitar = None # Limpa a chave de quitação
-                        st.cache_data.clear()
-                        st.rerun()
+if salvar_dados_no_github(st.session_state.df, commit_msg):
+    st.session_state.edit_id = None
+    st.session_state.edit_id_loaded = None 
+    st.session_state.lista_produtos = [] 
+    st.session_state.divida_a_quitar = None # Limpa a chave de quitação
+    st.cache_data.clear()
+    st.rerun()
 
-
-            if cancelar:
-                st.session_state.edit_id = None
-                st.session_state.edit_id_loaded = None 
-                st.session_state.lista_produtos = []
-                st.rerun()
+# Note que o 'if cancelar' está no nível de indentação do formulário
+# (4 espaços a menos do que o 'if salvar_dados_no_github').
+if cancelar:
+    st.session_state.edit_id = None
+    st.session_state.edit_id_loaded = None 
+    st.session_state.lista_produtos = []
+    st.rerun()
                 
     # ==============================================================================================
     # ABA: MOVIMENTAÇÕES E RESUMO (Código Original)
@@ -3436,6 +3437,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
