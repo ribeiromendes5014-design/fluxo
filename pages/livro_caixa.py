@@ -293,11 +293,6 @@ def salvar_dados_no_github(df_completo: pd.DataFrame, commit_message: str, data_
         st.error("Verifique se seu 'GITHUB_TOKEN' tem permissões e se o repositório existe.")
         return False
 
-    except Exception as e:
-        st.error(f"❌ Erro ao salvar no GitHub: {e}")
-        st.error("Verifique se seu 'GITHUB_TOKEN' tem permissões e se o repositório existe.")
-        return False
-
 
 @st.cache_data(show_spinner="Carregando dados de todos os meses...")
 def carregar_livro_caixa():
@@ -3322,6 +3317,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
