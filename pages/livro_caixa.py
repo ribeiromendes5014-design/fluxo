@@ -2927,9 +2927,8 @@ def livro_caixa():
 
     # --- CONTEÚDO DA ABA 📋 MOVIMENTAÇÕES E RESUMO ---
     with tab_mov:
-    elif st.session_state.aba_ativa_livro_caixa == abas_validas[1]:
-        with tab_mov:
-            # RESTO DO CÓDIGO DA ABA 2 (MOVIMENTAÇÕES E RESUMO)
+
+
             hoje = date.today()
             primeiro_dia_mes = hoje.replace(day=1)
             if hoje.month == 12: proximo_mes = hoje.replace(year=hoje.year + 1, month=1, day=1)
@@ -3490,6 +3489,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
