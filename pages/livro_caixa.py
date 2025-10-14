@@ -3384,8 +3384,6 @@ with st.form("form_concluir_divida"):
             if idx_original not in st.session_state.df.index:
                 st.error("Erro interno ao localizar dívida. O registro original foi perdido.")
                 st.rerun()
-                # O 'return' que causava o erro foi removido daqui nas iterações anteriores, resolvendo o SyntaxError.
-                return
 
             row_original = st.session_state.df.loc[idx_original].copy()
             
@@ -3490,6 +3488,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
