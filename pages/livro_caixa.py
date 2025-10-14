@@ -242,66 +242,56 @@ def carregar_historico_compras():
             df[col] = "" 
     return df[[col for col in COLUNAS_COMPRAS if col in df.columns]]
 
-def salvar_dados_no_github(df: pd.DataFrame, commit_message: str, data_referencia=None):
+def salvar_dados_no_github(df_completo: pd.DataFrame, commit_message: str, data_transacao: date):
     """
-    Salva o DataFrame CSV no GitHub usando a API, determinando o nome do arquivo
-    com base na data do primeiro registro (livro_caixa_AAAA_MM.csv).
-    
-    O parâmetro 'data_referencia' é mantido para compatibilidade com chamadas antigas,
-    mas é ignorado em favor da data contida no próprio DataFrame.
+    Salva os dados do Livro Caixa no arquivo CSV mensal correspondente no GitHub.
+    Esta função determina o arquivo correto com base na data da transação, filtra os dados
+    e cria ou atualiza o arquivo no repositório.
     """
     
-    # 0. Determina o nome do arquivo de destino (Mensal)
-    if df.empty:
-        st.error("❌ DataFrame vazio. Não há dados para salvar.")
-        return False
-        
-    # Usa a data do primeiro registro para determinar o arquivo (melhor para edição/adição)
-    try:
-        # A coluna 'Data' em st.session_state.df deve ser um objeto date ou string 'YYYY-MM-DD'
-        # Nota: Ignorando data_referencia=None
-        data_referencia_dt = pd.to_datetime(df['Data'].iloc[0], errors='coerce').date()
-    except Exception:
-        data_referencia_dt = date.today()
-        
-    path_arquivo_mensal = get_livro_caixa_path(data_referencia_dt)
+    # 1. Determina o nome do arquivo com base na data da transação
+    # Ex: Para uma data em Outubro de 2025, o caminho será "livro_caixa_2025_10.csv"
+    file_path = f"livro_caixa_{data_transacao.year}_{data_transacao.month:02d}.csv"
     
-    # 1. Backup local (Tenta salvar, ignora se falhar)
-    try:
-        df.to_csv(path_arquivo_mensal, index=False, encoding="utf-8-sig") 
-    except Exception:
-        pass
+    # 2. Filtra o DataFrame completo para conter apenas os dados do mês correto
+    # Isso garante que cada arquivo mensal contenha apenas as transações daquele mês.
+    df_mes_especifico = df_completo[
+        (pd.to_datetime(df_completo['Data']).dt.year == data_transacao.year) &
+        (pd.to_datetime(df_completo['Data']).dt.month == data_transacao.month)
+    ].copy()
 
-    # 2. Prepara DataFrame para envio ao GitHub
-    df_temp = df.copy()
-    
-    # Prepara os dados de data para serem salvos como string no formato YYYY-MM-DD
+    # 3. Prepara as colunas de data do DataFrame filtrado para serem salvas como string
     for col_date in ['Data', 'Data Pagamento']:
-        if col_date in df_temp.columns:
-            df_temp[col_date] = pd.to_datetime(df_temp[col_date], errors='coerce').apply(
+        if col_date in df_mes_especifico.columns:
+            df_mes_especifico[col_date] = pd.to_datetime(df_mes_especifico[col_date], errors='coerce').apply(
                 lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
             )
 
     try:
         g = Github(TOKEN)
         repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        csv_string = df_temp.to_csv(index=False, encoding="utf-8-sig")
+        csv_string = df_mes_especifico.to_csv(index=False, encoding="utf-8-sig")
 
         try:
-            # Tenta obter o SHA do conteúdo atual (usa o path_arquivo_mensal)
-            contents = repo.get_contents(path_arquivo_mensal, ref=BRANCH)
-            # Atualiza o arquivo
+            # Tenta obter o conteúdo do arquivo mensal atual
+            contents = repo.get_contents(file_path, ref=BRANCH)
+            # Se o arquivo já existe, atualiza-o
             repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
-            st.success(f"📁 Livro Caixa salvo (atualizado) no GitHub em {path_arquivo_mensal}!")
+            st.success(f"📁 Livro Caixa salvo (atualizado) em '{file_path}' no GitHub!")
         except Exception:
-            # Cria o arquivo (se não existir)
-            repo.create_file(path_arquivo_mensal, commit_message, csv_string, branch=BRANCH)
-            st.success(f"📁 Livro Caixa salvo (criado) no GitHub em {path_arquivo_mensal}!")
+            # Se o arquivo não existe (ex: primeiro lançamento do mês), cria um novo
+            repo.create_file(file_path, commit_message, csv_string, branch=BRANCH)
+            st.success(f"📁 Livro Caixa salvo (novo arquivo '{file_path}' criado) no GitHub!")
 
-        # IMPORTANTE: Limpa o cache após o salvamento bem-sucedido
+        # Limpa o cache para forçar a releitura de todos os arquivos na próxima vez
         carregar_livro_caixa.clear()
         
         return True
+
+    except Exception as e:
+        st.error(f"❌ Erro ao salvar no GitHub: {e}")
+        st.error("Verifique se seu 'GITHUB_TOKEN' tem permissões e se o repositório existe.")
+        return False
 
     except Exception as e:
         st.error(f"❌ Erro ao salvar no GitHub: {e}")
@@ -3332,6 +3322,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
