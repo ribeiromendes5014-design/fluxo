@@ -1,2 +1,3 @@
 Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Status,Data Pagamento,RecorrenciaID,TransacaoPaiID,TransactionID
 2025-09-02,Doce&bella,loja,162.53,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":162.53,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-09-02,,,
+2025-09-10,Doce&bella,loja,68.21,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""corre\u00e7\u00e3o"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":68.21,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-09-10,,,
