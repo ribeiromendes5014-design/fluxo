@@ -244,48 +244,73 @@ def carregar_historico_compras():
 
 def salvar_dados_no_github(df_completo: pd.DataFrame, commit_message: str, data_transacao: date):
     """
-    Salva os dados do Livro Caixa no arquivo CSV mensal correspondente no GitHub.
-    Esta função determina o arquivo correto com base na data da transação, filtra os dados
-    e cria ou atualiza o arquivo no repositório.
+    Salva os dados de todas as movimentações no Livro Caixa, reescrevendo todos
+    os arquivos CSV mensais necessários para garantir a integridade dos dados.
     """
     
-    # 1. Determina o nome do arquivo com base na data da transação
-    # Ex: Para uma data em Outubro de 2025, o caminho será "livro_caixa_2025_10.csv"
-    file_path = f"livro_caixa_{data_transacao.year}_{data_transacao.month:02d}.csv"
+    # 1. Prepara o DataFrame para iteração e filtragem
+    df_temp_data = df_completo.copy()
     
-    # 2. Filtra o DataFrame completo para conter apenas os dados do mês correto
-    # Isso garante que cada arquivo mensal contenha apenas as transações daquele mês.
-    df_mes_especifico = df_completo[
-        (pd.to_datetime(df_completo['Data']).dt.year == data_transacao.year) &
-        (pd.to_datetime(df_completo['Data']).dt.month == data_transacao.month)
-    ].copy()
-
-    # 3. Prepara as colunas de data do DataFrame filtrado para serem salvas como string
-    for col_date in ['Data', 'Data Pagamento']:
-        if col_date in df_mes_especifico.columns:
-            df_mes_especifico[col_date] = pd.to_datetime(df_mes_especifico[col_date], errors='coerce').apply(
-                lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
-            )
-
+    # Garante que 'Data' é datetime e remove linhas sem data válida (não podem ser salvas)
+    df_temp_data['Data_dt'] = pd.to_datetime(df_temp_data['Data'], errors='coerce')
+    df_temp_data.dropna(subset=['Data_dt'], inplace=True)
+    
+    # Identifica todos os meses únicos que precisam de atualização
+    unique_months = df_temp_data['Data_dt'].dt.to_period('M').unique()
+    
     try:
+        from github import Github
         g = Github(TOKEN)
         repo = g.get_repo(f"{OWNER}/{REPO_NAME}")
-        csv_string = df_mes_especifico.to_csv(index=False, encoding="utf-8-sig")
+        
+        updated_files_count = 0
+        
+        # 2. Itera sobre cada mês único presente no DataFrame e salva o arquivo
+        for month_period in unique_months:
+            
+            target_year = month_period.year
+            target_month = month_period.month
+            
+            # Determina o nome do arquivo: Ex: "livro_caixa_2025_10.csv"
+            file_path = f"livro_caixa_{target_year}_{target_month:02d}.csv"
+            
+            # Filtra o DataFrame para conter APENAS os dados daquele mês
+            df_mes_especifico = df_temp_data[
+                (df_temp_data['Data_dt'].dt.year == target_year) &
+                (df_temp_data['Data_dt'].dt.month == target_month)
+            ].copy()
 
-        try:
-            # Tenta obter o conteúdo do arquivo mensal atual
-            contents = repo.get_contents(file_path, ref=BRANCH)
-            # Se o arquivo já existe, atualiza-o
-            repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
-            st.success(f"📁 Livro Caixa salvo (atualizado) em '{file_path}' no GitHub!")
-        except Exception:
-            # Se o arquivo não existe (ex: primeiro lançamento do mês), cria um novo
-            repo.create_file(file_path, commit_message, csv_string, branch=BRANCH)
-            st.success(f"📁 Livro Caixa salvo (novo arquivo '{file_path}' criado) no GitHub!")
+            # Prepara as colunas de data para serem salvas como string 'YYYY-MM-DD'
+            for col_date in ['Data', 'Data Pagamento']:
+                if col_date in df_mes_especifico.columns:
+                    # Usa Data_dt para formatar a data correta
+                    df_mes_especifico[col_date] = df_mes_especifico['Data_dt'].apply(
+                        lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else ''
+                    )
+            
+            # Remove a coluna auxiliar de datetime
+            df_mes_especifico.drop(columns=['Data_dt'], errors='ignore', inplace=True)
 
+            # Gera o conteúdo CSV
+            csv_string = df_mes_especifico.to_csv(index=False, encoding="utf-8-sig")
+
+            try:
+                # Tenta obter o conteúdo do arquivo mensal atual
+                contents = repo.get_contents(file_path, ref=BRANCH)
+                # Se o arquivo já existe, atualiza-o
+                repo.update_file(contents.path, commit_message, csv_string, contents.sha, branch=BRANCH)
+                updated_files_count += 1
+            except Exception:
+                # Se o arquivo não existe, cria um novo
+                repo.create_file(file_path, commit_message, csv_string, branch=BRANCH)
+                updated_files_count += 1
+
+        # 3. Finaliza a operação
+        
         # Limpa o cache para forçar a releitura de todos os arquivos na próxima vez
         carregar_livro_caixa.clear()
         
+        st.success(f"📁 Movimentações salvas e sincronizadas! ({updated_files_count} arquivo(s) mensal(is) atualizado(s) no GitHub.)")
         return True
 
     except Exception as e:
@@ -3329,6 +3354,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
