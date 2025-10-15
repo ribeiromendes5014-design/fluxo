@@ -60,7 +60,7 @@ COLUNAS_COMPLETAS_PROCESSADAS = COLUNAS_PADRAO_COMPLETO + ["Data_dt", "original_
 FATOR_CARTAO = 0.95 # Ex: 5% de taxa de cartão
 
 CATEGORIAS_SAIDA = ["Aluguel", "Salários", "Fornecedores", "Marketing", "Impostos", "Manutenção", "Outro/Diversos"]
-LOJAS_DISPONIVEIS = ["Doce&Bella", "Fotografia", "Papelaria"]
+LOJAS_DISPONIVEIS = ["Doce&bella", "Fotografia", "Papelaria"]
 FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Boleto", "Transferência", "Cheque"]
 
 COMMIT_MESSAGE = "Nova movimentação adicionada via Streamlit"
@@ -3317,6 +3317,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
