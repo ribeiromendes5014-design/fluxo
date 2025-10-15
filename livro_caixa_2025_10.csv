@@ -6,3 +6,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-10-03,Doce&bella,mercadoria,-218.7,PIX,Saída,[],,Realizada,2025-10-03,,,
 2025-10-04,Doce&bella,mercadoria,-20.0,PIX,Saída,[],,Realizada,2025-10-04,,,
 2025-10-05,Doce&bella,Odair Derio,10.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":10.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-05,,,
+2025-10-04,Fotografia,Emilly,300.0,Dinheiro,Entrada,"[{""Produto_ID"":"""",""Produto"":""Ensaio festa"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":300.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-04,,,
