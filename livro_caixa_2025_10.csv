@@ -26,3 +26,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-10-12,Doce&bella,loja,24.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":24.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-12,,,
 2025-10-12,Doce&bella,mercadoria,-24.53,PIX,Saída,[],,Realizada,2025-10-12,,,
 2025-10-13,Doce&bella,leticia,128.8,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":128.8,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-13,,,
+2025-10-14,Doce&bella,andrea,45.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":45.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-14,,,
