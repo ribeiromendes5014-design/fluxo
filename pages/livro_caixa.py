@@ -2985,18 +2985,30 @@ def livro_caixa():
                         st.rerun()
 
                     if col_op_2.button(f"🗑️ Excluir: {item_selecionado_str}", key=f"del_mov_{original_idx_selecionado}", use_container_width=True, type="primary"):
+                        
+                        # 1. Tenta obter a data da transação excluída para saber qual arquivo mensal atualizar
+                        # O valor 'row['Data']' já é um objeto date (df_exibicao é um DataFrame processado).
+                        data_movimentacao_excluida = row['Data']
+                        if pd.isna(data_movimentacao_excluida):
+                             data_movimentacao_excluida = date.today()
+                        
+                        
                         if row['Status'] == 'Realizada' and row['Tipo'] == 'Entrada':
                             try:
                                 produtos_vendidos_antigos = ast.literal_eval(row['Produtos Vendidos'])
                                 for item in produtos_vendidos_antigos:
+                                    # Restaura o estoque
                                     if item.get("Produto_ID"): ajustar_estoque(item["Produto_ID"], item["Quantidade"], "creditar")
                                 if salvar_produtos_no_github(st.session_state.produtos, "Reversão de estoque por exclusão de venda"):
                                     inicializar_produtos.clear()
-                            except: pass
+                            except: 
+                                pass
 
+                        # 2. Exclui a linha do DataFrame da sessão
                         st.session_state.df = st.session_state.df.drop(row['original_index'], errors='ignore')
 
-                        if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE):
+                        # 3. Chama a função de salvamento com os TRÊS argumentos
+                        if salvar_dados_no_github(st.session_state.df, COMMIT_MESSAGE_DELETE, data_movimentacao_excluida):
                             st.cache_data.clear()
                             st.rerun()
                 else:
@@ -3317,6 +3329,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
