@@ -15,3 +15,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-10-09,Doce&bella,terezinha,10.5,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":10.5,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-09,,,
 2025-10-09,Doce&bella,Andica,50.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":50.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-09,,,
 2025-10-09,Doce&bella,loja,20.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":20.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-09,,,
+2025-10-10,Doce&bella,mercadoria,-317.09,PIX,Saída,[],,Realizada,2025-10-10,,,
