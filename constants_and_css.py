@@ -52,7 +52,7 @@ except Exception as e:
 # Caminhos dos arquivos no repositório
 URL_BASE_REPOS = f"https://raw.githubusercontent.com/{OWNER}/{REPO_NAME}/{BRANCH}/"
 ARQ_PRODUTOS = "produtos_estoque.csv"
-ARQ_LOCAL = "livro_caixa.csv"
+ARQ_LOCAL = "livro_caixa_2025_10.csv"
 PATH_DIVIDAS = CSV_PATH # Usa o caminho lido dos secrets ou o fallback
 ARQ_COMPRAS = "historico_compras.csv"
 ARQ_PROMOCOES = "promocoes.csv" 
@@ -81,6 +81,7 @@ NIVEIS_CASHBACK = {
     "Ouro": {"min_gasto": 2000, "percentual": 0.03},   # 3%
     "Diamante": {"min_gasto": 5000, "percentual": 0.05} # 5%
 }
+
 
 
 
