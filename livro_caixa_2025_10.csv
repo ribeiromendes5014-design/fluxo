@@ -28,4 +28,4 @@ Data,Loja,Cliente,Valor,Forma de Pagamento,Tipo,Produtos Vendidos,Categoria,Stat
 2025-10-13,Doce&bella,leticia,128.8,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":128.8,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-13,,,
 2025-10-14,Doce&bella,andrea,45.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":45.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-14,,,
 2025-10-15,Doce&bella,tais agostinho,19.0,Pendente,Entrada,"[{""Produto_ID"":"""",""Produto"":""venda"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":19.0,""Custo Unit\u00e1rio"":0.0}]",,Pendente,2025-10-15,,,
-2025-10-16,Doce&bella,Festa,500.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""Festa"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":500.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-16,,,
+2025-10-16,Fotografia,,500.0,PIX,Entrada,"[{""Produto_ID"":"""",""Produto"":""Festa"",""Quantidade"":1.0,""Pre\u00e7o Unit\u00e1rio"":500.0,""Custo Unit\u00e1rio"":0.0}]",,Realizada,2025-10-16,,,
