@@ -1,5 +1,10 @@
 # app.py
 
+import sys, types
+if 'imghdr' not in sys.modules:
+    sys.modules['imghdr'] = types.ModuleType('imghdr')
+
+
 import streamlit as st
 
 # 1. Importa a configuração global e o CSS
@@ -38,4 +43,5 @@ render_custom_header(paginas_ordenadas, PAGINAS)
 
 # --- 4. RENDERIZAÇÃO DO CONTEÚDO ---
 PAGINAS[st.session_state.pagina_atual]()
+
 
