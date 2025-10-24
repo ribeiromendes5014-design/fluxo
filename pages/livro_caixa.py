@@ -1769,12 +1769,13 @@ def gestao_produtos():
                     pc_calc = round(pv / FATOR_CARTAO, 2)
                     
                     preco_html = (
-                        f'<div class="custom-price-block">'
-                        f'<small>C: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>'
-                        f'**V:** R$ {pv:,.2f}<br>'
-                        f'**C:** R$ {pc_calc:,.2f}'
-                        f'</div>'
-                    )
+                        f"<div class='custom-price-block'>"
+                        f"<small>C: R$ {to_float(pai['PrecoCusto']):,.2f}</small><br>"
+                        f"**V:** R$ {pv:,.2f}<br>"
+                        f"**C:** R$ {pc_calc:,.2f}"
+                        f"</div>"
+                     )
+
                     c[4].markdown(preco_html, unsafe_allow_html=True)
                     
                     try:
@@ -3354,6 +3355,7 @@ PAGINAS[st.session_state.pagina_atual]()
 # A sidebar só é necessária para o formulário de Adicionar/Editar Movimentação (Livro Caixa)
 if st.session_state.pagina_atual != "Livro Caixa":
     st.sidebar.empty()
+
 
 
 
